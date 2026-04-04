@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cookie Test</title></head>
+<body style="padding:20px;font-family:monospace;font-size:14px;line-height:2">
+<pre id="out">Running test...</pre>
+<script>
+var el = document.getElementById("out");
+var logs = "";
+function log(msg) { logs += msg + "\n"; el.textContent = logs; }
+
+log("URL: " + location.href);
+log("Protocol: " + location.protocol);
+log("");
+
+fetch("/api/auth/test", { method: "POST", credentials: "include" })
+  .then(function(r) { log("POST status: " + r.status); return r.json(); })
+  .then(function(d) { log("POST: " + JSON.stringify(d)); })
+  .catch(function(e) { log("POST ERROR: " + e); })
+  .then(function() {
+    log("");
+    return fetch("/api/auth/test", { credentials: "include" });
+  })
+  .then(function(r) { log("GET status: " + r.status); return r.json(); })
+  .then(function(d) {
+    log("Cookies server got: " + JSON.stringify(d.receivedCookies));
+    var ok = d.receivedCookies.some(function(c) { return c.name === "test-cookie"; });
+    log("");
+    log(ok ? "RESULT: COOKIES WORK" : "RESULT: COOKIES BROKEN");
+  })
+  .catch(function(e) { log("GET ERROR: " + e); });
+</script>
+</body>
+</html>

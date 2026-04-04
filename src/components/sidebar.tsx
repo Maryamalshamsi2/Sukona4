@@ -81,14 +81,14 @@ export default function Sidebar({
         />
       )}
 
-      {/* Sidebar — icon only */}
+      {/* Sidebar — icon+label on mobile, icon-only on desktop */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-16 flex-col items-center bg-white border-r border-gray-200 py-4 transition-transform lg:translate-x-0 lg:static lg:z-auto ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-52 flex-col bg-white border-r border-gray-200 py-4 transition-transform lg:w-16 lg:items-center lg:translate-x-0 lg:static lg:z-auto ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Navigation icons */}
-        <nav className="flex flex-1 flex-col items-center gap-1 mt-2">
+        {/* Navigation */}
+        <nav className="flex flex-1 flex-col gap-1 mt-2 px-3 lg:items-center lg:px-0">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -101,15 +101,19 @@ export default function Sidebar({
                 href={item.href}
                 onClick={onClose}
                 title={item.label}
-                className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors group ${
+                className={`relative flex h-11 items-center gap-3 rounded-lg px-3 transition-colors group lg:h-10 lg:w-10 lg:justify-center lg:px-0 ${
                   isActive
                     ? "bg-violet-100 text-violet-700"
                     : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 }`}
               >
                 <NavIcon icon={item.icon} />
-                {/* Tooltip on hover */}
-                <span className="absolute left-full ml-2 hidden rounded-md bg-gray-900 px-2 py-1 text-xs text-white whitespace-nowrap group-hover:block lg:group-hover:block">
+                {/* Label — visible on mobile, hidden on desktop */}
+                <span className={`text-sm font-medium lg:hidden ${isActive ? "text-violet-700" : "text-gray-700"}`}>
+                  {item.label}
+                </span>
+                {/* Tooltip on desktop hover */}
+                <span className="absolute left-full ml-2 hidden rounded-md bg-gray-900 px-2 py-1 text-xs text-white whitespace-nowrap lg:group-hover:block">
                   {item.label}
                 </span>
               </Link>

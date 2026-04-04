@@ -38,9 +38,32 @@ interface ActivityItem {
   profiles: { full_name: string } | null;
 }
 
+type ActivityRange = "today" | "7days" | "30days";
+
 function formatDate(date: Date) {
   return date.toISOString().split("T")[0];
 }
+
+function getRangeFromDate(range: ActivityRange): string {
+  const now = new Date();
+  if (range === "today") {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  } else if (range === "7days") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 7);
+    return d.toISOString();
+  } else {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 30);
+    return d.toISOString();
+  }
+}
+
+const RANGE_LABELS: Record<ActivityRange, string> = {
+  today: "Today",
+  "7days": "Past 7 Days",
+  "30days": "Past 30 Days",
+};
 
 function timeAgo(dateStr: string) {
   const now = new Date();
@@ -95,6 +118,7 @@ export default function HomePage() {
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string; full_name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activityRange, setActivityRange] = useState<ActivityRange>("today");
 
   // Modals — same as calendar
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -103,11 +127,20 @@ export default function HomePage() {
 
   const today = formatDate(new Date());
 
+  const loadActivities = useCallback(async (range: ActivityRange) => {
+    try {
+      const fromDate = getRangeFromDate(range);
+      const acts = await getRecentActivities(fromDate);
+      setActivities(acts as unknown as ActivityItem[]);
+    } catch { /* ignore */ }
+  }, []);
+
   const loadData = useCallback(async () => {
     try {
+      const fromDate = getRangeFromDate("today");
       const [appts, acts, staffData, clientData, serviceData, profile] = await Promise.all([
         getTodayAppointments(today),
-        getRecentActivities(),
+        getRecentActivities(fromDate),
         getStaffMembers(),
         getClients(),
         getServices(),
@@ -128,18 +161,24 @@ export default function HomePage() {
 
   const reload = useCallback(async () => {
     try {
+      const fromDate = getRangeFromDate(activityRange);
       const [appts, acts, clientData] = await Promise.all([
         getTodayAppointments(today),
-        getRecentActivities(),
+        getRecentActivities(fromDate),
         getClients(),
       ]);
       setAppointments(appts as unknown as AppointmentData[]);
       setActivities(acts as unknown as ActivityItem[]);
       setClients(clientData);
     } catch { /* ignore */ }
-  }, [today]);
+  }, [today, activityRange]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Reload activities when the filter range changes
+  useEffect(() => {
+    if (!loading) loadActivities(activityRange);
+  }, [activityRange, loading, loadActivities]);
 
   // Check if an appointment is assigned to the current staff user
   function isMyAppointment(appt: AppointmentData) {
@@ -213,18 +252,19 @@ export default function HomePage() {
                 const endTime = getApptEndTime(appt);
                 const isMine = isMyAppointment(appt);
                 const location = appt.clients?.address;
+                const isPaid = appt.status === "paid";
 
                 return (
                   <button
                     key={appt.id}
                     onClick={() => openDetail(appt)}
-                    className={`flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 ${
+                    className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-gray-50 sm:px-5 ${
                       isStaff && isMine ? "bg-violet-50/60 border-l-[3px] border-l-violet-400" : ""
-                    }`}
+                    } ${isPaid ? "opacity-40" : ""}`}
                   >
                     {/* Time range */}
                     <div className="shrink-0">
-                      <p className="text-sm font-semibold text-gray-900">
+                      <p className="text-xs font-semibold text-gray-900 sm:text-sm">
                         {formatTime12Short(appt.time)} – {formatTime12Short(endTime)}
                       </p>
                       <p className="text-[10px] text-gray-400">{formatDuration(duration)}</p>
@@ -241,7 +281,7 @@ export default function HomePage() {
                     </div>
 
                     {/* Status badge */}
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusColor(appt.status)}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium sm:px-2.5 sm:text-[11px] ${statusColor(appt.status)}`}>
                       {statusLabel(appt.status)}
                     </span>
                   </button>
@@ -253,8 +293,23 @@ export default function HomePage() {
 
         {/* ---- Recent Activity ---- */}
         <div className="rounded-xl border border-gray-200 bg-white">
-          <div className="border-b border-gray-100 px-5 py-4">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 sm:px-5 sm:py-4">
             <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
+            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+              {(["today", "7days", "30days"] as ActivityRange[]).map((range) => (
+                <button
+                  key={range}
+                  onClick={() => setActivityRange(range)}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors sm:px-2.5 sm:text-xs ${
+                    activityRange === range
+                      ? "bg-white text-violet-700 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {RANGE_LABELS[range]}
+                </button>
+              ))}
+            </div>
           </div>
 
           {activities.length === 0 ? (

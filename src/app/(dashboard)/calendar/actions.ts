@@ -31,7 +31,7 @@ export async function getAppointmentsForDate(date: string) {
     .from("appointments")
     .select(`
       *,
-      clients ( id, name, phone, address ),
+      clients ( id, name, phone, address, map_link ),
       appointment_services (
         id,
         service_id,
@@ -65,7 +65,7 @@ export async function getClients() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("clients")
-    .select("id, name, phone, address")
+    .select("id, name, phone, address, map_link")
     .order("name", { ascending: true });
 
   if (error) throw error;

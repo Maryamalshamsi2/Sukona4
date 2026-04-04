@@ -15,7 +15,11 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                secure: false,
+                sameSite: "lax",
+              })
             );
           } catch {
             // This can be ignored in Server Components

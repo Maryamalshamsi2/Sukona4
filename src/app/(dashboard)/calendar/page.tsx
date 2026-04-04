@@ -190,6 +190,9 @@ export default function CalendarPage() {
   const [resizeBlockHeight, setResizeBlockHeight] = useState(0);
   const resizeBlockPending = useRef(false);
 
+  // FAB (floating action button) for mobile
+  const [fabOpen, setFabOpen] = useState(false);
+
   // Grid drag-to-create selection
   const [quickAction, setQuickAction] = useState<{
     x: number; y: number; startTime: string; endTime: string; staffId: string;
@@ -650,55 +653,49 @@ export default function CalendarPage() {
   const isToday = formatDate(new Date()) === dateStr;
 
   return (
-    <div className="flex flex-col h-full -m-4 lg:-m-6">
+    <div className="flex flex-col h-full -m-3 sm:-m-4 lg:-m-6">
       {/* ---- Top bar ---- */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+      {/* Mobile top bar */}
+      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-2 py-2 sm:hidden">
+        <button onClick={goPrev} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+
         <div className="flex items-center gap-2">
-          <button onClick={goPrev} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
-          </button>
           <button onClick={goToday}
-            className={`rounded-lg px-3 py-1 text-sm font-medium ${isToday ? "bg-violet-600 text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+            className={`rounded-lg px-2 py-1 text-xs font-medium ${isToday ? "bg-violet-600 text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}
           >Today</button>
-          <button onClick={goNext} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
-          </button>
-          <div className="relative ml-2" ref={datePickerRef}>
+          <div className="relative" ref={datePickerRef}>
             <button
               onClick={() => setDatePickerOpen((v) => !v)}
-              className="flex items-center gap-1 text-lg font-semibold text-gray-900 hover:text-violet-700 transition-colors"
+              className="flex items-center gap-1 text-sm font-semibold text-gray-900 hover:text-violet-700 transition-colors"
             >
               {formatDisplayDate(selectedDate)}
-              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
               </svg>
             </button>
             {datePickerOpen && <DatePicker selected={selectedDate} onSelect={(d) => { setSelectedDate(d); setDatePickerOpen(false); }} />}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Staff filter */}
+
+        <div className="flex items-center gap-1">
+          <button onClick={goNext} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
           <div className="relative" ref={staffFilterRef}>
             <button
               onClick={() => setStaffFilterOpen((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium ${
-                selectedStaffIds.size > 0
-                  ? "border-violet-300 bg-violet-50 text-violet-700"
-                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              className={`rounded-lg p-2 ${
+                selectedStaffIds.size > 0 ? "text-violet-700" : "text-gray-500 hover:bg-gray-100"
               }`}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-              </svg>
-              {selectedStaffIds.size === 0
-                ? "All Staff"
-                : `${selectedStaffIds.size} Staff`}
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
               </svg>
             </button>
 
@@ -761,7 +758,58 @@ export default function CalendarPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
 
+      {/* Desktop top bar */}
+      <div className="hidden sm:flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <button onClick={goPrev} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <button onClick={goToday}
+            className={`rounded-lg px-3 py-1 text-sm font-medium ${isToday ? "bg-violet-600 text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+          >Today</button>
+          <button onClick={goNext} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+          <div className="relative ml-2">
+            <button
+              onClick={() => setDatePickerOpen((v) => !v)}
+              className="flex items-center gap-1 text-lg font-semibold text-gray-900 hover:text-violet-700 transition-colors"
+            >
+              {formatDisplayDate(selectedDate)}
+              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+            {datePickerOpen && <DatePicker selected={selectedDate} onSelect={(d) => { setSelectedDate(d); setDatePickerOpen(false); }} />}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Desktop staff filter */}
+          <div className="relative">
+            <button
+              onClick={() => setStaffFilterOpen((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium ${
+                selectedStaffIds.size > 0
+                  ? "border-violet-300 bg-violet-50 text-violet-700"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+              </svg>
+              {selectedStaffIds.size === 0 ? "All Staff" : `${selectedStaffIds.size} Staff`}
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+          </div>
           <button onClick={() => setBlockModalOpen(true)}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >+ Block Time</button>
@@ -777,8 +825,8 @@ export default function CalendarPage() {
       <div className="flex-1 overflow-auto bg-gray-50">
         <div className="inline-flex min-w-full">
           {/* Time column */}
-          <div className="sticky left-0 z-10 w-16 shrink-0 border-r border-gray-200 bg-gray-50">
-            <div className="h-12 border-b border-gray-200" />
+          <div className="sticky left-0 z-10 w-12 shrink-0 border-r border-gray-200 bg-gray-50 sm:w-16">
+            <div className="h-[52px] border-b border-gray-200 sm:h-12" />
             <div className="relative" style={{ height: `${HOURS.length * HOUR_HEIGHT}px` }}>
               {HOURS.map((hour) => (
                 <div key={hour} className="absolute w-full text-right pr-2 text-xs text-gray-400"
@@ -799,15 +847,13 @@ export default function CalendarPage() {
               const memberAppts = getStaffAppointments(member.id, idx);
               const memberBlocks = getStaffBlocks(member.id);
               return (
-                <div key={member.id} className="min-w-[180px] flex-1 border-r border-gray-200 last:border-r-0">
-                  {/* Staff header */}
-                  <div className="sticky top-0 z-10 flex h-12 items-center justify-center border-b border-gray-200 bg-white px-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700">
-                        {member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                      </div>
-                      <span className="text-sm font-medium text-gray-900 truncate">{member.full_name}</span>
+                <div key={member.id} className="min-w-[100px] sm:min-w-[180px] flex-1 border-r border-gray-200 last:border-r-0">
+                  {/* Staff header — vertical on mobile, horizontal on desktop */}
+                  <div className="sticky top-0 z-10 flex flex-col items-center justify-center border-b border-gray-200 bg-white px-1 py-1.5 sm:flex-row sm:h-12 sm:gap-2 sm:px-2 sm:py-0">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700 sm:h-7 sm:w-7">
+                      {member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
                     </div>
+                    <span className="mt-0.5 text-[10px] font-medium text-gray-900 truncate max-w-full text-center leading-tight sm:mt-0 sm:text-sm sm:text-left">{member.full_name.split(" ")[0]}</span>
                   </div>
 
                   {/* Grid */}
@@ -897,9 +943,12 @@ export default function CalendarPage() {
 
                       const isDragging = dragApptId === appt.id;
                       const isResizing = resizeApptId === appt.id;
+                      const isPaid = appt.status === "paid";
                       const colorClass = isOrphan
                         ? "bg-gray-100 border-gray-300 text-gray-700"
-                        : APPT_COLOR;
+                        : isPaid
+                          ? "bg-pink-50/50 border-pink-200/50 text-pink-900/40"
+                          : APPT_COLOR;
 
                       // When dragging, offset the visual position based on the appointment's original start
                       const apptStartMin = timeToMinutes(appt.time);
@@ -950,6 +999,45 @@ export default function CalendarPage() {
             })
           )}
         </div>
+      </div>
+
+      {/* ==== MOBILE FAB (floating action button) ==== */}
+      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+        {fabOpen && (
+          <>
+            <div className="fixed inset-0" onClick={() => setFabOpen(false)} />
+            <div className="absolute bottom-16 right-0 flex flex-col items-end gap-2">
+              <button
+                onClick={() => { setFabOpen(false); setAddModalOpen(true); }}
+                className="flex items-center gap-2 rounded-full bg-violet-600 pl-4 pr-5 py-2.5 text-sm font-medium text-white shadow-lg"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+                Appointment
+              </button>
+              <button
+                onClick={() => { setFabOpen(false); setBlockModalOpen(true); }}
+                className="flex items-center gap-2 rounded-full bg-white border border-gray-300 pl-4 pr-5 py-2.5 text-sm font-medium text-gray-700 shadow-lg"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Block Time
+              </button>
+            </div>
+          </>
+        )}
+        <button
+          onClick={() => setFabOpen((v) => !v)}
+          className={`flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform ${
+            fabOpen ? "bg-gray-700 rotate-45" : "bg-violet-600"
+          }`}
+        >
+          <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
       </div>
 
       {/* ==== QUICK ACTION POPOVER (click on grid) ==== */}

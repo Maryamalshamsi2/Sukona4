@@ -2,31 +2,52 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { signup } from "./actions";
 
 export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setLoading(true);
     setError(null);
-    const result = await signup(formData);
-    if (result?.error) {
-      setError(result.error);
+
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const full_name = formData.get("full_name") as string;
+
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password, full_name }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Signup failed");
+        setLoading(false);
+      } else {
+        window.location.replace("/");
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-[100dvh] items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-violet-600">Sukona</h1>
           <p className="mt-2 text-gray-500">Create your account</p>
         </div>
 
-        <form action={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="full_name" className="block text-sm font-medium text-gray-700">
               Full Name
@@ -36,7 +57,8 @@ export default function SignupPage() {
               name="full_name"
               type="text"
               required
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              autoComplete="name"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-base sm:text-sm sm:py-2"
               placeholder="Your name"
             />
           </div>
@@ -50,7 +72,8 @@ export default function SignupPage() {
               name="email"
               type="email"
               required
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              autoComplete="email"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-base sm:text-sm sm:py-2"
               placeholder="you@example.com"
             />
           </div>
@@ -65,7 +88,8 @@ export default function SignupPage() {
               type="password"
               required
               minLength={6}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              autoComplete="new-password"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-base sm:text-sm sm:py-2"
               placeholder="••••••••"
             />
           </div>
@@ -77,7 +101,7 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-violet-600 px-4 py-2 text-white font-medium hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 disabled:opacity-50"
+            className="w-full rounded-lg bg-violet-600 px-4 py-3 text-white font-medium hover:bg-violet-700 active:bg-violet-800 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 disabled:opacity-50 sm:py-2"
           >
             {loading ? "Creating account..." : "Sign up"}
           </button>

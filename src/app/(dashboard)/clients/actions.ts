@@ -21,6 +21,7 @@ export async function addClient(formData: FormData) {
     name: formData.get("name") as string,
     phone: (formData.get("phone") as string) || null,
     address: (formData.get("address") as string) || null,
+    map_link: (formData.get("map_link") as string) || null,
     notes: (formData.get("notes") as string) || null,
   });
 
@@ -38,6 +39,7 @@ export async function updateClient(id: string, formData: FormData) {
       name: formData.get("name") as string,
       phone: (formData.get("phone") as string) || null,
       address: (formData.get("address") as string) || null,
+      map_link: (formData.get("map_link") as string) || null,
       notes: (formData.get("notes") as string) || null,
     })
     .eq("id", id);

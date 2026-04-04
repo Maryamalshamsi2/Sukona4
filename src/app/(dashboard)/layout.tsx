@@ -32,13 +32,13 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
       {/* Top bar */}
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-gray-200 bg-white px-4">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-3 sm:h-14 sm:gap-4 sm:px-4">
         {/* Mobile menu button */}
         <button
           onClick={() => setSidebarOpen(true)}
-          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 lg:hidden"
+          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -46,10 +46,10 @@ export default function DashboardLayout({
         </button>
 
         {/* Logo */}
-        <span className="text-xl font-bold text-violet-600">Sukona</span>
+        <span className="text-lg font-bold text-violet-600 sm:text-xl">Sukona</span>
 
-        {/* Search bar */}
-        <div className="flex flex-1 justify-center px-4">
+        {/* Search bar — hidden on small mobile */}
+        <div className="hidden flex-1 justify-center px-4 sm:flex">
           <div className="relative w-full max-w-md">
             <svg
               className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
@@ -64,6 +64,9 @@ export default function DashboardLayout({
             />
           </div>
         </div>
+
+        {/* Spacer on mobile */}
+        <div className="flex-1 sm:hidden" />
 
         {/* User avatar */}
         <div className="relative">
@@ -85,7 +88,7 @@ export default function DashboardLayout({
                 <form action={signOut}>
                   <button
                     type="submit"
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
                   >
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -104,7 +107,7 @@ export default function DashboardLayout({
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto bg-gray-50 p-3 sm:p-4 lg:p-6">
           {children}
         </main>
       </div>

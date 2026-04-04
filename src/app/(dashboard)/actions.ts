@@ -27,7 +27,7 @@ export async function getTodayAppointments(date: string) {
     .from("appointments")
     .select(`
       *,
-      clients ( id, name, phone, address ),
+      clients ( id, name, phone, address, map_link ),
       appointment_services (
         id,
         service_id,
@@ -45,10 +45,10 @@ export async function getTodayAppointments(date: string) {
   return data;
 }
 
-export async function getRecentActivities() {
+export async function getRecentActivities(fromDate?: string) {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("activity_log")
     .select(`
       id,
@@ -60,8 +60,15 @@ export async function getRecentActivities() {
       performed_by,
       profiles:performed_by ( full_name )
     `)
-    .order("created_at", { ascending: false })
-    .limit(30);
+    .order("created_at", { ascending: false });
+
+  if (fromDate) {
+    query = query.gte("created_at", fromDate);
+  }
+
+  query = query.limit(100);
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return data;

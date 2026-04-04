@@ -18,7 +18,12 @@ export async function updateSession(request: NextRequest) {
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              // Allow cookies over plain HTTP (local dev via IP address)
+              secure: false,
+              sameSite: "lax",
+            })
           );
         },
       },
@@ -34,7 +39,9 @@ export async function updateSession(request: NextRequest) {
   if (
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/signup")
+    !request.nextUrl.pathname.startsWith("/signup") &&
+    !request.nextUrl.pathname.startsWith("/api/") &&
+    !request.nextUrl.pathname.startsWith("/cookie-test")
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

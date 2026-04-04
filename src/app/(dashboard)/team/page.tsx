@@ -147,23 +147,23 @@ export default function TeamPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team</h1>
-          <p className="mt-1 text-gray-500">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Team</h1>
+          <p className="mt-0.5 text-sm text-gray-500">
             {members.length} members &middot; {groups.length} groups
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <button
             onClick={openAddGroup}
-            className="rounded-lg border border-violet-600 px-4 py-2 text-sm font-medium text-violet-600 hover:bg-violet-50"
+            className="rounded-lg border border-violet-600 px-2.5 py-2 text-xs font-medium text-violet-600 hover:bg-violet-50 sm:px-4 sm:text-sm"
           >
             + Group
           </button>
           <button
             onClick={openAddMember}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+            className="rounded-lg bg-violet-600 px-2.5 py-2 text-xs font-medium text-white hover:bg-violet-700 sm:px-4 sm:text-sm"
           >
             + Member
           </button>
@@ -245,34 +245,32 @@ export default function TeamPage() {
           {filteredMembers.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4"
+              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:gap-4 sm:p-4"
             >
-              <div className="flex items-center gap-4">
-                {/* Avatar */}
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700">
-                  {member.full_name
-                    ? member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-                    : "?"}
-                </div>
+              {/* Avatar */}
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700 sm:h-10 sm:w-10 sm:text-sm">
+                {member.full_name
+                  ? member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+                  : "?"}
+              </div>
 
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900">{member.full_name || member.email}</p>
-                    {roleBadge(member.role)}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-gray-500">
-                    {member.job_title && <span>{member.job_title}</span>}
-                    {member.phone && <span>{member.phone}</span>}
-                    {member.team_groups && (
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
-                        {member.team_groups.name}
-                      </span>
-                    )}
-                  </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <p className="truncate text-sm font-medium text-gray-900 sm:text-base">{member.full_name || member.email}</p>
+                  {roleBadge(member.role)}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-gray-500 sm:gap-x-3 sm:text-sm">
+                  {member.job_title && <span className="truncate">{member.job_title}</span>}
+                  {member.phone && <span>{member.phone}</span>}
+                  {member.team_groups && (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                      {member.team_groups.name}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex shrink-0 items-center gap-3 sm:gap-4">
                 {member.salary > 0 && (
                   <span className="hidden text-sm font-medium text-gray-700 sm:block">
                     AED {member.salary}/mo
@@ -280,7 +278,7 @@ export default function TeamPage() {
                 )}
                 <button
                   onClick={() => openEditMember(member)}
-                  className="text-sm text-violet-600 hover:text-violet-800"
+                  className="p-1 text-sm text-violet-600 hover:text-violet-800"
                 >
                   Edit
                 </button>

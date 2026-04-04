@@ -42,6 +42,7 @@ export interface Client {
   name: string;
   phone: string | null;
   address: string | null;
+  map_link: string | null;
   notes: string | null;
   created_at: string;
 }
