@@ -61,7 +61,36 @@ begin
 end $$;
 
 -- ============================================
--- 3. HELPER: current_user_salon_id()
+-- 3a. ADD salon_id TO profiles FIRST
+-- The helper function below references profiles.salon_id, and SQL
+-- functions are validated at create time — so the column has to
+-- exist before we define the helper. The loop in step 5 will skip
+-- profiles because the column will already be there.
+-- ============================================
+do $$
+declare
+  default_salon_id uuid := (select id from salons order by created_at limit 1);
+begin
+  if default_salon_id is null then
+    raise exception 'No default salon found — backfill step must run first';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'profiles'
+       and column_name = 'salon_id'
+  ) then
+    alter table profiles add column salon_id uuid references salons on delete cascade;
+  end if;
+
+  update profiles set salon_id = default_salon_id where salon_id is null;
+  alter table profiles alter column salon_id set not null;
+  create index if not exists profiles_salon_id_idx on profiles (salon_id);
+end $$;
+
+-- ============================================
+-- 3b. HELPER: current_user_salon_id()
 -- Used in DEFAULT clauses and RLS policies.
 -- ============================================
 create or replace function current_user_salon_id()

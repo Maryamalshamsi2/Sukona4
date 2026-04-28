@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import PhoneInput from "@/components/phone-input";
 
 export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [phone, setPhone] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -15,16 +17,28 @@ export default function SignupPage() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
+    const email = ((formData.get("email") as string) || "").trim();
     const password = formData.get("password") as string;
-    const full_name = formData.get("full_name") as string;
+    const full_name = ((formData.get("full_name") as string) || "").trim();
+    const phoneTrimmed = phone.trim();
+
+    if (!email) {
+      setError("Email is required");
+      setLoading(false);
+      return;
+    }
+    if (!phoneTrimmed || !phoneTrimmed.startsWith("+") || phoneTrimmed.length < 8) {
+      setError("Please enter a valid phone number with country code");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password, full_name }),
+        body: JSON.stringify({ email, phone: phoneTrimmed, password, full_name }),
       });
 
       const data = await res.json();
@@ -76,9 +90,21 @@ export default function SignupPage() {
               type="email"
               required
               autoComplete="email"
+              autoCapitalize="off"
+              spellCheck={false}
               className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
               placeholder="you@example.com"
             />
+          </div>
+
+          <div>
+            <label htmlFor="phone" className="block text-body-sm font-semibold text-text-primary mb-1.5">
+              Phone
+            </label>
+            <PhoneInput value={phone} onChange={setPhone} required />
+            <p className="mt-1.5 text-caption text-text-tertiary">
+              You can sign in with either your email or phone.
+            </p>
           </div>
 
           <div>
