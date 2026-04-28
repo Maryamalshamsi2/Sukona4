@@ -2,7 +2,15 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { signOut } from "@/app/(dashboard)/actions";
-import { getProfile, updateProfile, updatePassword } from "./actions";
+import {
+  getProfile,
+  updateProfile,
+  updatePassword,
+  getSalon,
+  updateSalon,
+} from "./actions";
+import PhoneInput from "@/components/phone-input";
+import { useCurrentUser } from "@/lib/user-context";
 
 interface Profile {
   id: string;
@@ -13,17 +21,34 @@ interface Profile {
   role: string;
 }
 
-type SettingsTab = "profile" | "security";
+interface SalonSettings {
+  id: string;
+  name: string;
+  slug: string | null;
+  brand_color: string | null;
+  contact_phone: string | null;
+  public_review_url: string | null;
+  signoff: string | null;
+  default_language: string;
+  is_onboarded: boolean;
+}
+
+type SettingsTab = "profile" | "salon" | "security";
 
 export default function SettingsPage() {
+  const currentUser = useCurrentUser();
+  const isOwner = currentUser?.role === "owner";
+
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [salon, setSalon] = useState<SalonSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<SettingsTab>("profile");
 
   const loadData = useCallback(async () => {
     try {
-      const p = await getProfile();
+      const [p, s] = await Promise.all([getProfile(), getSalon()]);
       setProfile(p as Profile | null);
+      setSalon(s as SalonSettings | null);
     } catch {
       // silently handle
     } finally {
@@ -35,8 +60,10 @@ export default function SettingsPage() {
 
   if (loading) return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
 
+  // Salon tab is owner-only — staff/admin don't see it.
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: "profile", label: "Profile" },
+    ...(isOwner ? ([{ key: "salon", label: "Salon" }] as const) : []),
     { key: "security", label: "Security" },
   ];
 
@@ -63,6 +90,10 @@ export default function SettingsPage() {
 
       {tab === "profile" && profile && (
         <ProfileSection profile={profile} onUpdate={loadData} />
+      )}
+
+      {tab === "salon" && isOwner && salon && (
+        <SalonSection salon={salon} onUpdate={loadData} />
       )}
 
       {tab === "security" && (
@@ -296,6 +327,209 @@ function SecuritySection() {
             className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
           >
             {saving ? "Updating..." : "Update Password"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ---- Salon Section (owner only) ----
+
+const LANGUAGES: { value: string; label: string }[] = [
+  { value: "en", label: "English" },
+  { value: "ar", label: "العربية (Arabic)" },
+];
+
+function SalonSection({
+  salon,
+  onUpdate,
+}: {
+  salon: SalonSettings;
+  onUpdate: () => void;
+}) {
+  const [name, setName] = useState(salon.name);
+  const [brandColor, setBrandColor] = useState(salon.brand_color || "#0A0A0A");
+  const [contactPhone, setContactPhone] = useState(salon.contact_phone || "");
+  const [reviewUrl, setReviewUrl] = useState(salon.public_review_url || "");
+  const [signoff, setSignoff] = useState(salon.signoff || "");
+  const [language, setLanguage] = useState(salon.default_language || "en");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const hasChanges =
+    name !== salon.name ||
+    brandColor !== (salon.brand_color || "#0A0A0A") ||
+    contactPhone !== (salon.contact_phone || "") ||
+    reviewUrl !== (salon.public_review_url || "") ||
+    signoff !== (salon.signoff || "") ||
+    language !== (salon.default_language || "en");
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setMessage(null);
+
+    if (!name.trim()) {
+      setMessage({ type: "error", text: "Salon name is required" });
+      return;
+    }
+    // Light URL validation — only if a value was entered.
+    if (reviewUrl.trim() && !/^https?:\/\//i.test(reviewUrl.trim())) {
+      setMessage({
+        type: "error",
+        text: "Review URL must start with http:// or https://",
+      });
+      return;
+    }
+
+    setSaving(true);
+    const result = await updateSalon({
+      name: name.trim(),
+      brand_color: brandColor,
+      contact_phone: contactPhone.trim() || null,
+      public_review_url: reviewUrl.trim() || null,
+      signoff: signoff.trim() || null,
+      default_language: language,
+    });
+
+    if (result.error) {
+      setMessage({ type: "error", text: result.error });
+    } else {
+      setMessage({ type: "success", text: "Salon settings updated" });
+      onUpdate();
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div className="rounded-2xl ring-1 ring-border bg-white">
+      <div className="border-b border-border px-5 py-4">
+        <h3 className="text-body-sm font-semibold text-text-primary">Salon Information</h3>
+        <p className="mt-0.5 text-caption text-text-secondary">
+          This is what your team and clients see in messages, receipts, and reviews.
+        </p>
+      </div>
+
+      <form onSubmit={handleSave} className="p-6 space-y-6">
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1">
+            Salon Name
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={80}
+            required
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            placeholder="e.g. Ateeq Spa"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Brand Color
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border-[1.5px] border-gray-200 px-3 py-2 sm:py-1.5">
+              <input
+                type="color"
+                value={brandColor}
+                onChange={(e) => setBrandColor(e.target.value)}
+                className="h-7 w-10 cursor-pointer rounded border border-gray-200 bg-transparent p-0"
+                aria-label="Pick brand color"
+              />
+              <input
+                type="text"
+                value={brandColor}
+                onChange={(e) => setBrandColor(e.target.value)}
+                pattern="^#[0-9A-Fa-f]{6}$"
+                className="flex-1 bg-transparent text-body-sm focus:outline-none"
+                placeholder="#0A0A0A"
+              />
+            </div>
+            <p className="mt-1 text-caption text-text-tertiary">
+              Used in receipts and notifications.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Default Language
+            </label>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-caption text-text-tertiary">
+              Used for client-facing messages.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1">
+            Contact Phone
+          </label>
+          <PhoneInput value={contactPhone} onChange={setContactPhone} />
+          <p className="mt-1 text-caption text-text-tertiary">
+            Shown on receipts and client messages so they can reach you.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1">
+            Public Review URL
+          </label>
+          <input
+            type="url"
+            value={reviewUrl}
+            onChange={(e) => setReviewUrl(e.target.value)}
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            placeholder="https://g.page/your-salon/review"
+          />
+          <p className="mt-1 text-caption text-text-tertiary">
+            Where 4–5 star reviews are sent. Google Business or Instagram works best.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1">
+            Sign-off
+          </label>
+          <input
+            type="text"
+            value={signoff}
+            onChange={(e) => setSignoff(e.target.value)}
+            maxLength={120}
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            placeholder={`— ${name || "Ateeq Spa"} team`}
+          />
+          <p className="mt-1 text-caption text-text-tertiary">
+            Appears at the end of every notification message.
+          </p>
+        </div>
+
+        {message && (
+          <p className={`text-body-sm ${message.type === "success" ? "text-green-600" : "text-red-600"}`}>
+            {message.text}
+          </p>
+        )}
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            disabled={saving || !hasChanges}
+            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </form>
