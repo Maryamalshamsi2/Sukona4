@@ -2,7 +2,19 @@ import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
-  const { email, password } = await request.json();
+  const body = await request.json();
+  const { email, phone, password } = body as {
+    email?: string;
+    phone?: string;
+    password?: string;
+  };
+
+  if (!password || (!email && !phone)) {
+    return NextResponse.json(
+      { error: "Email or phone and password are required" },
+      { status: 400 }
+    );
+  }
 
   // Build a response we can attach cookies to
   const response = NextResponse.json({ success: true });
@@ -29,10 +41,10 @@ export async function POST(request: NextRequest) {
     }
   );
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  // Sign in with whichever identifier was provided. Supabase accepts either
+  // { email, password } or { phone, password } — never both.
+  const credentials = phone ? { phone, password } : { email: email!, password };
+  const { error } = await supabase.auth.signInWithPassword(credentials);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 401 });

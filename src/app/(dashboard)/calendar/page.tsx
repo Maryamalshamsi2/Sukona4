@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Modal from "@/components/modal";
+import MarkPaidModal from "@/components/mark-paid-modal";
+import { useCurrentUser } from "@/lib/user-context";
 import {
   StaffMember,
   ClientItem,
@@ -20,6 +22,7 @@ import {
   getServiceName,
   DetailView,
   AppointmentForm,
+  BundleForBooking,
 } from "@/lib/calendar-shared";
 import {
   getAppointmentsForDate,
@@ -35,9 +38,12 @@ import {
   updateAppointmentTime,
   updateAppointmentDuration,
   createCalendarBlock,
+  createCalendarBlocksForStaff,
   updateCalendarBlock,
   updateCalendarBlockTimes,
   deleteCalendarBlock,
+  getBundlesForBooking,
+  getStaffSchedulesForDate,
 } from "./actions";
 
 // ---- Local Types ----
@@ -55,15 +61,22 @@ interface CalendarBlockData {
 // ---- Constants ----
 
 const HOUR_HEIGHT = 80;
-const START_HOUR = 7;
-const END_HOUR = 22;
+const START_HOUR = 0;
+const END_HOUR = 24;
 const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 const SNAP_MINUTES = 15;
 
 // Appointment block color: light baby pink
-const APPT_COLOR = "bg-pink-50 border-pink-200 text-pink-900";
+const APPT_STATUS_COLORS: Record<string, string> = {
+  scheduled: "bg-[#FFF8F0] border-[#FFD9A0] text-[#CC7700]",
+  on_the_way: "bg-[#F0FAF2] border-[#B3E6BF] text-[#1B8736]",
+  arrived: "bg-[#F0F7FF] border-[#B3D4FF] text-[#0062CC]",
+  completed: "bg-[#F5F5F7] border-[#D1D1D6] text-[#48484A]",
+  paid: "bg-[#F5F5F7]/60 border-[#D1D1D6]/50 text-[#48484A]/50",
+  cancelled: "bg-red-50/60 border-red-200/50 text-red-400",
+};
 // Calendar block color: light grey
-const CAL_BLOCK_COLOR = "bg-gray-100 border-gray-300 text-gray-700";
+const CAL_BLOCK_COLOR = "bg-neutral-100 border-neutral-200 text-text-primary";
 
 // ---- Local Helpers ----
 
@@ -72,12 +85,11 @@ function formatDate(date: Date) {
 }
 
 function formatDisplayDate(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  // Example: "Sat 18 Apr"
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
+  const day = date.getDate();
+  const month = date.toLocaleDateString("en-US", { month: "short" });
+  return `${weekday} ${day} ${month}`;
 }
 
 function snapMinutes(minutes: number) {
@@ -102,23 +114,23 @@ function DatePicker({ selected, onSelect }: { selected: Date; onSelect: (d: Date
   const monthName = viewDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   return (
-    <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+    <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-xl bg-white p-3 shadow-lg ring-1 ring-black/5" onMouseDown={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-2">
-        <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
+        <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
         </button>
-        <span className="text-sm font-semibold text-gray-900">{monthName}</span>
-        <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100">
+        <span className="text-body-sm font-semibold text-text-primary">{monthName}</span>
+        <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="rounded-lg p-1 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center">
+      <div className="grid grid-cols-7 gap-1 text-center">
         {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-          <div key={d} className="text-[10px] font-medium text-gray-400 py-1">{d}</div>
+          <div key={d} className="text-caption font-semibold text-text-tertiary py-1">{d}</div>
         ))}
         {days.map((day, i) => {
           if (day === null) return <div key={`e-${i}`} />;
@@ -130,12 +142,12 @@ function DatePicker({ selected, onSelect }: { selected: Date; onSelect: (d: Date
             <button
               key={day}
               onClick={() => onSelect(dateObj)}
-              className={`rounded-lg py-1.5 text-sm transition-colors ${
+              className={`rounded-lg py-1.5 text-body-sm transition-colors ${
                 isSelected
-                  ? "bg-violet-600 text-white font-semibold"
+                  ? "bg-neutral-900 text-text-inverse font-semibold"
                   : isToday
-                  ? "bg-violet-50 text-violet-700 font-medium"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-surface-active text-text-primary font-semibold"
+                  : "text-text-primary hover:bg-surface-hover"
               }`}
             >
               {day}
@@ -150,12 +162,17 @@ function DatePicker({ selected, onSelect }: { selected: Date; onSelect: (d: Date
 // ---- Main Component ----
 
 export default function CalendarPage() {
+  const currentUser = useCurrentUser();
+  const isStaff = currentUser?.role === "staff";
+
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [appointments, setAppointments] = useState<AppointmentData[]>([]);
   const [blocks, setBlocks] = useState<CalendarBlockData[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [bundles, setBundles] = useState<BundleForBooking[]>([]);
+  const [staffScheduleMap, setStaffScheduleMap] = useState<Map<string, { isOff: boolean; startMin: number; endMin: number }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,14 +180,17 @@ export default function CalendarPage() {
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
   const [staffFilterOpen, setStaffFilterOpen] = useState(false);
   const staffFilterRef = useRef<HTMLDivElement>(null);
+  const staffFilterMobileRef = useRef<HTMLDivElement>(null);
 
   // Date picker
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const datePickerRef = useRef<HTMLDivElement>(null);
+  const datePickerDesktopRef = useRef<HTMLDivElement>(null);
 
   // Modals
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [blockDetailOpen, setBlockDetailOpen] = useState(false);
@@ -190,8 +210,28 @@ export default function CalendarPage() {
   const [resizeBlockHeight, setResizeBlockHeight] = useState(0);
   const resizeBlockPending = useRef(false);
 
+  // Current time indicator (minutes from midnight) — updates every 30 seconds
+  const [nowMinutes, setNowMinutes] = useState<number>(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      setNowMinutes(d.getHours() * 60 + d.getMinutes());
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   // FAB (floating action button) for mobile
   const [fabOpen, setFabOpen] = useState(false);
+  // Desktop "+ Add" dropdown
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
+  const addDropdownMenuRef = useRef<HTMLDivElement>(null);
 
   // Grid drag-to-create selection
   const [quickAction, setQuickAction] = useState<{
@@ -232,9 +272,12 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!staffFilterOpen) return;
     function handleClick(e: MouseEvent) {
-      if (staffFilterRef.current && !staffFilterRef.current.contains(e.target as Node)) {
-        setStaffFilterOpen(false);
-      }
+      const target = e.target as Node;
+      if (
+        (staffFilterRef.current && staffFilterRef.current.contains(target)) ||
+        (staffFilterMobileRef.current && staffFilterMobileRef.current.contains(target))
+      ) return;
+      setStaffFilterOpen(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -244,13 +287,31 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!datePickerOpen) return;
     function handleClick(e: MouseEvent) {
-      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
-        setDatePickerOpen(false);
-      }
+      const target = e.target as Node;
+      if (
+        datePickerRef.current?.contains(target) ||
+        datePickerDesktopRef.current?.contains(target)
+      ) return;
+      setDatePickerOpen(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [datePickerOpen]);
+
+  // Dismiss add dropdown on outside click
+  useEffect(() => {
+    if (!addDropdownOpen) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        (addDropdownRef.current && addDropdownRef.current.contains(target)) ||
+        (addDropdownMenuRef.current && addDropdownMenuRef.current.contains(target))
+      ) return;
+      setAddDropdownOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [addDropdownOpen]);
 
   // Dismiss quick-action popover on outside click
   useEffect(() => {
@@ -268,6 +329,7 @@ export default function CalendarPage() {
 
   // Grid drag-to-create: mouse down
   function handleGridMouseDown(e: React.MouseEvent, staffId: string) {
+    if (isStaff) return; // Staff cannot create appointments or blocks
     const target = e.target as HTMLElement;
     if (target.closest('[data-appt-block]') || target.closest('[data-cal-block]')) return;
     if (quickAction) { setQuickAction(null); return; }
@@ -343,18 +405,45 @@ export default function CalendarPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [appts, staffData, clientData, serviceData, blockData] = await Promise.all([
+      const [appts, staffData, clientData, serviceData, blockData, bundleData, schedData] = await Promise.all([
         getAppointmentsForDate(dateStr),
         getStaffMembers(),
         getClients(),
         getServices(),
         getCalendarBlocks(dateStr),
+        getBundlesForBooking(),
+        getStaffSchedulesForDate(dateStr),
       ]);
       setAppointments(appts as unknown as AppointmentData[]);
       setStaff(staffData);
       setClients(clientData);
       setServices(serviceData as ServiceItem[]);
       setBlocks(blockData as CalendarBlockData[]);
+      setBundles(bundleData as unknown as BundleForBooking[]);
+
+      // Build schedule map
+      const map = new Map<string, { isOff: boolean; startMin: number; endMin: number }>();
+      const offSet = new Set(schedData.daysOff.map((d: { profile_id: string }) => d.profile_id));
+      for (const s of schedData.schedules) {
+        if (offSet.has(s.profile_id)) {
+          map.set(s.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        } else if (s.is_day_off) {
+          map.set(s.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        } else if (s.start_time && s.end_time) {
+          map.set(s.profile_id, {
+            isOff: false,
+            startMin: timeToMinutes(s.start_time.slice(0, 5)),
+            endMin: timeToMinutes(s.end_time.slice(0, 5)),
+          });
+        }
+      }
+      // Also mark staff with one-off day off but no schedule row
+      for (const d of schedData.daysOff) {
+        if (!map.has(d.profile_id)) {
+          map.set(d.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        }
+      }
+      setStaffScheduleMap(map);
     } catch {
       setError("Failed to load calendar data");
     } finally {
@@ -410,6 +499,12 @@ export default function CalendarPage() {
   // ---- Drag handlers ----
   function handlePointerDown(e: React.PointerEvent, svcStartMin: number, appt: AppointmentData) {
     if ((e.target as HTMLElement).dataset.resize) return;
+    // Staff: open detail on click; no drag-to-reschedule.
+    if (isStaff) {
+      e.preventDefault();
+      openDetail(appt);
+      return;
+    }
     e.preventDefault();
     didDrag.current = false;
     dragStartY.current = e.clientY;
@@ -494,6 +589,7 @@ export default function CalendarPage() {
 
   // ---- Resize handlers ----
   function handleResizeStart(e: React.PointerEvent, appt: AppointmentData) {
+    if (isStaff) return; // Staff cannot resize/reschedule
     e.preventDefault();
     e.stopPropagation();
     didDrag.current = true;
@@ -508,6 +604,14 @@ export default function CalendarPage() {
   // ---- Calendar block drag/resize/click handlers ----
   function handleBlockPointerDown(e: React.PointerEvent, block: CalendarBlockData) {
     if ((e.target as HTMLElement).dataset.resize) return;
+    // Staff: open block detail on click; no drag-to-reschedule.
+    if (isStaff) {
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectedBlock(block);
+      setBlockDetailOpen(true);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     didBlockDrag.current = false;
@@ -589,6 +693,7 @@ export default function CalendarPage() {
   }
 
   function handleBlockResizeStart(e: React.PointerEvent, block: CalendarBlockData) {
+    if (isStaff) return; // Staff cannot resize blocks
     e.preventDefault();
     e.stopPropagation();
     didBlockDrag.current = true;
@@ -613,8 +718,24 @@ export default function CalendarPage() {
   async function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
     setError(null);
+    // Intercept the transition to "paid" — collect method + receipt first.
+    if (status === "paid") {
+      setMarkPaidOpen(true);
+      return;
+    }
     const result = await updateAppointmentStatus(selectedAppointment.id, status);
     if (result.error) { setError(result.error); return; }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    reload();
+  }
+
+  // Called after the Mark-Paid modal successfully records a payment.
+  async function handlePaidComplete() {
+    if (!selectedAppointment) return;
+    const result = await updateAppointmentStatus(selectedAppointment.id, "paid");
+    if (result.error) { setError(result.error); return; }
+    setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
     reload();
@@ -648,50 +769,48 @@ export default function CalendarPage() {
     return blocks.filter((b) => b.staff_id === staffId);
   }
 
-  if (loading) return <p className="mt-8 text-center text-gray-500">Loading...</p>;
+  if (loading) return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
 
   const isToday = formatDate(new Date()) === dateStr;
 
   return (
-    <div className="flex flex-col h-full -m-3 sm:-m-4 lg:-m-6">
+    <div className="absolute inset-0 flex flex-col px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 lg:px-8 lg:pt-4 lg:pb-8">
+     <div className="flex flex-col flex-1 overflow-hidden rounded-2xl bg-white border border-[#EAEAEA] shadow-xs">
       {/* ---- Top bar ---- */}
       {/* Mobile top bar */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-2 py-2 sm:hidden">
-        <button onClick={goPrev} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </button>
+      <div className="flex items-center justify-between border-b border-border px-3 py-2.5 sm:hidden">
+        <button onClick={goToday}
+          className={`rounded-lg px-2.5 py-1 text-caption font-semibold ${isToday ? "bg-neutral-900 text-text-inverse" : "bg-surface-active text-text-secondary hover:bg-neutral-100"}`}
+        >Today</button>
 
-        <div className="flex items-center gap-2">
-          <button onClick={goToday}
-            className={`rounded-lg px-2 py-1 text-xs font-medium ${isToday ? "bg-violet-600 text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}
-          >Today</button>
+        <div className="flex items-center gap-1">
+          <button onClick={goPrev} className="rounded-lg p-2 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
           <div className="relative" ref={datePickerRef}>
             <button
               onClick={() => setDatePickerOpen((v) => !v)}
-              className="flex items-center gap-1 text-sm font-semibold text-gray-900 hover:text-violet-700 transition-colors"
+              className="text-body-sm font-semibold text-text-primary hover:text-text-secondary transition-colors"
             >
               {formatDisplayDate(selectedDate)}
-              <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
             </button>
             {datePickerOpen && <DatePicker selected={selectedDate} onSelect={(d) => { setSelectedDate(d); setDatePickerOpen(false); }} />}
           </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button onClick={goNext} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+          <button onClick={goNext} className="rounded-lg p-2 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>
           </button>
-          <div className="relative" ref={staffFilterRef}>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <div className="relative" ref={staffFilterMobileRef}>
             <button
               onClick={() => setStaffFilterOpen((v) => !v)}
               className={`rounded-lg p-2 ${
-                selectedStaffIds.size > 0 ? "text-violet-700" : "text-gray-500 hover:bg-gray-100"
+                selectedStaffIds.size > 0 ? "text-text-primary bg-surface-active" : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
               }`}
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -700,25 +819,25 @@ export default function CalendarPage() {
             </button>
 
             {staffFilterOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
                 <button
                   onClick={() => setSelectedStaffIds(new Set())}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${
-                    selectedStaffIds.size === 0 ? "text-violet-700 font-medium" : "text-gray-700"
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                    selectedStaffIds.size === 0 ? "text-text-primary font-semibold" : "text-text-secondary"
                   }`}
                 >
                   <span className={`flex h-4 w-4 items-center justify-center rounded border ${
-                    selectedStaffIds.size === 0 ? "border-violet-600 bg-violet-600" : "border-gray-300"
+                    selectedStaffIds.size === 0 ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
                   }`}>
                     {selectedStaffIds.size === 0 && (
-                      <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                       </svg>
                     )}
                   </span>
                   All Staff
                 </button>
-                <div className="my-1 border-t border-gray-100" />
+                <div className="my-1 border-t border-border" />
                 {staff.map((member) => {
                   const isSelected = selectedStaffIds.has(member.id);
                   return (
@@ -735,22 +854,22 @@ export default function CalendarPage() {
                           return next;
                         });
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-body-sm text-text-secondary hover:bg-surface-hover"
                     >
                       <span className={`flex h-4 w-4 items-center justify-center rounded border ${
-                        isSelected ? "border-violet-600 bg-violet-600" : "border-gray-300"
+                        isSelected ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
                       }`}>
                         {isSelected && (
-                          <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                           </svg>
                         )}
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-[10px] font-semibold text-violet-700">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-active text-caption font-semibold text-text-primary">
                           {member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
                         </div>
-                        <span className={isSelected ? "font-medium" : ""}>{member.full_name}</span>
+                        <span className={isSelected ? "font-semibold text-text-primary" : ""}>{member.full_name}</span>
                       </div>
                     </button>
                   );
@@ -762,113 +881,246 @@ export default function CalendarPage() {
       </div>
 
       {/* Desktop top bar */}
-      <div className="hidden sm:flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+      <div className="hidden sm:flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
-          <button onClick={goPrev} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+          <button onClick={goToday}
+            className={`rounded-lg px-3 py-1.5 text-body-sm font-semibold ${isToday ? "bg-neutral-900 text-text-inverse" : "bg-surface-active text-text-secondary hover:bg-neutral-100"}`}
+          >Today</button>
+          <button onClick={goPrev} className="ml-2 rounded-lg p-1.5 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
           </button>
-          <button onClick={goToday}
-            className={`rounded-lg px-3 py-1 text-sm font-medium ${isToday ? "bg-violet-600 text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"}`}
-          >Today</button>
-          <button onClick={goNext} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+          <div className="relative" ref={datePickerDesktopRef}>
+            <button
+              onClick={() => setDatePickerOpen((v) => !v)}
+              className="text-title-section font-semibold text-text-primary hover:text-text-secondary transition-colors"
+            >
+              {formatDisplayDate(selectedDate)}
+            </button>
+            {datePickerOpen && <DatePicker selected={selectedDate} onSelect={(d) => { setSelectedDate(d); setDatePickerOpen(false); }} />}
+          </div>
+          <button onClick={goNext} className="rounded-lg p-1.5 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>
           </button>
-          <div className="relative ml-2">
-            <button
-              onClick={() => setDatePickerOpen((v) => !v)}
-              className="flex items-center gap-1 text-lg font-semibold text-gray-900 hover:text-violet-700 transition-colors"
-            >
-              {formatDisplayDate(selectedDate)}
-              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
-            </button>
-            {datePickerOpen && <DatePicker selected={selectedDate} onSelect={(d) => { setSelectedDate(d); setDatePickerOpen(false); }} />}
-          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Desktop staff filter */}
-          <div className="relative">
+          <div className="relative" ref={staffFilterRef}>
             <button
               onClick={() => setStaffFilterOpen((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium ${
+              className={`relative flex items-center justify-center rounded-lg p-2 ${
                 selectedStaffIds.size > 0
-                  ? "border-violet-300 bg-violet-50 text-violet-700"
-                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                  ? "bg-surface-active text-text-primary"
+                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
               }`}
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
               </svg>
-              {selectedStaffIds.size === 0 ? "All Staff" : `${selectedStaffIds.size} Staff`}
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
+              {selectedStaffIds.size > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-neutral-800 text-[9px] font-bold text-text-inverse">
+                  {selectedStaffIds.size}
+                </span>
+              )}
             </button>
+            {staffFilterOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                <button
+                  onClick={() => setSelectedStaffIds(new Set())}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                    selectedStaffIds.size === 0 ? "text-text-primary font-semibold" : "text-text-secondary"
+                  }`}
+                >
+                  <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                    selectedStaffIds.size === 0 ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                  }`}>
+                    {selectedStaffIds.size === 0 && (
+                      <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    )}
+                  </span>
+                  All Staff
+                </button>
+                <div className="my-1 border-t border-border" />
+                {staff.map((member) => {
+                  const isSelected = selectedStaffIds.has(member.id);
+                  return (
+                    <button
+                      key={member.id}
+                      onClick={() => {
+                        setSelectedStaffIds((prev) => {
+                          const next = new Set(prev);
+                          if (isSelected) next.delete(member.id);
+                          else next.add(member.id);
+                          return next;
+                        });
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-body-sm text-text-secondary hover:bg-surface-hover"
+                    >
+                      <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                        isSelected ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                      }`}>
+                        {isSelected && (
+                          <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-active text-caption font-semibold text-text-primary">
+                          {member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                        </div>
+                        <span className={isSelected ? "font-semibold text-text-primary" : ""}>{member.full_name}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <button onClick={() => setBlockModalOpen(true)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >+ Block Time</button>
-          <button onClick={() => setAddModalOpen(true)}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-          >+ Appointment</button>
+          {!isStaff && (
+            <div className="hidden sm:block" ref={addDropdownRef}>
+              <button
+                onClick={() => setAddDropdownOpen(!addDropdownOpen)}
+                aria-label="Add"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {error && <p className="px-4 py-2 text-sm text-red-600 bg-red-50">{error}</p>}
+      {error && <p className="px-5 py-2.5 text-body-sm text-error-700 bg-red-50">{error}</p>}
 
       {/* ---- Calendar grid ---- */}
-      <div className="flex-1 overflow-auto bg-gray-50">
+      <div className="flex-1 overflow-auto bg-[#FAFAFA]">
         <div className="inline-flex min-w-full">
           {/* Time column */}
-          <div className="sticky left-0 z-10 w-12 shrink-0 border-r border-gray-200 bg-gray-50 sm:w-16">
-            <div className="h-[52px] border-b border-gray-200 sm:h-12" />
+          <div className="sticky left-0 z-10 w-12 shrink-0 border-r border-border bg-[#FAFAFA] sm:w-16">
+            <div className="h-[52px] border-b border-border sm:h-12" />
             <div className="relative" style={{ height: `${HOURS.length * HOUR_HEIGHT}px` }}>
               {HOURS.map((hour) => (
-                <div key={hour} className="absolute w-full text-right pr-2 text-xs text-gray-400"
+                <div key={hour} className="absolute w-full text-right pr-2 text-caption text-text-tertiary"
                   style={{ top: `${(hour - START_HOUR) * HOUR_HEIGHT + 2}px` }}>
                   {hour === 0 ? "12 AM" : hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`}
                 </div>
               ))}
+              {/* Current-time dot (only on today) */}
+              {isToday && nowMinutes >= START_HOUR * 60 && nowMinutes <= END_HOUR * 60 && (
+                <div
+                  className="absolute -right-[5px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-[#FAFAFA]"
+                  style={{ top: `${((nowMinutes - START_HOUR * 60) / 60) * HOUR_HEIGHT - 5}px` }}
+                />
+              )}
             </div>
           </div>
 
           {/* Staff columns */}
           {filteredStaff.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center p-8 text-gray-500">
+            <div className="flex-1 flex items-center justify-center p-8 text-text-secondary">
               {staff.length === 0 ? "No staff members yet. Add team members first." : "No staff selected. Use the filter to show staff columns."}
             </div>
           ) : (
             filteredStaff.map((member, idx) => {
               const memberAppts = getStaffAppointments(member.id, idx);
               const memberBlocks = getStaffBlocks(member.id);
+              const isOwnColumn = isStaff && member.id === currentUser?.id;
               return (
-                <div key={member.id} className="min-w-[100px] sm:min-w-[180px] flex-1 border-r border-gray-200 last:border-r-0">
-                  {/* Staff header — vertical on mobile, horizontal on desktop */}
-                  <div className="sticky top-0 z-10 flex flex-col items-center justify-center border-b border-gray-200 bg-white px-1 py-1.5 sm:flex-row sm:h-12 sm:gap-2 sm:px-2 sm:py-0">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700 sm:h-7 sm:w-7">
-                      {member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                    </div>
-                    <span className="mt-0.5 text-[10px] font-medium text-gray-900 truncate max-w-full text-center leading-tight sm:mt-0 sm:text-sm sm:text-left">{member.full_name.split(" ")[0]}</span>
+                <div
+                  key={member.id}
+                  className={`min-w-[100px] sm:min-w-[180px] flex-1 border-r border-border last:border-r-0 ${
+                    isOwnColumn ? "bg-[#FFF8F0]" : ""
+                  }`}
+                >
+                  {/* Staff header */}
+                  <div
+                    className={`sticky top-0 z-10 flex items-center justify-center gap-2 border-b border-border px-2 py-2 sm:h-12 ${
+                      isOwnColumn ? "bg-[#FFF8F0]" : "bg-white"
+                    }`}
+                  >
+                    <span className="text-body-sm font-semibold text-text-primary truncate">{member.full_name}</span>
+                    {isOwnColumn && (
+                      <span className="shrink-0 rounded-full bg-[#FFD9A0] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#CC7700]">
+                        You
+                      </span>
+                    )}
                   </div>
 
                   {/* Grid */}
                   <div
                     data-staff-grid
-                    className="relative cursor-crosshair"
+                    className={`relative ${isStaff ? "cursor-default" : "cursor-crosshair"}`}
                     onMouseDown={(e) => handleGridMouseDown(e, member.id)}
                     onMouseMove={handleGridMouseMove}
                     onMouseUp={handleGridMouseUp}
                     style={{ height: `${HOURS.length * HOUR_HEIGHT}px` }}
                   >
                     {HOURS.map((hour) => (
-                      <div key={hour} className="absolute w-full border-t border-gray-100"
+                      <div key={hour} className="absolute w-full border-t border-border"
                         style={{ top: `${(hour - START_HOUR) * HOUR_HEIGHT}px` }} />
                     ))}
+
+                    {/* Current-time red line (only on today) */}
+                    {isToday && nowMinutes >= START_HOUR * 60 && nowMinutes <= END_HOUR * 60 && (
+                      <div
+                        className="absolute left-0 right-0 z-[15] pointer-events-none"
+                        style={{ top: `${((nowMinutes - START_HOUR * 60) / 60) * HOUR_HEIGHT}px` }}
+                      >
+                        <div className="h-px bg-red-500" />
+                      </div>
+                    )}
+
+                    {/* Non-working hours overlay */}
+                    {(() => {
+                      const sched = staffScheduleMap.get(member.id);
+                      if (!sched) return null;
+                      if (sched.isOff) {
+                        return (
+                          <div
+                            className="absolute left-0 right-0 bg-neutral-200/30 pointer-events-none z-[1]"
+                            style={{ top: 0, height: `${HOURS.length * HOUR_HEIGHT}px` }}
+                          >
+                            <div className="flex items-center justify-center h-full">
+                              <span className="text-caption font-medium text-text-tertiary bg-white/60 rounded px-2 py-0.5">Day Off</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      const overlays = [];
+                      if (sched.startMin > START_HOUR * 60) {
+                        overlays.push(
+                          <div
+                            key="before"
+                            className="absolute left-0 right-0 bg-neutral-200/30 pointer-events-none z-[1]"
+                            style={{
+                              top: 0,
+                              height: `${((sched.startMin - START_HOUR * 60) / 60) * HOUR_HEIGHT}px`,
+                            }}
+                          />
+                        );
+                      }
+                      if (sched.endMin < END_HOUR * 60) {
+                        overlays.push(
+                          <div
+                            key="after"
+                            className="absolute left-0 right-0 bg-neutral-200/30 pointer-events-none z-[1]"
+                            style={{
+                              top: `${((sched.endMin - START_HOUR * 60) / 60) * HOUR_HEIGHT}px`,
+                              height: `${((END_HOUR * 60 - sched.endMin) / 60) * HOUR_HEIGHT}px`,
+                            }}
+                          />
+                        );
+                      }
+                      return overlays;
+                    })()}
 
                     {/* Calendar blocks (buffer time) */}
                     {memberBlocks.map((block) => {
@@ -887,18 +1139,20 @@ export default function CalendarPage() {
                           onPointerMove={handleBlockPointerMove}
                           onPointerUp={() => handleBlockPointerUp(block)}
                           style={{ top: displayTop, height: displayHeight }}
-                          className={`absolute left-1 right-1 rounded-lg border px-2 py-1 text-xs overflow-hidden select-none cursor-grab transition-shadow hover:shadow-md z-10 ${CAL_BLOCK_COLOR} ${isDraggingBlock ? "shadow-lg opacity-80 cursor-grabbing z-20" : ""}`}
+                          className={`absolute left-1 right-1 rounded-lg border px-2 py-1 text-xs overflow-hidden select-none transition-shadow hover:shadow-md z-10 ${CAL_BLOCK_COLOR} ${isStaff ? "cursor-pointer" : "cursor-grab"} ${isDraggingBlock ? "shadow-lg opacity-80 cursor-grabbing z-20" : ""}`}
                         >
                           <p className="font-semibold truncate">{block.title}</p>
                           <p className="opacity-70">
                             {formatTime12Short(block.start_time)} - {formatTime12Short(block.end_time)} ({formatDuration(dur)})
                           </p>
-                          {/* Resize handle */}
-                          <div
-                            data-resize="true"
-                            onPointerDown={(e) => handleBlockResizeStart(e, block)}
-                            className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize rounded-b-lg hover:bg-black/10"
-                          />
+                          {/* Resize handle (hidden for staff) */}
+                          {!isStaff && (
+                            <div
+                              data-resize="true"
+                              onPointerDown={(e) => handleBlockResizeStart(e, block)}
+                              className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize rounded-b-lg hover:bg-black/10"
+                            />
+                          )}
                         </div>
                       );
                     })}
@@ -912,10 +1166,10 @@ export default function CalendarPage() {
                       const heightPx = ((finalEnd - selStart) / 60) * HOUR_HEIGHT;
                       return (
                         <div
-                          className="absolute left-1 right-1 rounded-lg bg-violet-200/60 border-2 border-violet-400 pointer-events-none z-10"
+                          className="absolute left-1 right-1 rounded-lg bg-neutral-200/60 border-2 border-neutral-400 pointer-events-none z-10"
                           style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 10)}px` }}
                         >
-                          <p className="px-2 py-1 text-xs font-medium text-violet-700">
+                          <p className="px-2 py-1 text-caption font-semibold text-text-primary">
                             {formatTime12Short(minutesToTime(selStart))} - {formatTime12Short(minutesToTime(finalEnd))}
                           </p>
                         </div>
@@ -943,12 +1197,9 @@ export default function CalendarPage() {
 
                       const isDragging = dragApptId === appt.id;
                       const isResizing = resizeApptId === appt.id;
-                      const isPaid = appt.status === "paid";
                       const colorClass = isOrphan
-                        ? "bg-gray-100 border-gray-300 text-gray-700"
-                        : isPaid
-                          ? "bg-pink-50/50 border-pink-200/50 text-pink-900/40"
-                          : APPT_COLOR;
+                        ? "bg-neutral-100 border-neutral-200 text-text-primary"
+                        : (APPT_STATUS_COLORS[appt.status] || APPT_STATUS_COLORS.scheduled);
 
                       // When dragging, offset the visual position based on the appointment's original start
                       const apptStartMin = timeToMinutes(appt.time);
@@ -970,26 +1221,28 @@ export default function CalendarPage() {
                           onPointerDown={(e) => handlePointerDown(e, earliestStart, appt)}
                           onPointerMove={handlePointerMove}
                           onPointerUp={() => handlePointerUp(appt)}
-                          className={`absolute left-1 right-1 rounded-lg border px-2 py-1 text-left text-xs cursor-grab overflow-hidden select-none transition-shadow hover:shadow-md ${colorClass} ${isDragging ? "shadow-lg opacity-80 cursor-grabbing z-20" : ""}`}
+                          className={`absolute left-1 right-1 rounded-lg border px-2 py-1 text-left text-xs overflow-hidden select-none transition-shadow hover:shadow-md ${colorClass} ${isStaff ? "cursor-pointer" : "cursor-grab"} ${isDragging ? "shadow-lg opacity-80 cursor-grabbing z-20" : ""}`}
                           style={{ top: `${displayTop}px`, height: `${displayHeight}px` }}
                         >
                           <p className="font-semibold truncate">{appt.clients?.name || "Unknown"}</p>
                           {appt.clients?.address && (
                             <p className="truncate opacity-70">{appt.clients.address}</p>
                           )}
-                          <p className="opacity-80 font-medium">
+                          <p className="opacity-80 font-semibold">
                             {formatTime12Short(blockStartTime)} - {formatTime12Short(blockEndTime)} ({formatDuration(blockDuration)})
                           </p>
                           {serviceNames.length > 0 && (
                             <p className="truncate opacity-60">{serviceNames.join(", ")}</p>
                           )}
 
-                          {/* Resize handle */}
-                          <div
-                            data-resize="true"
-                            onPointerDown={(e) => handleResizeStart(e, appt)}
-                            className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize rounded-b-lg hover:bg-black/10"
-                          />
+                          {/* Resize handle (hidden for staff) */}
+                          {!isStaff && (
+                            <div
+                              data-resize="true"
+                              onPointerDown={(e) => handleResizeStart(e, appt)}
+                              className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize rounded-b-lg hover:bg-black/10"
+                            />
+                          )}
                         </div>
                       );
                     })}
@@ -1001,15 +1254,45 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* ==== DESKTOP ADD DROPDOWN (rendered outside overflow container) ==== */}
+      {addDropdownOpen && addDropdownRef.current && (() => {
+        const rect = addDropdownRef.current!.getBoundingClientRect();
+        return (
+          <div ref={addDropdownMenuRef} className="fixed z-[9999]" style={{ top: rect.bottom + 6, right: window.innerWidth - rect.right }}>
+            <div className="w-44 rounded-xl border border-border bg-white py-1 shadow-lg">
+              <button
+                onClick={() => { setAddModalOpen(true); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                <svg className="h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+                Appointment
+              </button>
+              <button
+                onClick={() => { setBlockModalOpen(true); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                <svg className="h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Block Time
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ==== MOBILE FAB (floating action button) ==== */}
+      {!isStaff && (
       <div className="fixed bottom-6 right-6 z-40 sm:hidden">
         {fabOpen && (
           <>
             <div className="fixed inset-0" onClick={() => setFabOpen(false)} />
-            <div className="absolute bottom-16 right-0 flex flex-col items-end gap-2">
+            <div className="absolute bottom-16 right-0 flex flex-col items-stretch gap-2">
               <button
                 onClick={() => { setFabOpen(false); setAddModalOpen(true); }}
-                className="flex items-center gap-2 rounded-full bg-violet-600 pl-4 pr-5 py-2.5 text-sm font-medium text-white shadow-lg"
+                className="flex items-center gap-2 rounded-full bg-neutral-900 pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-inverse shadow-lg"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -1018,7 +1301,7 @@ export default function CalendarPage() {
               </button>
               <button
                 onClick={() => { setFabOpen(false); setBlockModalOpen(true); }}
-                className="flex items-center gap-2 rounded-full bg-white border border-gray-300 pl-4 pr-5 py-2.5 text-sm font-medium text-gray-700 shadow-lg"
+                className="flex items-center gap-2 rounded-full bg-white pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-primary shadow-lg ring-1 ring-black/5"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
@@ -1031,32 +1314,33 @@ export default function CalendarPage() {
         <button
           onClick={() => setFabOpen((v) => !v)}
           className={`flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform ${
-            fabOpen ? "bg-gray-700 rotate-45" : "bg-violet-600"
+            fabOpen ? "bg-neutral-700 rotate-45" : "bg-neutral-900"
           }`}
         >
-          <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="h-7 w-7 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
         </button>
       </div>
+      )}
 
       {/* ==== QUICK ACTION POPOVER (click on grid) ==== */}
       {quickAction && (
         <div
           ref={quickActionRef}
-          className="fixed z-50 rounded-xl border border-gray-200 bg-white shadow-xl p-1 min-w-[180px]"
+          className="fixed z-50 rounded-xl bg-white shadow-lg ring-1 ring-black/5 p-1 min-w-[180px]"
           style={{
             left: `${quickAction.x}px`,
             top: `${quickAction.y}px`,
             transform: "translate(-50%, -100%) translateY(-8px)",
           }}
         >
-          <p className="px-3 py-1.5 text-xs font-medium text-gray-400">
+          <p className="px-3 py-1.5 text-caption font-normal text-text-tertiary">
             {formatTime12Short(quickAction.startTime)} - {formatTime12Short(quickAction.endTime)} · {staff.find((s) => s.id === quickAction.staffId)?.full_name}
           </p>
           <button
             onClick={openAddFromGrid}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-body-sm text-text-primary hover:bg-surface-hover"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -1065,7 +1349,7 @@ export default function CalendarPage() {
           </button>
           <button
             onClick={openBlockFromGrid}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-body-sm text-text-primary hover:bg-surface-hover"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
@@ -1082,6 +1366,8 @@ export default function CalendarPage() {
           clients={clients}
           services={services}
           staff={staff}
+          bundles={bundles}
+          staffSchedules={staffScheduleMap}
           prefillTime={prefillTime}
           prefillStaffId={prefillStaffId}
           onSubmit={async (clientId, date, time, notes, entries) => {
@@ -1093,8 +1379,8 @@ export default function CalendarPage() {
             setPrefillStaffId(null);
             reload();
           }}
-          onNewClient={async (name, phone, address) => {
-            const result = await addClientQuick(name, phone, address);
+          onNewClient={async (name, phone, address, mapLink, notes) => {
+            const result = await addClientQuick(name, phone, address, mapLink, notes);
             if (result.error) { setError(result.error); return null; }
             return result.client!;
           }}
@@ -1104,7 +1390,7 @@ export default function CalendarPage() {
       </Modal>
 
       {/* ==== DETAIL MODAL ==== */}
-      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title="Appointment Details">
+      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title="Appointment Details" variant="drawer">
         {selectedAppointment && (
           <DetailView
             appointment={selectedAppointment}
@@ -1112,9 +1398,24 @@ export default function CalendarPage() {
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            canEdit={!isStaff}
           />
         )}
       </Modal>
+
+      {/* ==== MARK AS PAID MODAL ==== */}
+      <MarkPaidModal
+        open={markPaidOpen}
+        appointmentId={selectedAppointment?.id ?? null}
+        defaultAmount={
+          selectedAppointment?.appointment_services.reduce(
+            (sum, as2) => sum + (as2.services?.price || 0), 0
+          ) || 0
+        }
+        clientName={selectedAppointment?.clients?.name}
+        onClose={() => setMarkPaidOpen(false)}
+        onPaid={handlePaidComplete}
+      />
 
       {/* ==== EDIT MODAL ==== */}
       <Modal open={editModalOpen} onClose={() => { setEditModalOpen(false); setSelectedAppointment(null); }} title="Edit Appointment">
@@ -1124,6 +1425,8 @@ export default function CalendarPage() {
             clients={clients}
             services={services}
             staff={staff}
+            bundles={bundles}
+            staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries) => {
               setError(null);
               const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries);
@@ -1132,8 +1435,8 @@ export default function CalendarPage() {
               setSelectedAppointment(null);
               reload();
             }}
-            onNewClient={async (name, phone, address) => {
-              const result = await addClientQuick(name, phone, address);
+            onNewClient={async (name, phone, address, mapLink, notes) => {
+              const result = await addClientQuick(name, phone, address, mapLink, notes);
               if (result.error) { setError(result.error); return null; }
               return result.client!;
             }}
@@ -1164,9 +1467,12 @@ export default function CalendarPage() {
           prefillTime={prefillTime}
           prefillEndTime={prefillEndTime}
           prefillStaffId={prefillStaffId}
-          onSubmit={async (staffId, date, startTime, endTime, title, blockType) => {
+          multiStaff
+          onSubmit={async (staffIds, date, startTime, endTime, title, blockType) => {
             setError(null);
-            const result = await createCalendarBlock(staffId, date, startTime, endTime, title, blockType);
+            const result = staffIds.length === 1
+              ? await createCalendarBlock(staffIds[0], date, startTime, endTime, title, blockType)
+              : await createCalendarBlocksForStaff(staffIds, date, startTime, endTime, title, blockType);
             if (result.error) { setError(result.error); return; }
             setBlockModalOpen(false);
             setPrefillTime(null);
@@ -1181,44 +1487,46 @@ export default function CalendarPage() {
       {/* ==== BLOCK DETAIL MODAL ==== */}
       <Modal open={blockDetailOpen} onClose={() => { setBlockDetailOpen(false); }} title="Block Time Details">
         {selectedBlock && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
-              <p className="text-sm text-gray-500">Title</p>
-              <p className="font-medium text-gray-900">{selectedBlock.title}</p>
+              <p className="text-body-sm text-text-secondary">Title</p>
+              <p className="font-semibold text-text-primary">{selectedBlock.title}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Type</p>
-              <p className="font-medium text-gray-900 capitalize">{selectedBlock.block_type}</p>
+              <p className="text-body-sm text-text-secondary">Type</p>
+              <p className="font-semibold text-text-primary capitalize">{selectedBlock.block_type}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Time</p>
-              <p className="font-medium text-gray-900">
+              <p className="text-body-sm text-text-secondary">Time</p>
+              <p className="font-semibold text-text-primary">
                 {formatTime12(selectedBlock.start_time)} - {formatTime12(selectedBlock.end_time)}
                 {" "}({formatDuration(timeToMinutes(selectedBlock.end_time) - timeToMinutes(selectedBlock.start_time))})
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Staff</p>
-              <p className="font-medium text-gray-900">
+              <p className="text-body-sm text-text-secondary">Staff</p>
+              <p className="font-semibold text-text-primary">
                 {staff.find((s) => s.id === selectedBlock.staff_id)?.full_name || "Unknown"}
               </p>
             </div>
-            <div className="flex gap-3 border-t border-gray-100 pt-4">
-              <button
-                onClick={() => { setBlockDetailOpen(false); setBlockEditOpen(true); }}
-                className="flex-1 rounded-lg border border-violet-600 px-4 py-2 text-sm font-medium text-violet-600 hover:bg-violet-50"
-              >Edit</button>
-              <button
-                onClick={async () => {
-                  if (!confirm("Delete this block?")) return;
-                  await deleteCalendarBlock(selectedBlock.id);
-                  setBlockDetailOpen(false);
-                  setSelectedBlock(null);
-                  reload();
-                }}
-                className="flex-1 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-              >Delete</button>
-            </div>
+            {!isStaff && (
+              <div className="flex gap-3 border-t border-border pt-4">
+                <button
+                  onClick={() => { setBlockDetailOpen(false); setBlockEditOpen(true); }}
+                  className="flex-1 rounded-lg bg-surface-active px-4 py-2 text-body-sm font-semibold text-text-primary hover:bg-neutral-100"
+                >Edit</button>
+                <button
+                  onClick={async () => {
+                    if (!confirm("Delete this block?")) return;
+                    await deleteCalendarBlock(selectedBlock.id);
+                    setBlockDetailOpen(false);
+                    setSelectedBlock(null);
+                    reload();
+                  }}
+                  className="flex-1 rounded-lg border border-error-200 px-4 py-2 text-body-sm font-semibold text-error-700 hover:bg-red-50"
+                >Delete</button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -1235,9 +1543,9 @@ export default function CalendarPage() {
             defaultTitle={selectedBlock.title}
             defaultBlockType={selectedBlock.block_type}
             submitLabel="Save"
-            onSubmit={async (staffId, date, startTime, endTime, title, blockType) => {
+            onSubmit={async (staffIds, date, startTime, endTime, title, blockType) => {
               setError(null);
-              const result = await updateCalendarBlock(selectedBlock.id, staffId, startTime, endTime, title, blockType);
+              const result = await updateCalendarBlock(selectedBlock.id, staffIds[0], startTime, endTime, title, blockType);
               if (result.error) { setError(result.error); return; }
               setBlockEditOpen(false);
               setSelectedBlock(null);
@@ -1247,6 +1555,7 @@ export default function CalendarPage() {
           />
         )}
       </Modal>
+     </div>
     </div>
   );
 }
@@ -1265,10 +1574,11 @@ function BlockTimeForm({
   defaultTitle,
   defaultBlockType,
   submitLabel,
+  multiStaff,
 }: {
   dateStr: string;
   staff: StaffMember[];
-  onSubmit: (staffId: string, date: string, startTime: string, endTime: string, title: string, blockType: string) => Promise<void>;
+  onSubmit: (staffIds: string[], date: string, startTime: string, endTime: string, title: string, blockType: string) => Promise<void>;
   onCancel: () => void;
   prefillTime?: string | null;
   prefillEndTime?: string | null;
@@ -1276,18 +1586,32 @@ function BlockTimeForm({
   defaultTitle?: string;
   defaultBlockType?: string;
   submitLabel?: string;
+  multiStaff?: boolean;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>(
+    prefillStaffId ? [prefillStaffId] : []
+  );
 
   // Calculate a default end time (1 hour after start, or use prefillEndTime)
   const defaultStart = prefillTime || "12:00";
   const defaultEnd = prefillEndTime || minutesToTime(Math.min(timeToMinutes(defaultStart) + 60, END_HOUR * 60));
 
+  function toggleStaff(id: string) {
+    setSelectedStaffIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const fd = new FormData(formRef.current!);
+    const ids = multiStaff
+      ? selectedStaffIds
+      : [fd.get("staff_id") as string].filter(Boolean);
+    if (!ids.length) return;
     await onSubmit(
-      fd.get("staff_id") as string,
+      ids,
       fd.get("date") as string,
       fd.get("start_time") as string,
       fd.get("end_time") as string,
@@ -1297,28 +1621,66 @@ function BlockTimeForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700">Staff Member *</label>
-        <select name="staff_id" required defaultValue={prefillStaffId || ""}
-          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500">
-          <option value="">Select staff</option>
-          {staff.map((s) => (
-            <option key={s.id} value={s.id}>{s.full_name}</option>
-          ))}
-        </select>
+        <label className="block text-body-sm font-semibold text-text-primary">
+          Staff Member{multiStaff ? "s" : ""} *
+        </label>
+        {multiStaff ? (
+          <>
+            <div className="mt-1.5 max-h-48 overflow-y-auto rounded-xl border-[1.5px] border-neutral-200 divide-y divide-border">
+              {staff.map((s) => {
+                const checked = selectedStaffIds.includes(s.id);
+                return (
+                  <label
+                    key={s.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-hover ${
+                      checked ? "bg-surface-hover" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleStaff(s.id)}
+                      className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
+                    />
+                    <span className="text-body-sm text-text-primary">{s.full_name}</span>
+                  </label>
+                );
+              })}
+              {staff.length === 0 && (
+                <p className="px-3 py-4 text-body-sm text-text-secondary text-center">
+                  No staff members available.
+                </p>
+              )}
+            </div>
+            {selectedStaffIds.length === 0 && (
+              <p className="mt-1 text-caption text-text-tertiary">
+                Select one or more staff to block time for.
+              </p>
+            )}
+          </>
+        ) : (
+          <select name="staff_id" required defaultValue={prefillStaffId || ""}
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
+            <option value="">Select staff</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>{s.full_name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Title *</label>
+        <label className="block text-body-sm font-semibold text-text-primary">Title *</label>
         <input type="text" name="title" required defaultValue={defaultTitle || "Lunch Break"} placeholder="e.g. Lunch Break, Travel"
-          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Type</label>
+        <label className="block text-body-sm font-semibold text-text-primary">Type</label>
         <select name="block_type" defaultValue={defaultBlockType || "break"}
-          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500">
+          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
           <option value="break">Break</option>
           <option value="travel">Travel / Route</option>
           <option value="personal">Personal</option>
@@ -1328,26 +1690,29 @@ function BlockTimeForm({
 
       <input type="hidden" name="date" value={dateStr} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Start Time *</label>
+          <label className="block text-body-sm font-semibold text-text-primary">Start Time *</label>
           <input type="time" name="start_time" required defaultValue={defaultStart}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">End Time *</label>
+          <label className="block text-body-sm font-semibold text-text-primary">End Time *</label>
           <input type="time" name="end_time" required defaultValue={defaultEnd}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
         <button type="button" onClick={onCancel}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          className="rounded-lg bg-surface-active px-4 py-2 text-body-sm font-semibold text-text-primary hover:bg-neutral-100">
           Cancel
         </button>
-        <button type="submit"
-          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">
+        <button
+          type="submit"
+          disabled={multiStaff && selectedStaffIds.length === 0}
+          className="rounded-lg bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           {submitLabel || "Block Time"}
         </button>
       </div>

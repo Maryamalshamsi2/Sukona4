@@ -1,1 +1,287 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 @import "tailwindcss";
+
+/* ============================================================
+   SUKONA DESIGN TOKENS
+   Clean · Minimal · Highly legible
+
+   Typography follows a semantic role-based scale. Tokens are
+   mobile-first; the @media (min-width: 768px) block below
+   upgrades H1/H2 to their desktop sizes. All text utilities
+   (text-title-page, text-title-section, …) read from CSS
+   variables, so responsive overrides cascade automatically.
+   ============================================================ */
+
+@theme {
+  /* ==========================================================
+     FONT FAMILY
+     ========================================================== */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ==========================================================
+     COLORS — Neutral (cool grays)
+     ========================================================== */
+  --color-neutral-0: #FFFFFF;
+  --color-neutral-25: #FAFAFA;
+  --color-neutral-50: #F5F5F7;
+  --color-neutral-100: #E8E8ED;
+  --color-neutral-200: #D2D2D7;
+  --color-neutral-300: #B0B0B8;
+  --color-neutral-400: #86868B;
+  --color-neutral-500: #6E6E73;
+  --color-neutral-600: #48484A;
+  --color-neutral-700: #3A3A3C;
+  --color-neutral-800: #2C2C2E;
+  --color-neutral-900: #1D1D1F;
+  --color-neutral-950: #0D0D0D;
+
+  /* ==========================================================
+     COLORS — Primary (warm peach/orange)
+     ========================================================== */
+  --color-primary-50: #FFF8F1;
+  --color-primary-100: #FEEAD2;
+  --color-primary-200: #FDDBB3;
+  --color-primary-300: #FBB97A;
+  --color-primary-400: #F59E4B;
+  --color-primary-500: #F08C2D;
+  --color-primary-600: #E27B1A;
+  --color-primary-700: #C46515;
+  --color-primary-800: #9E5013;
+  --color-primary-900: #7A3E12;
+  --color-primary-950: #4A2409;
+
+  /* ==========================================================
+     COLORS — Semantic
+     ========================================================== */
+  --color-success-50: #F0FDF4;
+  --color-success-500: #22C55E;
+  --color-success-700: #15803D;
+
+  --color-warning-50: #FFFBEB;
+  --color-warning-500: #F59E0B;
+  --color-warning-700: #B45309;
+
+  --color-error-50: #FEF2F2;
+  --color-error-500: #EF4444;
+  --color-error-700: #B91C1C;
+
+  /* ==========================================================
+     COLORS — Surfaces, text & borders
+     Body text is off-black (#1A1A1A) for maximum legibility.
+     Captions/secondary text at #666666 (~58% lightness).
+     ========================================================== */
+  --color-bg: #F5F5F7;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: rgba(0, 0, 0, 0.02);
+  --color-surface-active: rgba(0, 0, 0, 0.04);
+  --color-border: rgba(0, 0, 0, 0.04);
+  --color-border-strong: rgba(0, 0, 0, 0.08);
+  --color-overlay: rgba(0, 0, 0, 0.40);
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #86868B;
+  --color-text-disabled: #B0B0B8;
+  --color-text-inverse: #FFFFFF;
+
+  /* ==========================================================
+     TYPOGRAPHY — Role-based scale (mobile-first base)
+     Desktop overrides live in the @media block below.
+
+     Role   Class                Mobile     Desktop    Weight
+     ───────────────────────────────────────────────────────────
+     H1     text-title-page      30px/1.15  40px/1.1   700 Bold,  -0.02em
+     H2     text-title-section   22px/1.2   26px/1.2   600 Semi,  -0.01em
+     H3     text-title-card      24px/1.3   24px/1.3   500 Medium
+     Body   text-body            16px/1.6   16px/1.6   400 Regular
+     Body·  text-body-sm         14px/1.5   14px/1.5   400 Regular
+     Capt.  text-caption         13px/1.4   13px/1.4   500 Medium
+
+     Body stays at 16px on all viewports to prevent iOS input
+     auto-zoom and preserve legibility. Headers drop line-height
+     slightly on mobile to conserve vertical real estate.
+     ========================================================== */
+
+  /* H1 — Page title (mobile base) */
+  --text-title-page: 1.875rem;          /* 30px */
+  --text-title-page--line-height: 1.15;
+  --text-title-page--letter-spacing: -0.02em;
+  --text-title-page--font-weight: 700;
+
+  /* H2 — Section title (mobile base) */
+  --text-title-section: 1.375rem;       /* 22px */
+  --text-title-section--line-height: 1.2;
+  --text-title-section--letter-spacing: -0.01em;
+  --text-title-section--font-weight: 600;
+
+  /* H3 — Card / sub-section title (same at all breakpoints) */
+  --text-title-card: 1.5rem;            /* 24px */
+  --text-title-card--line-height: 1.3;
+  --text-title-card--font-weight: 500;
+
+  /* Body — 16px everywhere (prevents iOS auto-zoom) */
+  --text-body: 1rem;                    /* 16px */
+  --text-body--line-height: 1.6;
+  --text-body--font-weight: 400;
+
+  /* Body small — for dense UI (tables, chips, meta) */
+  --text-body-sm: 0.875rem;             /* 14px */
+  --text-body-sm--line-height: 1.5;
+  --text-body-sm--font-weight: 400;
+
+  /* Caption — metadata, timestamps, labels */
+  --text-caption: 0.8125rem;            /* 13px */
+  --text-caption--line-height: 1.4;
+  --text-caption--font-weight: 500;
+
+  /* ==========================================================
+     READABILITY
+     Optimal reading measure — ~65 characters per line.
+     Use via Tailwind's built-in `max-w-prose` or the
+     `.prose-width` helper defined below.
+     ========================================================== */
+  --max-prose: 65ch;
+
+  /* ==========================================================
+     SHADOWS
+     ========================================================== */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+
+  /* ==========================================================
+     TRANSITIONS
+     ========================================================== */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  /* ==========================================================
+     LEGACY — Violet palette remap (backward compat)
+     ========================================================== */
+  --color-violet-50: #FFF8F1;
+  --color-violet-100: #FEEAD2;
+  --color-violet-200: #FDDBB3;
+  --color-violet-300: #FBB97A;
+  --color-violet-400: #F59E4B;
+  --color-violet-500: #F08C2D;
+  --color-violet-600: #E27B1A;
+  --color-violet-700: #C46515;
+  --color-violet-800: #9E5013;
+  --color-violet-900: #7A3E12;
+  --color-violet-950: #4A2409;
+}
+
+/* ============================================================
+   RESPONSIVE TYPOGRAPHY — Desktop (≥ 768px)
+   Overriding the root CSS variables at this breakpoint
+   cascades into every `text-title-*` utility automatically.
+   ============================================================ */
+@media (min-width: 768px) {
+  :root {
+    --text-title-page: 2.5rem;            /* 40px */
+    --text-title-page--line-height: 1.1;
+
+    --text-title-section: 1.625rem;       /* 26px */
+    --text-title-section--line-height: 1.2;
+  }
+}
+
+/* ============================================================
+   GLOBAL STYLES
+   ============================================================ */
+
+html {
+  /* Consistent default body-size for rem calcs and form inputs */
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: 400;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+
+  /* Cleaner font rendering on macOS / iOS */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+::selection {
+  background: var(--color-primary-500);
+  color: var(--color-text-inverse);
+}
+
+*, *::before, *::after {
+  transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-200);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-300);
+}
+
+input:focus, select:focus, textarea:focus {
+  --tw-ring-color: var(--color-primary-100);
+}
+
+/* ============================================================
+   PROSE READABILITY
+   Constrain true prose (paragraphs inside <article> or any
+   element with a `.prose` class) to ~65 characters. Dashboard
+   UI paragraphs that live inside grids/cards are unaffected.
+   Developers can also opt in explicitly via `.prose-width` or
+   Tailwind's built-in `max-w-prose` utility.
+   ============================================================ */
+article p,
+article li,
+.prose p,
+.prose li {
+  max-width: var(--max-prose);
+}
+
+.prose-width {
+  max-width: var(--max-prose);
+}
+
+/* ============================================================
+   MODAL DRAWER VARIANT — slide in from the right on desktop.
+   Uses @starting-style so the dialog begins off-screen and
+   transitions in when opened. Mobile (<640px) keeps the
+   default full-screen modal behavior with no slide.
+   ============================================================ */
+@media (min-width: 640px) {
+  dialog.modal-root[data-variant="drawer"] {
+    transition: transform 160ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                opacity 110ms ease-out;
+    transform: translateX(0);
+    opacity: 1;
+  }
+  dialog.modal-root[data-variant="drawer"]::backdrop {
+    transition: opacity 110ms ease-out;
+  }
+  @starting-style {
+    dialog.modal-root[data-variant="drawer"][open] {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    dialog.modal-root[data-variant="drawer"][open]::backdrop {
+      opacity: 0;
+    }
+  }
+}

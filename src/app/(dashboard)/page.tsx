@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Modal from "@/components/modal";
+import MarkPaidModal from "@/components/mark-paid-modal";
 import {
   AppointmentData,
   StaffMember,
   ClientItem,
   ServiceItem,
   ServiceEntry,
+  BundleForBooking,
   STATUS_FLOW,
   formatTime12Short,
   getApptTotalDuration,
@@ -15,6 +17,7 @@ import {
   formatDuration,
   DetailView,
   AppointmentForm,
+  timeToMinutes,
 } from "@/lib/calendar-shared";
 import { getTodayAppointments, getRecentActivities, getCurrentUserProfile } from "./actions";
 import {
@@ -25,6 +28,8 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  getBundlesForBooking,
+  getStaffSchedulesForDate,
 } from "./calendar/actions";
 
 interface ActivityItem {
@@ -82,17 +87,17 @@ function timeAgo(dateStr: string) {
 function actionIcon(action: string) {
   switch (action) {
     case "created":
-      return "bg-green-500";
+      return "bg-green-400";
     case "status_updated":
-      return "bg-blue-500";
+      return "bg-blue-400";
     case "edited":
-      return "bg-amber-500";
+      return "bg-amber-400";
     case "cancelled":
-      return "bg-red-400";
+      return "bg-red-300";
     case "time_changed":
-      return "bg-purple-500";
+      return "bg-purple-400";
     default:
-      return "bg-gray-400";
+      return "bg-gray-300";
   }
 }
 
@@ -115,6 +120,8 @@ export default function HomePage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [bundles, setBundles] = useState<BundleForBooking[]>([]);
+  const [staffScheduleMap, setStaffScheduleMap] = useState<Map<string, { isOff: boolean; startMin: number; endMin: number }>>(new Map());
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string; full_name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +129,7 @@ export default function HomePage() {
 
   // Modals — same as calendar
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentData | null>(null);
 
@@ -138,20 +146,46 @@ export default function HomePage() {
   const loadData = useCallback(async () => {
     try {
       const fromDate = getRangeFromDate("today");
-      const [appts, acts, staffData, clientData, serviceData, profile] = await Promise.all([
+      const [appts, acts, staffData, clientData, serviceData, profile, bundleData, schedData] = await Promise.all([
         getTodayAppointments(today),
         getRecentActivities(fromDate),
         getStaffMembers(),
         getClients(),
         getServices(),
         getCurrentUserProfile(),
+        getBundlesForBooking(),
+        getStaffSchedulesForDate(today),
       ]);
       setAppointments(appts as unknown as AppointmentData[]);
       setActivities(acts as unknown as ActivityItem[]);
       setStaff(staffData);
       setClients(clientData);
       setServices(serviceData as ServiceItem[]);
+      setBundles(bundleData as unknown as BundleForBooking[]);
       setCurrentUser(profile);
+
+      // Build schedule map (same logic as calendar page)
+      const map = new Map<string, { isOff: boolean; startMin: number; endMin: number }>();
+      const offSet = new Set(schedData.daysOff.map((d: { profile_id: string }) => d.profile_id));
+      for (const s of schedData.schedules) {
+        if (offSet.has(s.profile_id)) {
+          map.set(s.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        } else if (s.is_day_off) {
+          map.set(s.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        } else if (s.start_time && s.end_time) {
+          map.set(s.profile_id, {
+            isOff: false,
+            startMin: timeToMinutes(s.start_time.slice(0, 5)),
+            endMin: timeToMinutes(s.end_time.slice(0, 5)),
+          });
+        }
+      }
+      for (const d of schedData.daysOff) {
+        if (!map.has(d.profile_id)) {
+          map.set(d.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        }
+      }
+      setStaffScheduleMap(map);
     } catch {
       setError("Failed to load dashboard data");
     } finally {
@@ -200,8 +234,23 @@ export default function HomePage() {
   async function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
     setError(null);
+    // Intercept the transition to "paid" — collect method + receipt first.
+    if (status === "paid") {
+      setMarkPaidOpen(true);
+      return;
+    }
     const result = await updateAppointmentStatus(selectedAppointment.id, status);
     if (result.error) { setError(result.error); return; }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    reload();
+  }
+
+  async function handlePaidComplete() {
+    if (!selectedAppointment) return;
+    const result = await updateAppointmentStatus(selectedAppointment.id, "paid");
+    if (result.error) { setError(result.error); return; }
+    setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
     reload();
@@ -216,38 +265,41 @@ export default function HomePage() {
     reload();
   }
 
-  if (loading) return <p className="mt-8 text-center text-gray-500">Loading...</p>;
+  if (loading) return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
 
   const statusLabel = (status: string) =>
     STATUS_FLOW.find((s) => s.value === status)?.label || status;
   const statusColor = (status: string) =>
-    STATUS_FLOW.find((s) => s.value === status)?.color || "bg-gray-100 text-gray-700";
+    STATUS_FLOW.find((s) => s.value === status)?.color || "bg-neutral-100 text-text-primary";
 
   const isStaff = currentUser?.role === "staff";
 
   return (
     <div>
-      {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-5 rounded-xl bg-error-50 px-4 py-3 text-body-sm text-error-700">{error}</p>}
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-7">
 
         {/* ---- Daily Appointments ---- */}
-        <div className="rounded-xl border border-gray-200 bg-white">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <h2 className="text-base font-semibold text-gray-900">Today&apos;s Appointments</h2>
-            <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+        <div className="rounded-2xl bg-white border border-[#EAEAEA] shadow-xs">
+          <div className="flex items-center justify-between p-6 sm:px-6">
+            <h2 className="text-title-section font-semibold text-text-primary">Today&apos;s Appointments</h2>
+            <span className="tabular-nums text-caption font-normal text-text-tertiary">
               {appointments.length}
             </span>
           </div>
 
           {appointments.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-gray-400">
-              No appointments today
+            <div className="flex flex-col items-center justify-center px-5 pb-12 pt-8 sm:px-6">
+              <svg className="h-12 w-12 text-neutral-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+              </svg>
+              <p className="mt-3 text-caption text-text-disabled">Appointments will appear here once scheduled.</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
-              {appointments.map((appt) => {
+            <div className="max-h-[460px] overflow-y-auto">
+              {appointments.map((appt, i) => {
                 const duration = getApptTotalDuration(appt);
                 const endTime = getApptEndTime(appt);
                 const isMine = isMyAppointment(appt);
@@ -258,30 +310,32 @@ export default function HomePage() {
                   <button
                     key={appt.id}
                     onClick={() => openDetail(appt)}
-                    className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-gray-50 sm:px-5 ${
-                      isStaff && isMine ? "bg-violet-50/60 border-l-[3px] border-l-violet-400" : ""
-                    } ${isPaid ? "opacity-40" : ""}`}
+                    className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-hover sm:px-6 ${
+                      i > 0 ? "border-t border-gray-100/80" : ""
+                    } ${
+                      isStaff && isMine ? "bg-violet-50/40 border-l-2 border-l-violet-400" : ""
+                    } ${isPaid ? "opacity-35" : ""}`}
                   >
                     {/* Time range */}
-                    <div className="shrink-0">
-                      <p className="text-xs font-semibold text-gray-900 sm:text-sm">
+                    <div className="w-[100px] shrink-0 sm:w-[110px]">
+                      <p className="text-body-sm font-semibold text-text-primary">
                         {formatTime12Short(appt.time)} – {formatTime12Short(endTime)}
                       </p>
-                      <p className="text-[10px] text-gray-400">{formatDuration(duration)}</p>
+                      <p className="mt-0.5 text-caption text-text-tertiary">{formatDuration(duration)}</p>
                     </div>
 
                     {/* Info */}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-gray-900">
+                      <p className="truncate text-body-sm font-semibold text-text-primary">
                         {appt.clients?.name || "Unknown"}
                       </p>
                       {location && (
-                        <p className="truncate text-xs text-gray-500">{location}</p>
+                        <p className="mt-0.5 truncate text-caption text-text-tertiary">{location}</p>
                       )}
                     </div>
 
                     {/* Status badge */}
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium sm:px-2.5 sm:text-[11px] ${statusColor(appt.status)}`}>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-caption font-medium ${statusColor(appt.status)}`}>
                       {statusLabel(appt.status)}
                     </span>
                   </button>
@@ -292,18 +346,18 @@ export default function HomePage() {
         </div>
 
         {/* ---- Recent Activity ---- */}
-        <div className="rounded-xl border border-gray-200 bg-white">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 sm:px-5 sm:py-4">
-            <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
-            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+        <div className="rounded-2xl bg-white border border-[#EAEAEA] shadow-xs">
+          <div className="flex items-center justify-between p-6 sm:px-6">
+            <h2 className="text-title-section font-semibold text-text-primary">Recent Activity</h2>
+            <div className="flex rounded-lg bg-black/[0.04] p-0.5">
               {(["today", "7days", "30days"] as ActivityRange[]).map((range) => (
                 <button
                   key={range}
                   onClick={() => setActivityRange(range)}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors sm:px-2.5 sm:text-xs ${
+                  className={`rounded-md px-2.5 py-1 text-caption font-semibold transition-colors ${
                     activityRange === range
-                      ? "bg-white text-violet-700 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
+                      ? "bg-white text-text-primary shadow-sm"
+                      : "text-text-secondary hover:text-text-primary"
                   }`}
                 >
                   {RANGE_LABELS[range]}
@@ -313,33 +367,36 @@ export default function HomePage() {
           </div>
 
           {activities.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-gray-400">
-              No recent activity
+            <div className="flex flex-col items-center justify-center px-5 pb-12 pt-8 sm:px-6">
+              <svg className="h-12 w-12 text-neutral-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              <p className="mt-3 text-caption text-text-disabled">Activity will be logged as appointments are updated.</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
-              {activities.map((act) => (
-                <div key={act.id} className="flex items-start gap-3 px-5 py-3">
+            <div className="max-h-[460px] overflow-y-auto">
+              {activities.map((act, i) => (
+                <div key={act.id} className={`flex items-start gap-3 px-5 py-4 sm:px-6 ${i > 0 ? "border-t border-neutral-100/60" : ""}`}>
                   {/* Action dot */}
-                  <div className="mt-1.5 shrink-0">
-                    <div className={`h-2 w-2 rounded-full ${actionIcon(act.action)}`} />
+                  <div className="mt-[7px] shrink-0">
+                    <div className={`h-1.5 w-1.5 rounded-full ${actionIcon(act.action)}`} />
                   </div>
 
                   {/* Content */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-900">
+                    <p className="text-body-sm leading-snug text-text-primary">
                       {act.description}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      <span className="font-medium">{actionLabel(act.action)}</span>
+                    <p className="mt-0.5 text-caption text-text-tertiary">
+                      {actionLabel(act.action)}
                       {act.profiles?.full_name && (
-                        <> · by {act.profiles.full_name}</>
+                        <> · {act.profiles.full_name}</>
                       )}
                     </p>
                   </div>
 
                   {/* Time ago */}
-                  <span className="shrink-0 text-[11px] text-gray-400">
+                  <span className="mt-0.5 shrink-0 text-caption text-text-disabled">
                     {timeAgo(act.created_at)}
                   </span>
                 </div>
@@ -350,7 +407,7 @@ export default function HomePage() {
       </div>
 
       {/* ==== DETAIL MODAL (same as calendar) ==== */}
-      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title="Appointment Details">
+      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title="Appointment Details" variant="drawer">
         {selectedAppointment && (
           <DetailView
             appointment={selectedAppointment}
@@ -358,9 +415,24 @@ export default function HomePage() {
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            canEdit={currentUser?.role !== "staff"}
           />
         )}
       </Modal>
+
+      {/* ==== MARK AS PAID MODAL ==== */}
+      <MarkPaidModal
+        open={markPaidOpen}
+        appointmentId={selectedAppointment?.id ?? null}
+        defaultAmount={
+          selectedAppointment?.appointment_services.reduce(
+            (sum, as2) => sum + (as2.services?.price || 0), 0
+          ) || 0
+        }
+        clientName={selectedAppointment?.clients?.name}
+        onClose={() => setMarkPaidOpen(false)}
+        onPaid={handlePaidComplete}
+      />
 
       {/* ==== EDIT MODAL (same as calendar) ==== */}
       <Modal open={editModalOpen} onClose={() => { setEditModalOpen(false); setSelectedAppointment(null); }} title="Edit Appointment">
@@ -370,6 +442,8 @@ export default function HomePage() {
             clients={clients}
             services={services}
             staff={staff}
+            bundles={bundles}
+            staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries) => {
               setError(null);
               const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries);
@@ -378,8 +452,8 @@ export default function HomePage() {
               setSelectedAppointment(null);
               reload();
             }}
-            onNewClient={async (name, phone, address) => {
-              const result = await addClientQuick(name, phone, address);
+            onNewClient={async (name, phone, address, mapLink, notes) => {
+              const result = await addClientQuick(name, phone, address, mapLink, notes);
               if (result.error) { setError(result.error); return null; }
               return result.client!;
             }}

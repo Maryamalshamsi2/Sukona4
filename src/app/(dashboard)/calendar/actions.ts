@@ -98,7 +98,7 @@ export async function getCalendarBlocks(date: string) {
 
 // ---- ADD NEW CLIENT (inline) ----
 
-export async function addClientQuick(name: string, phone: string, address: string) {
+export async function addClientQuick(name: string, phone: string, address: string, mapLink: string, notes: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -107,6 +107,8 @@ export async function addClientQuick(name: string, phone: string, address: strin
       name,
       phone: phone || null,
       address: address || null,
+      map_link: mapLink || null,
+      notes: notes || null,
     })
     .select()
     .single();
@@ -321,6 +323,20 @@ export async function updateAppointmentDuration(id: string, durationMinutes: num
   return { success: true };
 }
 
+// ---- BUNDLES FOR BOOKING ----
+
+export async function getBundlesForBooking() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("service_bundles")
+    .select("id, name, discount_type, discount_percentage, fixed_price, duration_override, service_bundle_items(id, service_id, sort_order, services:service_id(id, name, price, duration_minutes))")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error) return [];
+  return data;
+}
+
 // ---- CALENDAR BLOCKS ----
 
 export async function createCalendarBlock(
@@ -332,6 +348,24 @@ export async function createCalendarBlock(
     staff_id: staffId, date, start_time: startTime,
     end_time: endTime, title, block_type: blockType,
   });
+  if (error) return { error: error.message };
+  revalidatePath("/calendar");
+  return { success: true };
+}
+
+// Create one block row per selected staff member — same date/time/title/type.
+// Each row is independent (edit/delete affects only that staff's block).
+export async function createCalendarBlocksForStaff(
+  staffIds: string[], date: string, startTime: string,
+  endTime: string, title: string, blockType: string
+) {
+  if (!staffIds.length) return { error: "Select at least one staff member" };
+  const supabase = await createClient();
+  const rows = staffIds.map((sid) => ({
+    staff_id: sid, date, start_time: startTime,
+    end_time: endTime, title, block_type: blockType,
+  }));
+  const { error } = await supabase.from("calendar_blocks").insert(rows);
   if (error) return { error: error.message };
   revalidatePath("/calendar");
   return { success: true };
@@ -367,4 +401,25 @@ export async function deleteCalendarBlock(id: string) {
   if (error) return { error: error.message };
   revalidatePath("/calendar");
   return { success: true };
+}
+
+export async function getStaffSchedulesForDate(date: string) {
+  const supabase = await createClient();
+  const dayOfWeek = new Date(date + "T00:00:00").getDay(); // 0=Sunday
+
+  const [schedResult, offResult] = await Promise.all([
+    supabase
+      .from("staff_schedules")
+      .select("*")
+      .eq("day_of_week", dayOfWeek),
+    supabase
+      .from("staff_days_off")
+      .select("*")
+      .eq("date", date),
+  ]);
+
+  return {
+    schedules: schedResult.data ?? [],
+    daysOff: offResult.data ?? [],
+  };
 }

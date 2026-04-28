@@ -2,15 +2,78 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/modal";
-import { getClients, addClient, updateClient, deleteClient } from "./actions";
+import MarkPaidModal from "@/components/mark-paid-modal";
+import PhoneInput from "@/components/phone-input";
+import { useCurrentUser } from "@/lib/user-context";
+import { getClients, addClient, updateClient, deleteClient, getClientAppointments } from "./actions";
+import {
+  getStaffMembers,
+  getClients as getClientsForForm,
+  getServices,
+  addClientQuick,
+  updateAppointment,
+  updateAppointmentStatus,
+  cancelAppointment,
+  getBundlesForBooking,
+  getStaffSchedulesForDate,
+} from "../calendar/actions";
+import {
+  AppointmentData,
+  StaffMember,
+  ClientItem,
+  ServiceItem,
+  BundleForBooking,
+  STATUS_FLOW,
+  formatTime12Short,
+  getApptTotalDuration,
+  getApptEndTime,
+  DetailView,
+  AppointmentForm,
+  timeToMinutes,
+} from "@/lib/calendar-shared";
 import type { Client } from "@/types";
 
+function formatDateLabel(dateStr: string) {
+  // Parse "YYYY-MM-DD" without timezone shift
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export default function ClientsPage() {
+  const currentUser = useCurrentUser();
+  const isStaff = currentUser?.role === "staff";
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [phoneValue, setPhoneValue] = useState("");
+
+  // ---- Client appointments list modal ----
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [listClient, setListClient] = useState<Client | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [clientAppointments, setClientAppointments] = useState<AppointmentData[]>([]);
+
+  // ---- Appointment detail / edit / mark-paid ----
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentData | null>(null);
+
+  // Supporting data for AppointmentForm
+  const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
+  const [allClientsForForm, setAllClientsForForm] = useState<ClientItem[]>([]);
+  const [allServices, setAllServices] = useState<ServiceItem[]>([]);
+  const [allBundles, setAllBundles] = useState<BundleForBooking[]>([]);
+  const [staffScheduleMap, setStaffScheduleMap] = useState<Map<string, { isOff: boolean; startMin: number; endMin: number }>>(new Map());
+  const [formDataLoaded, setFormDataLoaded] = useState(false);
 
   async function loadClients() {
     try {
@@ -27,14 +90,151 @@ export default function ClientsPage() {
     loadClients();
   }, []);
 
+  // Lazy-load shared form data (staff/services/bundles) the first time we open
+  // an appointment list. These feed DetailView & AppointmentForm.
+  async function ensureFormDataLoaded(appointmentDate?: string) {
+    if (formDataLoaded && !appointmentDate) return;
+    try {
+      const [staffData, clientData, serviceData, bundleData] = await Promise.all([
+        getStaffMembers(),
+        getClientsForForm(),
+        getServices(),
+        getBundlesForBooking(),
+      ]);
+      setAllStaff(staffData);
+      setAllClientsForForm(clientData);
+      setAllServices(serviceData as ServiceItem[]);
+      setAllBundles(bundleData as unknown as BundleForBooking[]);
+      setFormDataLoaded(true);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Refresh the schedule map for the date we're editing (so the
+  // AppointmentForm's out-of-hours warning reflects that day).
+  async function loadSchedulesForDate(dateStr: string) {
+    try {
+      const schedData = await getStaffSchedulesForDate(dateStr);
+      const map = new Map<string, { isOff: boolean; startMin: number; endMin: number }>();
+      const offSet = new Set(schedData.daysOff.map((d: { profile_id: string }) => d.profile_id));
+      for (const s of schedData.schedules) {
+        if (offSet.has(s.profile_id)) {
+          map.set(s.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        } else if (s.is_day_off) {
+          map.set(s.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        } else if (s.start_time && s.end_time) {
+          map.set(s.profile_id, {
+            isOff: false,
+            startMin: timeToMinutes(s.start_time.slice(0, 5)),
+            endMin: timeToMinutes(s.end_time.slice(0, 5)),
+          });
+        }
+      }
+      for (const d of schedData.daysOff) {
+        if (!map.has(d.profile_id)) {
+          map.set(d.profile_id, { isOff: true, startMin: 0, endMin: 0 });
+        }
+      }
+      setStaffScheduleMap(map);
+    } catch {
+      setStaffScheduleMap(new Map());
+    }
+  }
+
   function openAdd() {
     setEditing(null);
+    setPhoneValue("");
     setModalOpen(true);
   }
 
   function openEdit(client: Client) {
     setEditing(client);
+    setPhoneValue(client.phone || "");
     setModalOpen(true);
+  }
+
+  async function openClientAppointments(client: Client) {
+    setListClient(client);
+    setListModalOpen(true);
+    setListLoading(true);
+    // Load appointments + form data in parallel
+    await Promise.all([
+      (async () => {
+        try {
+          const data = await getClientAppointments(client.id);
+          setClientAppointments(data as unknown as AppointmentData[]);
+        } catch {
+          setClientAppointments([]);
+        }
+      })(),
+      ensureFormDataLoaded(),
+    ]);
+    setListLoading(false);
+  }
+
+  async function refreshClientAppointments() {
+    if (!listClient) return;
+    try {
+      const data = await getClientAppointments(listClient.id);
+      setClientAppointments(data as unknown as AppointmentData[]);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function openAppointmentDetail(appt: AppointmentData) {
+    setSelectedAppointment(appt);
+    setDetailModalOpen(true);
+  }
+
+  async function openAppointmentEdit() {
+    if (!selectedAppointment) return;
+    await loadSchedulesForDate(selectedAppointment.date);
+    setDetailModalOpen(false);
+    setEditModalOpen(true);
+  }
+
+  async function handleStatusUpdate(status: string) {
+    if (!selectedAppointment) return;
+    setError(null);
+    if (status === "paid") {
+      setMarkPaidOpen(true);
+      return;
+    }
+    const result = await updateAppointmentStatus(selectedAppointment.id, status);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    refreshClientAppointments();
+  }
+
+  async function handlePaidComplete() {
+    if (!selectedAppointment) return;
+    const result = await updateAppointmentStatus(selectedAppointment.id, "paid");
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setMarkPaidOpen(false);
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    refreshClientAppointments();
+  }
+
+  async function handleAppointmentCancel() {
+    if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
+    const result = await cancelAppointment(selectedAppointment.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    refreshClientAppointments();
   }
 
   async function handleSubmit(formData: FormData) {
@@ -67,52 +267,66 @@ export default function ClientsPage() {
     <div>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Clients</h1>
-          <p className="mt-0.5 text-sm text-gray-500">{clients.length} clients</p>
+          <h1 className="text-title-page font-bold tracking-tight text-text-primary">Clients</h1>
+          <p className="mt-1 text-body-sm text-text-secondary">{clients.length} clients</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 sm:px-4"
-        >
-          + Add Client
-        </button>
+        {!isStaff && (
+          <button
+            onClick={openAdd}
+            aria-label="Add client"
+            className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {error && (
-        <p className="mt-4 text-sm text-red-600">{error}</p>
+        <p className="mt-4 text-body-sm text-error-700">{error}</p>
       )}
 
       {loading ? (
-        <p className="mt-8 text-center text-gray-500">Loading...</p>
+        <p className="mt-8 text-center text-text-secondary">Loading...</p>
       ) : clients.length === 0 ? (
-        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No clients yet. Click &quot;+ Add Client&quot; to get started.
+        <div className="mt-8 rounded-2xl ring-1 ring-border bg-white p-8 text-center text-text-secondary">
+          {isStaff
+            ? "No clients yet."
+            : "No clients yet. Click \u201C+\u201D to get started."}
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="mt-6 overflow-hidden rounded-2xl ring-1 ring-border bg-white">
           {/* Desktop: table */}
           <div className="hidden sm:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50">
+            <table className="w-full text-left text-body-sm">
+              <thead className="border-b border-border bg-surface-hover">
                 <tr>
-                  <th className="px-4 py-3 font-medium text-gray-500">Name</th>
-                  <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
-                  <th className="px-4 py-3 font-medium text-gray-500">Location</th>
-                  <th className="px-4 py-3 font-medium text-gray-500">Notes</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-5 py-4 font-semibold text-text-secondary">Name</th>
+                  <th className="px-5 py-4 font-semibold text-text-secondary">Phone</th>
+                  <th className="px-5 py-4 font-semibold text-text-secondary">Location</th>
+                  <th className="px-5 py-4 font-semibold text-text-secondary">Notes</th>
+                  <th className="px-5 py-4"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {clients.map((client) => (
-                  <tr key={client.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{client.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{client.phone || "—"}</td>
-                    <td className="px-4 py-3 text-gray-600">
+                  <tr key={client.id} className="hover:bg-surface-hover">
+                    <td className="px-5 py-4">
+                      <button
+                        onClick={() => openClientAppointments(client)}
+                        className="font-semibold text-text-primary hover:text-primary-700 hover:underline underline-offset-2 transition-colors text-left"
+                      >
+                        {client.name}
+                      </button>
+                    </td>
+                    <td className="px-5 py-4 text-text-secondary">{client.phone || "—"}</td>
+                    <td className="px-5 py-4 text-text-secondary">
                       <div>
                         {client.address || "—"}
                         {client.map_link && (
                           <a href={client.map_link} target="_blank" rel="noopener noreferrer"
-                            className="ml-2 inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800">
+                            className="ml-2 inline-flex items-center gap-1 text-caption text-text-secondary hover:text-text-primary">
                             <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
@@ -122,12 +336,14 @@ export default function ClientsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{client.notes || "—"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 justify-end">
-                        <button onClick={() => openEdit(client)} className="text-sm text-violet-600 hover:text-violet-800">Edit</button>
-                        <button onClick={() => handleDelete(client.id)} className="text-sm text-red-500 hover:text-red-700">Delete</button>
-                      </div>
+                    <td className="px-5 py-4 text-text-secondary max-w-[200px] truncate">{client.notes || "—"}</td>
+                    <td className="px-5 py-4">
+                      {!isStaff && (
+                        <div className="flex gap-3 justify-end">
+                          <button onClick={() => openEdit(client)} className="text-body-sm text-text-secondary hover:text-text-primary">Edit</button>
+                          <button onClick={() => handleDelete(client.id)} className="text-body-sm text-error-500 hover:text-error-700">Delete</button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -136,17 +352,22 @@ export default function ClientsPage() {
           </div>
 
           {/* Mobile: cards */}
-          <div className="divide-y divide-gray-200 sm:hidden">
+          <div className="divide-y divide-black/[0.04] sm:hidden">
             {clients.map((client) => (
-              <div key={client.id} className="p-4">
+              <div key={client.id} className="p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium text-gray-900">{client.name}</p>
-                    {client.phone && <p className="mt-1 text-sm text-gray-500">{client.phone}</p>}
-                    {client.address && <p className="mt-1 text-sm text-gray-500 truncate">{client.address}</p>}
+                    <button
+                      onClick={() => openClientAppointments(client)}
+                      className="font-semibold text-text-primary hover:text-primary-700 transition-colors text-left"
+                    >
+                      {client.name}
+                    </button>
+                    {client.phone && <p className="mt-1 text-body-sm text-text-secondary">{client.phone}</p>}
+                    {client.address && <p className="mt-1 text-body-sm text-text-secondary truncate">{client.address}</p>}
                     {client.map_link && (
                       <a href={client.map_link} target="_blank" rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-xs text-violet-600">
+                        className="mt-1 inline-flex items-center gap-1 text-caption text-text-secondary hover:text-text-primary">
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
@@ -155,10 +376,12 @@ export default function ClientsPage() {
                       </a>
                     )}
                   </div>
-                  <div className="flex shrink-0 gap-3">
-                    <button onClick={() => openEdit(client)} className="p-1 text-sm text-violet-600">Edit</button>
-                    <button onClick={() => handleDelete(client.id)} className="p-1 text-sm text-red-500">Delete</button>
-                  </div>
+                  {!isStaff && (
+                    <div className="flex shrink-0 gap-3">
+                      <button onClick={() => openEdit(client)} className="p-1 text-body-sm text-text-secondary hover:text-text-primary">Edit</button>
+                      <button onClick={() => handleDelete(client.id)} className="p-1 text-body-sm text-error-500">Delete</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -166,54 +389,232 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
+      {/* ==== Add / Edit Client Modal ==== */}
       <Modal
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditing(null); }}
         title={editing ? "Edit Client" : "Add Client"}
       >
-        <form action={handleSubmit} className="space-y-4">
+        <form action={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Name *</label>
+            <label htmlFor="name" className="block text-body-sm font-semibold text-text-primary">Name *</label>
             <input id="name" name="name" type="text" required defaultValue={editing?.name ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5" />
           </div>
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
-            <input id="phone" name="phone" type="tel" defaultValue={editing?.phone ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            <label className="block text-body-sm font-semibold text-text-primary">Phone *</label>
+            <input type="hidden" name="phone" value={phoneValue} />
+            <div className="mt-1.5">
+              <PhoneInput value={phoneValue} onChange={setPhoneValue} required />
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-            <div className="space-y-2 rounded-lg border border-gray-200 p-3 bg-gray-50">
+            <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Location *</label>
+            <div className="space-y-6 rounded-xl ring-1 ring-border p-4 bg-surface-hover">
               <div>
-                <label htmlFor="address" className="block text-xs text-gray-500 mb-0.5">Address (Area, Street, House/Floor/Apt)</label>
-                <input id="address" name="address" type="text" defaultValue={editing?.address ?? ""}
+                <label htmlFor="address" className="block text-caption font-semibold text-text-secondary mb-1">Address (Area, Street, House/Floor/Apt) *</label>
+                <input id="address" name="address" type="text" required defaultValue={editing?.address ?? ""}
                   placeholder="e.g. Al Reem Island, Tower 3, Floor 12, Apt 1204"
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                  className="block w-full rounded-lg border border-neutral-200 px-4 py-2.5 text-body-sm text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-100 sm:py-2" />
               </div>
               <div>
-                <label htmlFor="map_link" className="block text-xs text-gray-500 mb-0.5">Google Maps Link (pin location)</label>
+                <label htmlFor="map_link" className="block text-caption font-semibold text-text-secondary mb-1">Google Maps Link (pin location)</label>
                 <input id="map_link" name="map_link" type="url" defaultValue={editing?.map_link ?? ""}
                   placeholder="https://maps.google.com/..."
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                  className="block w-full rounded-lg border border-neutral-200 px-4 py-2.5 text-body-sm text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-100 sm:py-2" />
               </div>
             </div>
           </div>
           <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
+            <label htmlFor="notes" className="block text-body-sm font-semibold text-text-primary">Notes</label>
             <textarea id="notes" name="notes" rows={2} defaultValue={editing?.notes ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5" />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-3">
             <button type="button" onClick={() => { setModalOpen(false); setEditing(null); }}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+              className="rounded-xl bg-surface-active px-5 py-2.5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100">Cancel</button>
             <button type="submit"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">
+              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all">
               {editing ? "Save" : "Add Client"}
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* ==== Client Appointments List Modal ==== */}
+      <Modal
+        open={listModalOpen}
+        onClose={() => {
+          setListModalOpen(false);
+          setListClient(null);
+          setClientAppointments([]);
+        }}
+        title={listClient ? `${listClient.name}'s Appointments` : "Appointments"}
+      >
+        {listLoading ? (
+          <p className="py-6 text-center text-text-secondary">Loading...</p>
+        ) : clientAppointments.length === 0 ? (
+          <div className="py-10 text-center">
+            <svg className="mx-auto h-12 w-12 text-neutral-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+            </svg>
+            <p className="mt-3 text-body-sm text-text-secondary">No appointments yet</p>
+          </div>
+        ) : (
+          <div className="-mx-2 max-h-[65vh] overflow-y-auto">
+            <div className="divide-y divide-border">
+              {clientAppointments.map((appt) => {
+                const endTime = getApptEndTime(appt);
+                const duration = getApptTotalDuration(appt);
+                const statusMeta = STATUS_FLOW.find((s) => s.value === appt.status);
+                const isCancelled = appt.status === "cancelled";
+                const statusLabel = isCancelled ? "Cancelled" : statusMeta?.label || appt.status;
+                const statusColor = isCancelled
+                  ? "bg-red-50 text-error-700"
+                  : statusMeta?.color || "bg-neutral-100 text-text-primary";
+
+                const serviceNames = appt.appointment_services
+                  .slice()
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .map((as) => as.services?.name)
+                  .filter(Boolean)
+                  .join(", ");
+
+                const staffNames = Array.from(
+                  new Set(
+                    appt.appointment_services
+                      .map((as) => allStaff.find((s) => s.id === as.staff_id)?.full_name)
+                      .filter((n): n is string => Boolean(n))
+                  )
+                ).join(", ");
+
+                const totalPrice = appt.appointment_services.reduce(
+                  (sum, as2) => sum + (as2.services?.price || 0), 0
+                );
+
+                return (
+                  <button
+                    key={appt.id}
+                    onClick={() => openAppointmentDetail(appt)}
+                    className={`flex w-full items-start gap-3 px-3 py-3.5 text-left transition-colors hover:bg-surface-hover ${
+                      isCancelled ? "opacity-60" : ""
+                    }`}
+                  >
+                    {/* Left: date + time */}
+                    <div className="w-[110px] shrink-0">
+                      <p className="text-body-sm font-semibold text-text-primary">
+                        {formatDateLabel(appt.date)}
+                      </p>
+                      <p className="mt-0.5 text-caption text-text-tertiary">
+                        {formatTime12Short(appt.time)} – {formatTime12Short(endTime)}
+                      </p>
+                      <p className="mt-0.5 text-caption text-text-tertiary">{duration} min</p>
+                    </div>
+
+                    {/* Middle: services + staff */}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-body-sm text-text-primary line-clamp-2">
+                        {serviceNames || "—"}
+                      </p>
+                      {staffNames && (
+                        <p className="mt-0.5 text-caption text-text-tertiary truncate">{staffNames}</p>
+                      )}
+                    </div>
+
+                    {/* Right: status + total */}
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      <span className={`rounded-full px-2.5 py-0.5 text-caption font-medium ${statusColor}`}>
+                        {statusLabel}
+                      </span>
+                      <span className="text-caption font-semibold text-text-primary tabular-nums">
+                        AED {totalPrice}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ==== Appointment Detail Modal ==== */}
+      <Modal
+        open={detailModalOpen}
+        onClose={() => { setDetailModalOpen(false); }}
+        title="Appointment Details"
+        variant="drawer"
+      >
+        {selectedAppointment && (
+          <DetailView
+            appointment={selectedAppointment}
+            staff={allStaff}
+            onStatusUpdate={handleStatusUpdate}
+            onEdit={openAppointmentEdit}
+            onCancel={handleAppointmentCancel}
+            canEdit={currentUser?.role !== "staff"}
+          />
+        )}
+      </Modal>
+
+      {/* ==== Mark As Paid Modal ==== */}
+      <MarkPaidModal
+        open={markPaidOpen}
+        appointmentId={selectedAppointment?.id ?? null}
+        defaultAmount={
+          selectedAppointment?.appointment_services.reduce(
+            (sum, as2) => sum + (as2.services?.price || 0), 0
+          ) || 0
+        }
+        clientName={selectedAppointment?.clients?.name}
+        onClose={() => setMarkPaidOpen(false)}
+        onPaid={handlePaidComplete}
+      />
+
+      {/* ==== Edit Appointment Modal ==== */}
+      <Modal
+        open={editModalOpen}
+        onClose={() => { setEditModalOpen(false); setSelectedAppointment(null); }}
+        title="Edit Appointment"
+      >
+        {selectedAppointment && (
+          <AppointmentForm
+            dateStr={selectedAppointment.date}
+            clients={allClientsForForm}
+            services={allServices}
+            staff={allStaff}
+            bundles={allBundles}
+            staffSchedules={staffScheduleMap}
+            onSubmit={async (clientId, date, time, notes, entries) => {
+              setError(null);
+              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries);
+              if (result.error) { setError(result.error); return; }
+              setEditModalOpen(false);
+              setSelectedAppointment(null);
+              refreshClientAppointments();
+            }}
+            onNewClient={async (name, phone, address, mapLink, notes) => {
+              const result = await addClientQuick(name, phone, address, mapLink, notes);
+              if (result.error) { setError(result.error); return null; }
+              return result.client!;
+            }}
+            onCancel={() => { setEditModalOpen(false); setSelectedAppointment(null); }}
+            submitLabel="Save"
+            defaultValues={{
+              client_id: selectedAppointment.client_id,
+              date: selectedAppointment.date,
+              time: selectedAppointment.time,
+              notes: selectedAppointment.notes || "",
+              serviceEntries: selectedAppointment.appointment_services
+                .sort((a, b) => a.sort_order - b.sort_order)
+                .map((as2) => ({
+                  service_id: as2.service_id,
+                  staff_id: as2.staff_id || "",
+                  is_parallel: as2.is_parallel,
+                })),
+            }}
+          />
+        )}
       </Modal>
     </div>
   );

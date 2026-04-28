@@ -58,3 +58,30 @@ export async function deleteClient(id: string) {
   revalidatePath("/clients");
   return { success: true };
 }
+
+// Fetch all appointments for a specific client (past + upcoming, including cancelled),
+// ordered by date desc, then time desc. Shaped the same as calendar's getAppointmentsForDate
+// so it can feed directly into <DetailView> and <AppointmentForm>.
+export async function getClientAppointments(clientId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(`
+      *,
+      clients ( id, name, phone, address, map_link ),
+      appointment_services (
+        id,
+        service_id,
+        staff_id,
+        is_parallel,
+        sort_order,
+        services:service_id ( id, name, price, duration_minutes )
+      )
+    `)
+    .eq("client_id", clientId)
+    .order("date", { ascending: false })
+    .order("time", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}

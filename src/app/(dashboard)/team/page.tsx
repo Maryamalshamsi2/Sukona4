@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
+import PhoneInput from "@/components/phone-input";
 import {
   getGroups,
   addGroup,
@@ -10,8 +11,13 @@ import {
   getTeamMembers,
   addTeamMember,
   updateTeamMember,
+  getStaffSchedules,
+  upsertStaffSchedules,
+  getStaffDaysOff,
+  addStaffDayOff,
+  deleteStaffDayOff,
 } from "./actions";
-import type { Profile, TeamGroup } from "@/types";
+import type { Profile, TeamGroup, StaffSchedule, StaffDayOff } from "@/types";
 
 export default function TeamPage() {
   const [members, setMembers] = useState<Profile[]>([]);
@@ -29,6 +35,36 @@ export default function TeamPage() {
   const [memberModalOpen, setMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Profile | null>(null);
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [memberPhone, setMemberPhone] = useState("");
+  // Auth identifier method when ADDING a new member (email or phone).
+  const [addAuthMethod, setAddAuthMethod] = useState<"email" | "phone">("email");
+
+  // Schedule state
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const DEFAULT_SCHEDULE = DAY_NAMES.map((_, i) => ({
+    day_of_week: i,
+    is_day_off: i === 5 || i === 6, // Friday & Saturday off
+    start_time: "09:00",
+    end_time: "18:00",
+  }));
+  const [scheduleData, setScheduleData] = useState(DEFAULT_SCHEDULE);
+  const [daysOff, setDaysOff] = useState<StaffDayOff[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [newDayOffDate, setNewDayOffDate] = useState("");
+  const [newDayOffReason, setNewDayOffReason] = useState("");
+
+  // "+" add dropdown
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
+        setAddDropdownOpen(false);
+      }
+    }
+    if (addDropdownOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [addDropdownOpen]);
 
   async function loadData() {
     try {
@@ -95,13 +131,44 @@ export default function TeamPage() {
   function openAddMember() {
     setEditingMember(null);
     setIsAddingMember(true);
+    setMemberPhone("");
+    setAddAuthMethod("email");
     setMemberModalOpen(true);
   }
 
-  function openEditMember(member: Profile) {
+  async function openEditMember(member: Profile) {
     setEditingMember(member);
     setIsAddingMember(false);
+    setMemberPhone(member.phone || "");
+    setScheduleData(DEFAULT_SCHEDULE);
+    setDaysOff([]);
+    setNewDayOffDate("");
+    setNewDayOffReason("");
     setMemberModalOpen(true);
+
+    // Load schedule data
+    setScheduleLoading(true);
+    try {
+      const [sched, off] = await Promise.all([
+        getStaffSchedules(member.id),
+        getStaffDaysOff(member.id),
+      ]);
+      if (sched.length > 0) {
+        setScheduleData(
+          DAY_NAMES.map((_, i) => {
+            const row = sched.find((s) => s.day_of_week === i);
+            return row
+              ? { day_of_week: i, is_day_off: row.is_day_off, start_time: row.start_time?.slice(0, 5) || "09:00", end_time: row.end_time?.slice(0, 5) || "18:00" }
+              : DEFAULT_SCHEDULE[i];
+          })
+        );
+      }
+      setDaysOff(off);
+    } catch {
+      // silently fail — defaults shown
+    } finally {
+      setScheduleLoading(false);
+    }
   }
 
   function closeMemberModal() {
@@ -123,25 +190,76 @@ export default function TeamPage() {
       setError(result.error);
       return;
     }
+
+    // Save schedule when editing
+    if (editingMember) {
+      const schedResult = await upsertStaffSchedules(editingMember.id, scheduleData);
+      if (schedResult.error) {
+        setError(schedResult.error);
+        return;
+      }
+    }
+
     closeMemberModal();
     loadData();
+  }
+
+  // Schedule helpers
+  function updateScheduleRow(dayIndex: number, field: string, value: string | boolean) {
+    setScheduleData((prev) =>
+      prev.map((row) =>
+        row.day_of_week === dayIndex ? { ...row, [field]: value } : row
+      )
+    );
+  }
+
+  function applyToAllWorkingDays() {
+    const firstWorking = scheduleData.find((d) => !d.is_day_off);
+    if (!firstWorking) return;
+    setScheduleData((prev) =>
+      prev.map((row) =>
+        row.is_day_off ? row : { ...row, start_time: firstWorking.start_time, end_time: firstWorking.end_time }
+      )
+    );
+  }
+
+  async function handleAddDayOff() {
+    if (!editingMember || !newDayOffDate) return;
+    const result = await addStaffDayOff(editingMember.id, newDayOffDate, newDayOffReason || null);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    const updated = await getStaffDaysOff(editingMember.id);
+    setDaysOff(updated);
+    setNewDayOffDate("");
+    setNewDayOffReason("");
+  }
+
+  async function handleDeleteDayOff(id: string) {
+    const result = await deleteStaffDayOff(id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDaysOff((prev) => prev.filter((d) => d.id !== id));
   }
 
   function roleBadge(role: string) {
     const colors: Record<string, string> = {
       owner: "bg-amber-100 text-amber-700",
       admin: "bg-blue-100 text-blue-700",
-      staff: "bg-gray-100 text-gray-600",
+      staff: "bg-surface-active text-text-secondary",
     };
     return (
-      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colors[role] || colors.staff}`}>
+      <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${colors[role] || colors.staff}`}>
         {role}
       </span>
     );
   }
 
   if (loading) {
-    return <p className="mt-8 text-center text-gray-500">Loading...</p>;
+    return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
   }
 
   return (
@@ -149,37 +267,50 @@ export default function TeamPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Team</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h1 className="text-title-page font-bold tracking-tight text-text-primary">Team</h1>
+          <p className="mt-0.5 text-body-sm text-text-secondary">
             {members.length} members &middot; {groups.length} groups
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="relative shrink-0" ref={addDropdownRef}>
           <button
-            onClick={openAddGroup}
-            className="rounded-lg border border-violet-600 px-2.5 py-2 text-xs font-medium text-violet-600 hover:bg-violet-50 sm:px-4 sm:text-sm"
+            onClick={() => setAddDropdownOpen((o) => !o)}
+            aria-label="Add"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
           >
-            + Group
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
           </button>
-          <button
-            onClick={openAddMember}
-            className="rounded-lg bg-violet-600 px-2.5 py-2 text-xs font-medium text-white hover:bg-violet-700 sm:px-4 sm:text-sm"
-          >
-            + Member
-          </button>
+          {addDropdownOpen && (
+            <div className="absolute right-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-border bg-white py-1 shadow-lg">
+              <button
+                onClick={() => { openAddMember(); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                Member
+              </button>
+              <button
+                onClick={() => { openAddGroup(); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                Group
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 
       {/* Group tabs */}
       <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
         <button
           onClick={() => setActiveTab("all")}
-          className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
             activeTab === "all"
-              ? "bg-violet-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              ? "bg-neutral-900 text-text-inverse"
+              : "bg-surface-active text-text-secondary hover:bg-neutral-100"
           }`}
         >
           All ({members.length})
@@ -190,10 +321,10 @@ export default function TeamPage() {
             <button
               key={g.id}
               onClick={() => setActiveTab(g.id)}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
                 activeTab === g.id
-                  ? "bg-violet-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  ? "bg-neutral-900 text-text-inverse"
+                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
               }`}
             >
               {g.name} ({count})
@@ -203,10 +334,10 @@ export default function TeamPage() {
         {members.some((m) => !m.group_id) && (
           <button
             onClick={() => setActiveTab("unassigned")}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+            className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
               activeTab === "unassigned"
-                ? "bg-violet-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                ? "bg-neutral-900 text-text-inverse"
+                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
             }`}
           >
             Unassigned ({members.filter((m) => !m.group_id).length})
@@ -222,13 +353,13 @@ export default function TeamPage() {
               const g = groups.find((g) => g.id === activeTab);
               if (g) openEditGroup(g);
             }}
-            className="text-sm text-violet-600 hover:text-violet-800"
+            className="text-body-sm text-text-secondary hover:text-text-primary"
           >
             Rename group
           </button>
           <button
             onClick={() => handleDeleteGroup(activeTab)}
-            className="text-sm text-red-500 hover:text-red-700"
+            className="text-body-sm text-error-500 hover:text-error-700"
           >
             Delete group
           </button>
@@ -237,33 +368,33 @@ export default function TeamPage() {
 
       {/* Team members list */}
       {filteredMembers.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No team members{activeTab !== "all" ? " in this group" : ""}. Click &quot;+ Member&quot; to add one.
+        <div className="mt-6 rounded-2xl ring-1 ring-border bg-white p-8 text-center text-text-secondary">
+          No team members{activeTab !== "all" ? " in this group" : ""}. Click &quot;+&quot; to add one.
         </div>
       ) : (
         <div className="mt-4 space-y-3">
           {filteredMembers.map((member) => (
             <div
               key={member.id}
-              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:gap-4 sm:p-4"
+              className="flex items-center gap-3 rounded-2xl ring-1 ring-border bg-white p-6 sm:p-6 sm:gap-4"
             >
               {/* Avatar */}
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700 sm:h-10 sm:w-10 sm:text-sm">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-caption font-semibold text-text-primary sm:h-10 sm:w-10 sm:text-body-sm">
                 {member.full_name
                   ? member.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
                   : "?"}
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  <p className="truncate text-sm font-medium text-gray-900 sm:text-base">{member.full_name || member.email}</p>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2">
+                  <p className="truncate text-body-sm font-semibold text-text-primary sm:text-body">{member.full_name || member.email}</p>
                   {roleBadge(member.role)}
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-gray-500 sm:gap-x-3 sm:text-sm">
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-caption text-text-secondary sm:gap-x-3 sm:text-body-sm">
                   {member.job_title && <span className="truncate">{member.job_title}</span>}
                   {member.phone && <span>{member.phone}</span>}
                   {member.team_groups && (
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                    <span className="rounded bg-surface-active px-1.5 py-0.5 text-caption">
                       {member.team_groups.name}
                     </span>
                   )}
@@ -272,13 +403,13 @@ export default function TeamPage() {
 
               <div className="flex shrink-0 items-center gap-3 sm:gap-4">
                 {member.salary > 0 && (
-                  <span className="hidden text-sm font-medium text-gray-700 sm:block">
+                  <span className="hidden text-body-sm font-semibold text-text-primary sm:block">
                     AED {member.salary}/mo
                   </span>
                 )}
                 <button
                   onClick={() => openEditMember(member)}
-                  className="p-1 text-sm text-violet-600 hover:text-violet-800"
+                  className="p-1 text-body-sm text-text-secondary hover:text-text-primary"
                 >
                   Edit
                 </button>
@@ -294,9 +425,9 @@ export default function TeamPage() {
         onClose={() => { setGroupModalOpen(false); setEditingGroup(null); }}
         title={editingGroup ? "Edit Group" : "Add Group"}
       >
-        <form action={handleGroupSubmit} className="space-y-4">
+        <form action={handleGroupSubmit} className="space-y-6">
           <div>
-            <label htmlFor="grp-name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="grp-name" className="block text-body-sm font-semibold text-text-primary">
               Name *
             </label>
             <input
@@ -305,20 +436,20 @@ export default function TeamPage() {
               type="text"
               required
               defaultValue={editingGroup?.name ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-3">
             <button
               type="button"
               onClick={() => { setGroupModalOpen(false); setEditingGroup(null); }}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-xl bg-surface-active hover:bg-neutral-100 px-5 py-2.5 text-body-sm font-semibold text-text-primary"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
             >
               {editingGroup ? "Save" : "Add Group"}
             </button>
@@ -331,25 +462,61 @@ export default function TeamPage() {
         open={memberModalOpen}
         onClose={closeMemberModal}
         title={isAddingMember ? "Add Team Member" : "Edit Team Member"}
+        size={isAddingMember ? "md" : "lg"}
       >
-        <form action={handleMemberSubmit} className="space-y-4">
-          {/* Only show email + password when adding */}
+        <form action={handleMemberSubmit} className="space-y-6">
+          {/* Only show email/phone + password when adding */}
           {isAddingMember && (
             <>
+              <input type="hidden" name="auth_method" value={addAuthMethod} />
               <div>
-                <label htmlFor="mem-email" className="block text-sm font-medium text-gray-700">
-                  Email *
+                <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+                  Sign-in method *
                 </label>
-                <input
-                  id="mem-email"
-                  name="email"
-                  type="email"
-                  required
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                />
+                <div className="flex gap-1 rounded-xl bg-neutral-100/80 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setAddAuthMethod("email")}
+                    className={`flex-1 rounded-lg px-3 py-2 text-body-sm font-semibold transition-all ${
+                      addAuthMethod === "email"
+                        ? "bg-white text-text-primary shadow-sm"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddAuthMethod("phone")}
+                    className={`flex-1 rounded-lg px-3 py-2 text-body-sm font-semibold transition-all ${
+                      addAuthMethod === "phone"
+                        ? "bg-white text-text-primary shadow-sm"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    Phone
+                  </button>
+                </div>
+                <p className="mt-1.5 text-caption text-text-tertiary">
+                  This is what they&apos;ll use to sign in.
+                </p>
               </div>
+              {addAuthMethod === "email" && (
+                <div>
+                  <label htmlFor="mem-email" className="block text-body-sm font-semibold text-text-primary">
+                    Email *
+                  </label>
+                  <input
+                    id="mem-email"
+                    name="email"
+                    type="email"
+                    required
+                    className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                  />
+                </div>
+              )}
               <div>
-                <label htmlFor="mem-password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="mem-password" className="block text-body-sm font-semibold text-text-primary">
                   Password *
                 </label>
                 <input
@@ -359,14 +526,14 @@ export default function TeamPage() {
                   required
                   minLength={6}
                   placeholder="Min 6 characters"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
                 />
               </div>
             </>
           )}
 
           <div>
-            <label htmlFor="mem-name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="mem-name" className="block text-body-sm font-semibold text-text-primary">
               Full Name *
             </label>
             <input
@@ -375,12 +542,12 @@ export default function TeamPage() {
               type="text"
               required
               defaultValue={editingMember?.full_name ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             />
           </div>
 
           <div>
-            <label htmlFor="mem-title" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="mem-title" className="block text-body-sm font-semibold text-text-primary">
               Job Title
             </label>
             <input
@@ -389,50 +556,55 @@ export default function TeamPage() {
               type="text"
               placeholder="e.g. Nail Technician"
               defaultValue={editingMember?.job_title ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="mem-phone" className="block text-sm font-medium text-gray-700">
-                Phone
-              </label>
-              <input
-                id="mem-phone"
-                name="phone"
-                type="tel"
-                defaultValue={editingMember?.phone ?? ""}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary">
+              Phone{isAddingMember && addAuthMethod === "phone" ? " *" : ""}
+            </label>
+            <input type="hidden" name="phone" value={memberPhone} />
+            <div className="mt-1.5">
+              <PhoneInput
+                value={memberPhone}
+                onChange={setMemberPhone}
+                required={isAddingMember && addAuthMethod === "phone"}
               />
             </div>
-            <div>
-              <label htmlFor="mem-role" className="block text-sm font-medium text-gray-700">
-                Role
-              </label>
-              <select
-                id="mem-role"
-                name="role"
-                defaultValue={editingMember?.role ?? "staff"}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              >
-                <option value="owner">Owner</option>
-                <option value="admin">Admin</option>
-                <option value="staff">Staff</option>
-              </select>
-            </div>
+            {isAddingMember && addAuthMethod === "phone" && (
+              <p className="mt-1.5 text-caption text-text-tertiary">
+                They&apos;ll sign in with this phone number.
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="mem-role" className="block text-body-sm font-semibold text-text-primary">
+              Role
+            </label>
+            <select
+              id="mem-role"
+              name="role"
+              defaultValue={editingMember?.role ?? "staff"}
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+            >
+              <option value="owner">Owner</option>
+              <option value="admin">Admin</option>
+              <option value="staff">Staff</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="mem-group" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="mem-group" className="block text-body-sm font-semibold text-text-primary">
                 Group
               </label>
               <select
                 id="mem-group"
                 name="group_id"
                 defaultValue={editingMember?.group_id ?? ""}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
               >
                 <option value="">No group</option>
                 {groups.map((g) => (
@@ -443,7 +615,7 @@ export default function TeamPage() {
               </select>
             </div>
             <div>
-              <label htmlFor="mem-salary" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="mem-salary" className="block text-body-sm font-semibold text-text-primary">
                 Salary (AED/mo)
               </label>
               <input
@@ -453,28 +625,136 @@ export default function TeamPage() {
                 step="0.01"
                 min="0"
                 defaultValue={editingMember?.salary || ""}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
               />
             </div>
           </div>
 
           {editingMember && (
-            <p className="text-xs text-gray-400">
-              Email: {editingMember.email} (cannot be changed)
+            <p className="text-caption text-text-tertiary">
+              {editingMember.email
+                ? <>Email: {editingMember.email} (cannot be changed)</>
+                : <>Sign-in phone: {editingMember.phone || "—"} (cannot be changed)</>}
             </p>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          {/* Work Schedule — only when editing */}
+          {editingMember && (
+            <div className="border-t border-border pt-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-body-sm font-semibold text-text-primary">Work Schedule</h3>
+                <button
+                  type="button"
+                  onClick={applyToAllWorkingDays}
+                  className="text-caption text-text-secondary hover:text-text-primary"
+                >
+                  Apply to all working days
+                </button>
+              </div>
+
+              {scheduleLoading ? (
+                <p className="text-body-sm text-text-tertiary text-center py-4">Loading schedule...</p>
+              ) : (
+                <div className="space-y-2">
+                  {scheduleData.map((day) => (
+                    <div
+                      key={day.day_of_week}
+                      className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-body-sm ${day.is_day_off ? "bg-surface-hover opacity-60" : ""}`}
+                    >
+                      <span className="w-12 shrink-0 text-caption font-semibold text-text-primary">
+                        {DAY_NAMES[day.day_of_week].slice(0, 3)}
+                      </span>
+                      <input
+                        type="time"
+                        value={day.start_time}
+                        disabled={day.is_day_off}
+                        onChange={(e) => updateScheduleRow(day.day_of_week, "start_time", e.target.value)}
+                        className="block w-full rounded-lg border border-neutral-200 px-2.5 py-1.5 text-caption disabled:bg-neutral-50 disabled:text-text-disabled focus:border-neutral-400 focus:outline-none"
+                      />
+                      <span className="text-caption text-text-tertiary">to</span>
+                      <input
+                        type="time"
+                        value={day.end_time}
+                        disabled={day.is_day_off}
+                        onChange={(e) => updateScheduleRow(day.day_of_week, "end_time", e.target.value)}
+                        className="block w-full rounded-lg border border-neutral-200 px-2.5 py-1.5 text-caption disabled:bg-neutral-50 disabled:text-text-disabled focus:border-neutral-400 focus:outline-none"
+                      />
+                      <label className="flex shrink-0 items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={day.is_day_off}
+                          onChange={(e) => updateScheduleRow(day.day_of_week, "is_day_off", e.target.checked)}
+                          className="h-3.5 w-3.5 rounded border-neutral-300 text-neutral-900 focus:ring-primary-100"
+                        />
+                        <span className="text-caption text-text-secondary">Off</span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Days Off */}
+              <div className="mt-5">
+                <h4 className="text-caption font-semibold text-text-primary mb-2">Days Off (one-time)</h4>
+                {daysOff.length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {daysOff.map((d) => (
+                      <div key={d.id} className="flex items-center justify-between rounded-lg bg-surface-hover px-3 py-2 text-caption">
+                        <span className="text-text-primary">
+                          {new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                          {d.reason && <span className="text-text-tertiary ml-1.5">— {d.reason}</span>}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDayOff(d.id)}
+                          className="p-0.5 text-text-tertiary hover:text-error-500"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={newDayOffDate}
+                    onChange={(e) => setNewDayOffDate(e.target.value)}
+                    className="block w-full rounded-lg border border-neutral-200 px-2.5 py-2 text-caption focus:border-neutral-400 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newDayOffReason}
+                    onChange={(e) => setNewDayOffReason(e.target.value)}
+                    placeholder="Reason (optional)"
+                    className="block w-full rounded-lg border border-neutral-200 px-2.5 py-2 text-caption focus:border-neutral-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddDayOff}
+                    disabled={!newDayOffDate}
+                    className="shrink-0 rounded-lg bg-surface-active px-4 py-2 text-caption font-semibold text-text-primary hover:bg-neutral-100 disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-3">
             <button
               type="button"
               onClick={closeMemberModal}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-xl bg-surface-active hover:bg-neutral-100 px-5 py-2.5 text-body-sm font-semibold text-text-primary"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
             >
               {isAddingMember ? "Add Member" : "Save"}
             </button>

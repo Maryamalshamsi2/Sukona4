@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Modal from "@/components/modal";
+import { useCurrentUser } from "@/lib/user-context";
 import {
   getCategories,
   addCategory,
@@ -11,14 +12,26 @@ import {
   addService,
   updateService,
   deleteService,
+  getBundles,
+  addBundle,
+  updateBundle,
+  deleteBundle,
 } from "./actions";
-import type { Service, ServiceCategory } from "@/types";
+import type { Service, ServiceCategory, ServiceBundle } from "@/types";
 
 export default function CatalogPage() {
+  const currentUser = useCurrentUser();
+  const isStaff = currentUser?.role === "staff";
+
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [bundles, setBundles] = useState<ServiceBundle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // "+ Add" dropdown
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
 
   // Which category tab is selected ("all" or a category id)
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -30,11 +43,15 @@ export default function CatalogPage() {
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
 
+  const [bundleModalOpen, setBundleModalOpen] = useState(false);
+  const [editingBundle, setEditingBundle] = useState<ServiceBundle | null>(null);
+
   async function loadData() {
     try {
-      const [cats, svcs] = await Promise.all([getCategories(), getServices()]);
+      const [cats, svcs, bdls] = await Promise.all([getCategories(), getServices(), getBundles()]);
       setCategories(cats);
       setServices(svcs);
+      setBundles(bdls);
     } catch {
       setError("Failed to load catalog");
     } finally {
@@ -46,13 +63,49 @@ export default function CatalogPage() {
     loadData();
   }, []);
 
-  // Filter services by active tab
-  const filteredServices =
+  // Close add dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
+        setAddDropdownOpen(false);
+      }
+    }
+    if (addDropdownOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [addDropdownOpen]);
+
+  // Merge services + bundles into a single list so bundles sit inside
+  // the category of their included services (one category per bundle now).
+  type CatalogItem =
+    | { kind: "service"; service: Service; createdAt: string; categoryId: string | null }
+    | { kind: "bundle"; bundle: ServiceBundle; createdAt: string; categoryId: string | null };
+
+  const catalogItems: CatalogItem[] = [
+    ...services.map<CatalogItem>((s) => ({
+      kind: "service",
+      service: s,
+      createdAt: s.created_at,
+      categoryId: s.category_id,
+    })),
+    ...bundles.map<CatalogItem>((b) => ({
+      kind: "bundle",
+      bundle: b,
+      createdAt: b.created_at,
+      categoryId: b.category_id,
+    })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const filteredItems =
     activeTab === "all"
-      ? services
+      ? catalogItems
       : activeTab === "uncategorized"
-        ? services.filter((s) => !s.category_id)
-        : services.filter((s) => s.category_id === activeTab);
+        ? catalogItems.filter((item) => !item.categoryId)
+        : catalogItems.filter((item) => item.categoryId === activeTab);
+
+  // Per-category counts (services + bundles combined)
+  const countForCategory = (categoryId: string) =>
+    catalogItems.filter((item) => item.categoryId === categoryId).length;
+  const uncategorizedCount = catalogItems.filter((item) => !item.categoryId).length;
 
   // ---- Category handlers ----
   function openAddCategory() {
@@ -127,6 +180,27 @@ export default function CatalogPage() {
     loadData();
   }
 
+  // ---- Bundle handlers ----
+  function openAddBundle() {
+    setEditingBundle(null);
+    setBundleModalOpen(true);
+  }
+
+  function openEditBundle(bundle: ServiceBundle) {
+    setEditingBundle(bundle);
+    setBundleModalOpen(true);
+  }
+
+  async function handleDeleteBundle(id: string) {
+    if (!confirm("Delete this bundle?")) return;
+    const result = await deleteBundle(id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    loadData();
+  }
+
   function formatDuration(minutes: number) {
     if (minutes < 60) return `${minutes}min`;
     const h = Math.floor(minutes / 60);
@@ -134,155 +208,303 @@ export default function CatalogPage() {
     return m > 0 ? `${h}h ${m}min` : `${h}h`;
   }
 
+  function getBundleOriginalPrice(bundle: ServiceBundle) {
+    return (bundle.service_bundle_items || []).reduce(
+      (sum, item) => sum + (item.services?.price || 0), 0
+    );
+  }
+
+  function getBundlePrice(bundle: ServiceBundle) {
+    const original = getBundleOriginalPrice(bundle);
+    if (bundle.discount_type === "fixed" && bundle.fixed_price != null) {
+      return bundle.fixed_price;
+    }
+    if (bundle.discount_type === "percentage" && bundle.discount_percentage != null) {
+      return original * (1 - bundle.discount_percentage / 100);
+    }
+    return original;
+  }
+
+  function getBundleDuration(bundle: ServiceBundle) {
+    if (bundle.duration_override != null) return bundle.duration_override;
+    return (bundle.service_bundle_items || []).reduce(
+      (sum, item) => sum + (item.services?.duration_minutes || 0), 0
+    );
+  }
+
   if (loading) {
-    return <p className="mt-8 text-center text-gray-500">Loading...</p>;
+    return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
   }
 
   return (
     <div>
-      {/* Page header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Catalog</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {categories.length} categories &middot; {services.length} services
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
+      {/* Floating "+" add button (no page title / counts) */}
+      {!isStaff && (
+      <div className="flex justify-end">
+        <div className="relative" ref={addDropdownRef}>
           <button
-            onClick={openAddCategory}
-            className="rounded-lg border border-violet-600 px-2.5 py-2 text-xs font-medium text-violet-600 hover:bg-violet-50 sm:px-4 sm:text-sm"
+            onClick={() => setAddDropdownOpen(!addDropdownOpen)}
+            aria-label="Add"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
           >
-            + Category
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
           </button>
-          <button
-            onClick={openAddService}
-            className="rounded-lg bg-violet-600 px-2.5 py-2 text-xs font-medium text-white hover:bg-violet-700 sm:px-4 sm:text-sm"
-          >
-            + Service
-          </button>
+          {addDropdownOpen && (
+            <div className="absolute right-0 top-full z-20 mt-1.5 w-44 rounded-xl border border-border bg-white py-1 shadow-lg">
+              <button
+                onClick={() => { openAddService(); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                <svg className="h-5 w-5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Service
+              </button>
+              <button
+                onClick={() => { openAddBundle(); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                <svg className="h-5 w-5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                Bundle
+              </button>
+              <button
+                onClick={() => { openAddCategory(); setAddDropdownOpen(false); }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                <svg className="h-5 w-5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Category
+              </button>
+            </div>
+          )}
         </div>
       </div>
+      )}
 
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 
-      {/* Category tabs */}
-      <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
-        <button
-          onClick={() => setActiveTab("all")}
-          className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-            activeTab === "all"
-              ? "bg-violet-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          All ({services.length})
-        </button>
-        {categories.map((cat) => {
-          const count = services.filter((s) => s.category_id === cat.id).length;
-          return (
+      {/* ======= CATALOG (services + bundles, merged) ======= */}
+      {/* Category tabs — single horizontal line, left-aligned (scrolls if overflow) */}
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
+              activeTab === "all"
+                ? "bg-neutral-900 text-text-inverse"
+                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+            }`}
+          >
+            All ({catalogItems.length})
+          </button>
+          {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveTab(cat.id)}
-              className={`group relative shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
                 activeTab === cat.id
-                  ? "bg-violet-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  ? "bg-neutral-900 text-text-inverse"
+                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
               }`}
             >
-              {cat.name} ({count})
+              {cat.name} ({countForCategory(cat.id)})
             </button>
-          );
-        })}
-        {services.some((s) => !s.category_id) && (
-          <button
-            onClick={() => setActiveTab("uncategorized")}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === "uncategorized"
-                ? "bg-violet-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            Uncategorized ({services.filter((s) => !s.category_id).length})
-          </button>
-        )}
+          ))}
+          {uncategorizedCount > 0 && (
+            <button
+              onClick={() => setActiveTab("uncategorized")}
+              className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
+                activeTab === "uncategorized"
+                  ? "bg-neutral-900 text-text-inverse"
+                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+              }`}
+            >
+              Uncategorized ({uncategorizedCount})
+            </button>
+          )}
       </div>
 
       {/* Category actions (edit/delete) when a category is selected */}
-      {activeTab !== "all" && activeTab !== "uncategorized" && (
+      {!isStaff && activeTab !== "all" && activeTab !== "uncategorized" && (
         <div className="mt-2 flex gap-3">
           <button
             onClick={() => {
               const cat = categories.find((c) => c.id === activeTab);
               if (cat) openEditCategory(cat);
             }}
-            className="text-sm text-violet-600 hover:text-violet-800"
+            className="text-body-sm text-text-secondary hover:text-text-primary"
           >
             Rename category
           </button>
           <button
             onClick={() => handleDeleteCategory(activeTab)}
-            className="text-sm text-red-500 hover:text-red-700"
+            className="text-body-sm text-error-500 hover:text-error-700"
           >
             Delete category
           </button>
         </div>
       )}
 
-      {/* Services grid */}
-      {filteredServices.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No services{activeTab !== "all" ? " in this category" : ""}. Click &quot;+ Service&quot; to add one.
+      {/* Single-column list — services & bundles stack vertically */}
+      {filteredItems.length === 0 ? (
+        <div className="mt-6 rounded-2xl ring-1 ring-border bg-white p-8 text-center text-text-secondary">
+          {isStaff
+            ? "Nothing here yet."
+            : "Nothing here yet. Click \u201C+\u201D to add a service or bundle."}
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredServices.map((service) => (
-            <div
-              key={service.id}
-              className={`rounded-lg border bg-white p-5 ${
-                service.is_active ? "border-gray-200" : "border-gray-200 opacity-50"
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium text-gray-900">{service.name}</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {formatDuration(service.duration_minutes)}
-                  </p>
+        <div className="mt-4 flex flex-col gap-4">
+          {filteredItems.map((item) => {
+            if (item.kind === "service") {
+              const service = item.service;
+              return (
+                <div
+                  key={`s-${service.id}`}
+                  className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
+                    service.is_active ? "" : "opacity-50"
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-text-primary">{service.name}</h3>
+                      <p className="mt-1 text-body-sm text-text-secondary">
+                        {formatDuration(service.duration_minutes)}
+                      </p>
+                    </div>
+                    <p className="text-lg font-semibold text-text-primary">
+                      AED {service.price}
+                    </p>
+                  </div>
+
+                  {service.service_categories && (
+                    <span className="mt-2 inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
+                      {service.service_categories.name}
+                    </span>
+                  )}
+
+                  {!service.is_active && (
+                    <span className="mt-2 ml-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
+                      Inactive
+                    </span>
+                  )}
+
+                  {!isStaff && (
+                    <div className="mt-4 flex gap-3 border-t border-border pt-3">
+                      <button
+                        onClick={() => openEditService(service)}
+                        className="text-body-sm text-text-secondary hover:text-text-primary"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteService(service.id)}
+                        className="text-body-sm text-error-500 hover:text-error-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-lg font-semibold text-gray-900">
-                  AED {service.price}
-                </p>
+              );
+            }
+
+            // Bundle
+            const bundle = item.bundle;
+            const originalPrice = getBundleOriginalPrice(bundle);
+            const bundlePrice = getBundlePrice(bundle);
+            const duration = getBundleDuration(bundle);
+            const savings = originalPrice - bundlePrice;
+            const activeServices = (bundle.service_bundle_items || []).filter(
+              (bi) => bi.services?.is_active !== false
+            );
+
+            return (
+              <div
+                key={`b-${bundle.id}`}
+                className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
+                  bundle.is_active ? "" : "opacity-50"
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold text-text-primary">{bundle.name}</h3>
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-caption font-semibold text-violet-600">
+                        Bundle
+                      </span>
+                    </div>
+                    <p className="mt-1 text-body-sm text-text-secondary">
+                      {formatDuration(duration)} &middot; {activeServices.length} services
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-semibold text-text-primary">
+                      AED {bundlePrice.toFixed(0)}
+                    </p>
+                    {savings > 0 && (
+                      <p className="text-caption text-text-tertiary line-through">
+                        AED {originalPrice.toFixed(0)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Included services */}
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {activeServices.map((bi) => (
+                    <span
+                      key={bi.id}
+                      className="rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary"
+                    >
+                      {bi.services?.name}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {bundle.service_categories && (
+                    <span className="inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
+                      {bundle.service_categories.name}
+                    </span>
+                  )}
+                  {savings > 0 && (
+                    <span className="inline-block rounded-full bg-green-50 px-2 py-0.5 text-caption font-semibold text-green-700">
+                      Save AED {savings.toFixed(0)}
+                      {bundle.discount_type === "percentage" && bundle.discount_percentage
+                        ? ` (${bundle.discount_percentage}%)`
+                        : ""}
+                    </span>
+                  )}
+                  {!bundle.is_active && (
+                    <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
+                      Inactive
+                    </span>
+                  )}
+                </div>
+
+                {!isStaff && (
+                  <div className="mt-4 flex gap-3 border-t border-border pt-3">
+                    <button
+                      onClick={() => openEditBundle(bundle)}
+                      className="text-body-sm text-text-secondary hover:text-text-primary"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBundle(bundle.id)}
+                      className="text-body-sm text-error-500 hover:text-error-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
-
-              {service.service_categories && (
-                <span className="mt-2 inline-block rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-600">
-                  {service.service_categories.name}
-                </span>
-              )}
-
-              {!service.is_active && (
-                <span className="mt-2 ml-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                  Inactive
-                </span>
-              )}
-
-              <div className="mt-4 flex gap-3 border-t border-gray-100 pt-3">
-                <button
-                  onClick={() => openEditService(service)}
-                  className="text-sm text-violet-600 hover:text-violet-800"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDeleteService(service.id)}
-                  className="text-sm text-red-500 hover:text-red-700"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -292,9 +514,9 @@ export default function CatalogPage() {
         onClose={() => { setCategoryModalOpen(false); setEditingCategory(null); }}
         title={editingCategory ? "Edit Category" : "Add Category"}
       >
-        <form action={handleCategorySubmit} className="space-y-4">
+        <form action={handleCategorySubmit} className="space-y-6">
           <div>
-            <label htmlFor="cat-name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="cat-name" className="block text-body-sm font-semibold text-text-primary">
               Name *
             </label>
             <input
@@ -303,20 +525,20 @@ export default function CatalogPage() {
               type="text"
               required
               defaultValue={editingCategory?.name ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => { setCategoryModalOpen(false); setEditingCategory(null); }}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-xl bg-surface-active px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
             >
               {editingCategory ? "Save" : "Add Category"}
             </button>
@@ -330,9 +552,9 @@ export default function CatalogPage() {
         onClose={() => { setServiceModalOpen(false); setEditingService(null); }}
         title={editingService ? "Edit Service" : "Add Service"}
       >
-        <form action={handleServiceSubmit} className="space-y-4">
+        <form action={handleServiceSubmit} className="space-y-6">
           <div>
-            <label htmlFor="svc-name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="svc-name" className="block text-body-sm font-semibold text-text-primary">
               Name *
             </label>
             <input
@@ -341,19 +563,19 @@ export default function CatalogPage() {
               type="text"
               required
               defaultValue={editingService?.name ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
 
           <div>
-            <label htmlFor="svc-category" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="svc-category" className="block text-body-sm font-semibold text-text-primary">
               Category
             </label>
             <select
               id="svc-category"
               name="category_id"
               defaultValue={editingService?.category_id ?? ""}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             >
               <option value="">No category</option>
               {categories.map((cat) => (
@@ -366,7 +588,7 @@ export default function CatalogPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="svc-price" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="svc-price" className="block text-body-sm font-semibold text-text-primary">
                 Price (AED) *
               </label>
               <input
@@ -377,11 +599,11 @@ export default function CatalogPage() {
                 min="0"
                 required
                 defaultValue={editingService?.price ?? ""}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
             </div>
             <div>
-              <label htmlFor="svc-duration" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="svc-duration" className="block text-body-sm font-semibold text-text-primary">
                 Duration (min) *
               </label>
               <input
@@ -392,7 +614,7 @@ export default function CatalogPage() {
                 step="5"
                 required
                 defaultValue={editingService?.duration_minutes ?? 60}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
             </div>
           </div>
@@ -406,9 +628,9 @@ export default function CatalogPage() {
                 type="checkbox"
                 value="true"
                 defaultChecked={editingService.is_active}
-                className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
               />
-              <label htmlFor="svc-active" className="text-sm text-gray-700">
+              <label htmlFor="svc-active" className="text-body-sm text-text-primary">
                 Active
               </label>
             </div>
@@ -418,19 +640,360 @@ export default function CatalogPage() {
             <button
               type="button"
               onClick={() => { setServiceModalOpen(false); setEditingService(null); }}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-xl bg-surface-active px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
             >
               {editingService ? "Save" : "Add Service"}
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* ---- Bundle Modal ---- */}
+      <Modal
+        open={bundleModalOpen}
+        onClose={() => { setBundleModalOpen(false); setEditingBundle(null); }}
+        title={editingBundle ? "Edit Bundle" : "Create Bundle"}
+      >
+        <BundleForm
+          services={services.filter((s) => s.is_active)}
+          categories={categories}
+          editingBundle={editingBundle}
+          onSubmit={async (data) => {
+            setError(null);
+            const result = editingBundle
+              ? await updateBundle(
+                  editingBundle.id,
+                  data.name,
+                  data.categoryId,
+                  data.discountType,
+                  data.discountPercentage,
+                  data.fixedPrice,
+                  data.durationOverride,
+                  data.isActive,
+                  data.serviceIds
+                )
+              : await addBundle(
+                  data.name,
+                  data.categoryId,
+                  data.discountType,
+                  data.discountPercentage,
+                  data.fixedPrice,
+                  data.durationOverride,
+                  data.serviceIds
+                );
+            if (result.error) {
+              setError(result.error);
+              return;
+            }
+            setBundleModalOpen(false);
+            setEditingBundle(null);
+            loadData();
+          }}
+          onCancel={() => { setBundleModalOpen(false); setEditingBundle(null); }}
+        />
+      </Modal>
     </div>
+  );
+}
+
+// ---- Bundle Form Component ----
+
+function BundleForm({
+  services,
+  categories,
+  editingBundle,
+  onSubmit,
+  onCancel,
+}: {
+  services: Service[];
+  categories: ServiceCategory[];
+  editingBundle: ServiceBundle | null;
+  onSubmit: (data: {
+    name: string;
+    categoryId: string | null;
+    discountType: "percentage" | "fixed";
+    discountPercentage: number | null;
+    fixedPrice: number | null;
+    durationOverride: number | null;
+    isActive: boolean;
+    serviceIds: string[];
+  }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(editingBundle?.name || "");
+  const [categoryId, setCategoryId] = useState<string>(editingBundle?.category_id || "");
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
+    editingBundle?.service_bundle_items
+      ?.sort((a, b) => a.sort_order - b.sort_order)
+      .map((item) => item.service_id) || []
+  );
+  const [discountType, setDiscountType] = useState<"percentage" | "fixed">(
+    editingBundle?.discount_type || "fixed"
+  );
+  const [discountPercentage, setDiscountPercentage] = useState<string>(
+    editingBundle?.discount_percentage?.toString() || ""
+  );
+  const [fixedPrice, setFixedPrice] = useState<string>(
+    editingBundle?.fixed_price?.toString() || ""
+  );
+  const [customDuration, setCustomDuration] = useState<string>(
+    editingBundle?.duration_override?.toString() || ""
+  );
+  const [isActive, setIsActive] = useState(editingBundle?.is_active ?? true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const originalPrice = selectedServiceIds.reduce((sum, sid) => {
+    const svc = services.find((s) => s.id === sid);
+    return sum + (svc?.price || 0);
+  }, 0);
+
+  const totalDuration = selectedServiceIds.reduce((sum, sid) => {
+    const svc = services.find((s) => s.id === sid);
+    return sum + (svc?.duration_minutes || 0);
+  }, 0);
+
+  const effectiveDuration = customDuration ? parseInt(customDuration) : totalDuration;
+
+  let bundlePrice = originalPrice;
+  if (discountType === "fixed" && fixedPrice) {
+    bundlePrice = parseFloat(fixedPrice);
+  } else if (discountType === "percentage" && discountPercentage) {
+    bundlePrice = originalPrice * (1 - parseFloat(discountPercentage) / 100);
+  }
+
+  const savings = originalPrice - bundlePrice;
+
+  function toggleService(serviceId: string) {
+    setSelectedServiceIds((prev) =>
+      prev.includes(serviceId)
+        ? prev.filter((id) => id !== serviceId)
+        : [...prev, serviceId]
+    );
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selectedServiceIds.length < 2) return;
+    setSubmitting(true);
+    await onSubmit({
+      name,
+      categoryId: categoryId || null,
+      discountType,
+      discountPercentage: discountType === "percentage" && discountPercentage
+        ? parseFloat(discountPercentage) : null,
+      fixedPrice: discountType === "fixed" && fixedPrice
+        ? parseFloat(fixedPrice) : null,
+      durationOverride: customDuration ? parseInt(customDuration) : null,
+      isActive,
+      serviceIds: selectedServiceIds,
+    });
+    setSubmitting(false);
+  }
+
+  function formatDuration(minutes: number) {
+    if (minutes < 60) return `${minutes}min`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h ${m}min` : `${h}h`;
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div>
+        <label className="block text-body-sm font-semibold text-text-primary">Bundle Name *</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          placeholder="e.g. Mani & Pedi Combo"
+          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+      </div>
+
+      <div>
+        <label className="block text-body-sm font-semibold text-text-primary">Category</label>
+        <select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        >
+          <option value="">No category</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Service selection */}
+      <div>
+        <label className="block text-body-sm font-semibold text-text-primary mb-2">
+          Select Services * <span className="text-text-tertiary font-normal">(min. 2)</span>
+        </label>
+        <div className="max-h-48 overflow-y-auto rounded-xl border-[1.5px] border-gray-200 divide-y divide-border">
+          {services.map((svc) => {
+            const isSelected = selectedServiceIds.includes(svc.id);
+            return (
+              <label
+                key={svc.id}
+                className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-hover ${
+                  isSelected ? "bg-surface-hover" : ""
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleService(svc.id)}
+                  className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-body-sm text-text-primary truncate">{svc.name}</p>
+                  <p className="text-caption text-text-secondary">
+                    {svc.duration_minutes} min &middot; AED {svc.price}
+                  </p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        {selectedServiceIds.length > 0 && selectedServiceIds.length < 2 && (
+          <p className="mt-1 text-caption text-error-500">Select at least 2 services</p>
+        )}
+      </div>
+
+      {/* Pricing */}
+      {selectedServiceIds.length >= 2 && (
+        <>
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-2">Bundle Pricing</label>
+            <div className="flex gap-3 mb-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={discountType === "fixed"}
+                  onChange={() => setDiscountType("fixed")}
+                  className="text-neutral-900 focus:ring-gray-400"
+                />
+                <span className="text-body-sm text-text-primary">Fixed price</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={discountType === "percentage"}
+                  onChange={() => setDiscountType("percentage")}
+                  className="text-neutral-900 focus:ring-gray-400"
+                />
+                <span className="text-body-sm text-text-primary">Percentage discount</span>
+              </label>
+            </div>
+
+            {discountType === "fixed" ? (
+              <div>
+                <label className="block text-caption text-text-secondary mb-1">
+                  Bundle Price (AED) — original: AED {originalPrice.toFixed(0)}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={fixedPrice}
+                  onChange={(e) => setFixedPrice(e.target.value)}
+                  placeholder={originalPrice.toFixed(2)}
+                  className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-caption text-text-secondary mb-1">
+                  Discount Percentage (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="100"
+                  value={discountPercentage}
+                  onChange={(e) => setDiscountPercentage(e.target.value)}
+                  placeholder="e.g. 10"
+                  className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Duration */}
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Duration — auto: {formatDuration(totalDuration)}
+            </label>
+            <input
+              type="number"
+              min="5"
+              step="5"
+              value={customDuration}
+              onChange={(e) => setCustomDuration(e.target.value)}
+              placeholder={`${totalDuration} (auto from services)`}
+              className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+            <p className="mt-1 text-caption text-text-tertiary">Leave empty to auto-calculate from services</p>
+          </div>
+
+          {/* Price summary */}
+          <div className="rounded-xl bg-surface-hover px-3 py-2.5">
+            <div className="flex items-center justify-between text-body-sm">
+              <span className="text-text-secondary">Bundle price</span>
+              <span className="font-semibold text-text-primary">AED {bundlePrice.toFixed(0)}</span>
+            </div>
+            <div className="flex items-center justify-between text-body-sm mt-1">
+              <span className="text-text-secondary">Duration</span>
+              <span className="font-semibold text-text-primary">{formatDuration(effectiveDuration)}</span>
+            </div>
+            {savings > 0 && (
+              <div className="flex items-center justify-between text-sm mt-1">
+                <span className="text-green-700">Savings</span>
+                <span className="font-semibold text-green-700">AED {savings.toFixed(0)}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {editingBundle && (
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
+          />
+          <span className="text-body-sm text-text-primary">Active</span>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-xl bg-surface-active px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={submitting || selectedServiceIds.length < 2}
+          className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+        >
+          {submitting ? "Saving..." : editingBundle ? "Save" : "Create Bundle"}
+        </button>
+      </div>
+    </form>
   );
 }

@@ -8,10 +8,33 @@ export type AppointmentStatus =
   | "paid"
   | "cancelled";
 
-export type PaymentMethod = "cash" | "card";
+export type PaymentMethod = "cash" | "card" | "other";
+
+/**
+ * A salon (tenant). Every other tenant-scoped row carries a `salon_id`
+ * pointing here. RLS isolates data per salon.
+ */
+export interface Salon {
+  id: string;
+  name: string;
+  slug: string | null;
+  brand_color: string | null;
+  contact_phone: string | null;
+  public_review_url: string | null;
+  signoff: string | null;
+  default_language: string;
+  whatsapp_phone_number_id: string | null;
+  whatsapp_business_account_id: string | null;
+  whatsapp_access_token: string | null;
+  is_onboarded: boolean;
+  owner_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface ServiceCategory {
   id: string;
+  salon_id: string;
   name: string;
   sort_order: number;
   created_at: string;
@@ -19,13 +42,15 @@ export interface ServiceCategory {
 
 export interface TeamGroup {
   id: string;
+  salon_id: string;
   name: string;
   created_at: string;
 }
 
 export interface Profile {
   id: string;
-  email: string;
+  salon_id: string;
+  email: string | null;
   full_name: string;
   role: UserRole;
   phone: string | null;
@@ -39,6 +64,7 @@ export interface Profile {
 
 export interface Client {
   id: string;
+  salon_id: string;
   name: string;
   phone: string | null;
   address: string | null;
@@ -49,6 +75,7 @@ export interface Client {
 
 export interface Service {
   id: string;
+  salon_id: string;
   name: string;
   price: number;
   duration_minutes: number;
@@ -61,6 +88,7 @@ export interface Service {
 
 export interface Appointment {
   id: string;
+  salon_id: string;
   client_id: string;
   service_id: string | null;
   date: string;
@@ -72,12 +100,14 @@ export interface Appointment {
 }
 
 export interface AppointmentStaff {
+  salon_id: string;
   appointment_id: string;
   staff_id: string;
 }
 
 export interface AppointmentService {
   id: string;
+  salon_id: string;
   appointment_id: string;
   service_id: string;
   staff_id: string | null;
@@ -88,6 +118,7 @@ export type CalendarBlockType = "break" | "travel" | "personal" | "other";
 
 export interface CalendarBlock {
   id: string;
+  salon_id: string;
   staff_id: string;
   date: string;
   start_time: string;
@@ -99,14 +130,18 @@ export interface CalendarBlock {
 
 export interface Payment {
   id: string;
+  salon_id: string;
   appointment_id: string;
   amount: number;
   method: PaymentMethod;
+  receipt_url: string | null;
+  note: string | null;
   created_at: string;
 }
 
 export interface Expense {
   id: string;
+  salon_id: string;
   description: string;
   amount: number;
   category: string;
@@ -117,8 +152,56 @@ export interface Expense {
 
 export interface InventoryItem {
   id: string;
+  salon_id: string;
   name: string;
   quantity: number;
   low_stock_threshold: number;
   created_at: string;
+}
+
+export interface StaffSchedule {
+  id: string;
+  salon_id: string;
+  profile_id: string;
+  day_of_week: number; // 0=Sunday ... 6=Saturday
+  is_day_off: boolean;
+  start_time: string | null; // "HH:MM"
+  end_time: string | null;
+  created_at: string;
+}
+
+export interface StaffDayOff {
+  id: string;
+  salon_id: string;
+  profile_id: string;
+  date: string; // "YYYY-MM-DD"
+  reason: string | null;
+  created_at: string;
+}
+
+export interface ServiceBundleItem {
+  id: string;
+  salon_id: string;
+  bundle_id: string;
+  service_id: string;
+  sort_order: number;
+  created_at: string;
+  // joined
+  services?: Service | null;
+}
+
+export interface ServiceBundle {
+  id: string;
+  salon_id: string;
+  name: string;
+  category_id: string | null;
+  discount_type: "percentage" | "fixed";
+  discount_percentage: number | null;
+  fixed_price: number | null;
+  duration_override: number | null;
+  is_active: boolean;
+  created_at: string;
+  // joined
+  service_categories?: ServiceCategory | null;
+  service_bundle_items?: ServiceBundleItem[];
 }

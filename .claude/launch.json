@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Next.js Dev Server",
-      "runtimeExecutable": "/usr/local/bin/node",
-      "runtimeArgs": ["node_modules/.bin/next", "dev", "--hostname", "0.0.0.0"],
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-l", "-c", "export PATH=/usr/local/bin:$PATH && cd /Users/mrym/Desktop/Sukona4 && node node_modules/.bin/next dev --hostname 0.0.0.0 --webpack"],
       "port": 3000,
       "autoPort": true
     }
