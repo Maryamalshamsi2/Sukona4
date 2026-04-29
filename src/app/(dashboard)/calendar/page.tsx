@@ -44,6 +44,7 @@ import {
   deleteCalendarBlock,
   getBundlesForBooking,
   getStaffSchedulesForDate,
+  markShareSent,
 } from "./actions";
 
 // ---- Local Types ----
@@ -1398,6 +1399,11 @@ export default function CalendarPage() {
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            onShareSent={async () => {
+              if (!selectedAppointment) return;
+              await markShareSent(selectedAppointment.id);
+              reload();
+            }}
             canEdit={!isStaff}
           />
         )}

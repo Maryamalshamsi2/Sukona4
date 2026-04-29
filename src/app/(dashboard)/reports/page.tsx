@@ -6,6 +6,7 @@ import {
   getReportPayments,
   getReportExpenses,
   getStaffMembers,
+  getReportReviews,
 } from "./actions";
 
 // ---- Types ----
@@ -63,7 +64,27 @@ interface StaffMember {
   job_title: string | null;
 }
 
-type TabKey = "overview" | "appointments" | "payments" | "expenses";
+interface ReportReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  wants_followup: boolean;
+  redirected_externally: boolean;
+  submitted_at: string;
+  appointment_id: string;
+  appointments: {
+    id: string;
+    date: string;
+    time: string;
+    clients: { id: string; name: string } | null;
+    appointment_services: Array<{
+      staff_id: string | null;
+      services: { name: string } | null;
+    }>;
+  } | null;
+}
+
+type TabKey = "overview" | "appointments" | "payments" | "expenses" | "reviews";
 type DatePreset = "today" | "30days" | "custom";
 
 // ---- Helpers ----
@@ -155,6 +176,7 @@ export default function ReportsPage() {
   const [payments, setPayments] = useState<ReportPayment[]>([]);
   const [expenses, setExpenses] = useState<ReportExpense[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [reviews, setReviews] = useState<ReportReview[]>([]);
 
   const getRange = useCallback(() => {
     if (preset === "custom" && customFrom && customTo) {
@@ -167,16 +189,18 @@ export default function ReportsPage() {
     setLoading(true);
     try {
       const { from, to } = getRange();
-      const [appts, pays, exps, staff] = await Promise.all([
+      const [appts, pays, exps, staff, revs] = await Promise.all([
         getReportAppointments(from, to),
         getReportPayments(from, to),
         getReportExpenses(from, to),
         getStaffMembers(),
+        getReportReviews(from, to),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
       setExpenses(exps as unknown as ReportExpense[]);
       setStaffList(staff as StaffMember[]);
+      setReviews(revs as unknown as ReportReview[]);
     } catch {
       // silently handle
     } finally {
@@ -225,6 +249,39 @@ export default function ReportsPage() {
     return staffList.find((s) => s.id === id)?.full_name || "Unknown";
   };
 
+  // ---- Review aggregates ----
+  const reviewCount = reviews.length;
+  const reviewAvg =
+    reviewCount > 0
+      ? reviews.reduce((s, r) => s + r.rating, 0) / reviewCount
+      : 0;
+  const lowReviews = reviews.filter((r) => r.rating <= 3);
+  const followupCount = reviews.filter((r) => r.wants_followup).length;
+
+  // Per-staff aggregates: walk every (review, staff) pair via the appointment's
+  // service rows. A multi-staff appointment counts toward each staff's avg —
+  // imperfect but the most useful default for a salon owner.
+  const staffReviewMap: Record<string, { sum: number; count: number }> = {};
+  for (const r of reviews) {
+    const staffIds = new Set<string>();
+    for (const as2 of r.appointments?.appointment_services || []) {
+      if (as2.staff_id) staffIds.add(as2.staff_id);
+    }
+    for (const sid of staffIds) {
+      if (!staffReviewMap[sid]) staffReviewMap[sid] = { sum: 0, count: 0 };
+      staffReviewMap[sid].sum += r.rating;
+      staffReviewMap[sid].count += 1;
+    }
+  }
+  const staffReviewRows = Object.entries(staffReviewMap)
+    .map(([sid, v]) => ({
+      id: sid,
+      name: staffName(sid),
+      avg: v.sum / v.count,
+      count: v.count,
+    }))
+    .sort((a, b) => b.avg - a.avg);
+
   // ---- Tab content ----
 
   const TABS: { key: TabKey; label: string }[] = [
@@ -232,6 +289,7 @@ export default function ReportsPage() {
     { key: "appointments", label: "Appointments" },
     { key: "payments", label: "Payments" },
     { key: "expenses", label: "Expenses" },
+    { key: "reviews", label: "Reviews" },
   ];
 
   return (
@@ -645,6 +703,130 @@ export default function ReportsPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ===== REVIEWS TAB ===== */}
+          {tab === "reviews" && (
+            <div className="space-y-4">
+              {/* Review summary cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard
+                  label="Avg Rating"
+                  value={reviewCount > 0 ? `${reviewAvg.toFixed(1)} / 5` : "—"}
+                  sub={reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? "" : "s"}` : undefined}
+                  color={reviewCount > 0 && reviewAvg >= 4 ? "text-green-700" : undefined}
+                />
+                <StatCard label="Reviews" value={String(reviewCount)} />
+                <StatCard
+                  label="Low (≤3★)"
+                  value={String(lowReviews.length)}
+                  color={lowReviews.length > 0 ? "text-red-600" : undefined}
+                />
+                <StatCard
+                  label="Wants Follow-up"
+                  value={String(followupCount)}
+                  color={followupCount > 0 ? "text-amber-700" : undefined}
+                />
+              </div>
+
+              {/* Per-staff averages */}
+              {staffReviewRows.length > 0 && (
+                <div className="rounded-2xl bg-white ring-1 ring-border">
+                  <div className="border-b border-border px-5 py-4">
+                    <h3 className="text-body-sm font-semibold text-text-primary">By Staff</h3>
+                  </div>
+                  <div className="divide-y divide-border px-5">
+                    {staffReviewRows.map((row) => (
+                      <div key={row.id} className="flex items-center justify-between py-3">
+                        <span className="text-body-sm text-text-primary">{row.name}</span>
+                        <div className="text-right">
+                          <span className="text-body-sm font-semibold text-text-primary">
+                            {row.avg.toFixed(1)} / 5
+                          </span>
+                          <span className="ml-2 text-caption text-text-tertiary">
+                            ({row.count})
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent reviews list */}
+              <div className="rounded-2xl bg-white ring-1 ring-border">
+                <div className="border-b border-border px-5 py-4 flex items-center justify-between">
+                  <h3 className="text-body-sm font-semibold text-text-primary">
+                    Recent Reviews
+                    <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-caption font-normal text-text-secondary">
+                      {reviews.length}
+                    </span>
+                  </h3>
+                </div>
+
+                {reviews.length === 0 ? (
+                  <p className="py-12 text-center text-body-sm text-text-tertiary">
+                    No reviews in this period yet.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {reviews.map((r) => {
+                      const clientName = r.appointments?.clients?.name || "Anonymous";
+                      const services = (r.appointments?.appointment_services || [])
+                        .map((as2) => as2.services?.name)
+                        .filter(Boolean)
+                        .join(", ");
+                      const submittedDate = new Date(r.submitted_at).toLocaleDateString(
+                        "en-GB",
+                        { day: "numeric", month: "short", year: "numeric" }
+                      );
+                      return (
+                        <div key={r.id} className="px-5 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-body-sm font-semibold text-text-primary">
+                                  {clientName}
+                                </span>
+                                <span className="text-amber-500 text-body-sm">
+                                  {"★".repeat(r.rating)}
+                                  <span className="text-gray-300">
+                                    {"★".repeat(5 - r.rating)}
+                                  </span>
+                                </span>
+                                {r.wants_followup && (
+                                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-caption font-medium text-amber-700">
+                                    Wants follow-up
+                                  </span>
+                                )}
+                                {r.redirected_externally && (
+                                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-caption font-medium text-blue-700">
+                                    Shared publicly
+                                  </span>
+                                )}
+                              </div>
+                              {services && (
+                                <p className="mt-0.5 text-caption text-text-tertiary truncate">
+                                  {services}
+                                </p>
+                              )}
+                              {r.comment && (
+                                <p className="mt-1.5 text-body-sm text-text-secondary whitespace-pre-wrap">
+                                  {r.comment}
+                                </p>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-caption text-text-tertiary">
+                              {submittedDate}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </>

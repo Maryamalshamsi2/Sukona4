@@ -76,7 +76,8 @@ export async function getClientAppointments(clientId: string) {
         is_parallel,
         sort_order,
         services:service_id ( id, name, price, duration_minutes )
-      )
+      ),
+      reviews ( id, rating, comment, submitted_at )
     `)
     .eq("client_id", clientId)
     .order("date", { ascending: false })

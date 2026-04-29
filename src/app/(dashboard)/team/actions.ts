@@ -66,6 +66,35 @@ export async function getTeamMembers() {
   return data;
 }
 
+// Build an admin Supabase client (service_role). Centralised so we can
+// reuse it for both creating new members and editing auth credentials of
+// existing ones — both paths require bypassing RLS to write to auth.users.
+async function getAdminClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    return {
+      error:
+        "Service role key not configured. Add SUPABASE_SERVICE_ROLE_KEY to .env.local",
+    } as const;
+  }
+  const { createClient: createAdminClient } = await import("@supabase/supabase-js");
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceRoleKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  return { admin } as const;
+}
+
+// Validate E.164 phone format (matches the public signup page rules)
+function isValidPhone(phone: string): boolean {
+  return /^\+\d{7,}$/.test(phone);
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export async function addTeamMember(formData: FormData) {
   // Caller's salon — the new member is attached to this salon.
   const inviter = await getCurrentProfile();
@@ -74,39 +103,43 @@ export async function addTeamMember(formData: FormData) {
     return { error: "Not authorized" };
   }
 
-  // Use the Supabase admin client (service_role key) to create users
-  // without logging out the current user
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) {
-    return { error: "Service role key not configured. Add SUPABASE_SERVICE_ROLE_KEY to .env.local" };
-  }
+  const adminResult = await getAdminClient();
+  if ("error" in adminResult) return { error: adminResult.error };
+  const adminSupabase = adminResult.admin;
 
-  const { createClient: createAdminClient } = await import("@supabase/supabase-js");
-  const adminSupabase = createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-
-  const authMethod = ((formData.get("auth_method") as string) || "email").trim();
   const email = ((formData.get("email") as string) || "").trim();
   const phone = ((formData.get("phone") as string) || "").trim();
-  const password = (formData.get("password") as string).trim();
-  const fullName = (formData.get("full_name") as string).trim();
+  const password = ((formData.get("password") as string) || "").trim();
+  const fullName = ((formData.get("full_name") as string) || "").trim();
   const requestedRole = ((formData.get("role") as string) || "staff").trim();
 
-  if (!password || !fullName) {
-    return { error: "Password and full name are required" };
+  // Validation — phone + password + name are always required, email optional.
+  if (!fullName) return { error: "Full name is required" };
+  if (!phone) return { error: "Phone number is required" };
+  if (!isValidPhone(phone)) {
+    return { error: "Phone must be in international format (e.g. +971501234567)" };
   }
-  if (authMethod === "phone" && !phone) {
-    return { error: "Phone number is required" };
-  }
-  if (authMethod === "email" && !email) {
-    return { error: "Email is required" };
-  }
-
+  if (!password) return { error: "Password is required" };
   if (password.length < 6) {
     return { error: "Password must be at least 6 characters" };
+  }
+  if (email && !isValidEmail(email)) {
+    return { error: "Email format is invalid" };
+  }
+
+  // Pre-check duplicates so we can return precise per-field errors instead
+  // of the raw "User already registered" Supabase error.
+  const { data: avail, error: availErr } = await adminSupabase.rpc(
+    "check_signup_availability",
+    { p_email: email || null, p_phone: phone }
+  );
+  if (availErr) return { error: availErr.message };
+  const row = Array.isArray(avail) ? avail[0] : avail;
+  if (row?.email_taken) {
+    return { error: "That email is already used by another member." };
+  }
+  if (row?.phone_taken) {
+    return { error: "That phone number is already used by another member." };
   }
 
   // Pass salon_id and role in user_metadata so the auth trigger
@@ -118,29 +151,18 @@ export async function addTeamMember(formData: FormData) {
     role: requestedRole || "staff",
   };
 
-  // Create the user via admin API (doesn't affect current session).
-  // Supabase accepts either email or phone (not both) when creating a user.
-  const createUserPayload =
-    authMethod === "phone"
-      ? {
-          phone,
-          password,
-          phone_confirm: true,
-          user_metadata: userMetadata,
-        }
-      : {
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: userMetadata,
-        };
+  // When both email and phone are provided, Supabase stores both on the
+  // auth row and the new staff member can sign in with either.
+  const { data, error: signUpError } = await adminSupabase.auth.admin.createUser({
+    email: email || undefined,
+    phone,
+    password,
+    email_confirm: email ? true : undefined,
+    phone_confirm: true,
+    user_metadata: userMetadata,
+  });
 
-  const { data, error: signUpError } =
-    await adminSupabase.auth.admin.createUser(createUserPayload);
-
-  if (signUpError) {
-    return { error: signUpError.message };
-  }
+  if (signUpError) return { error: signUpError.message };
 
   // Update the profile with extra fields the trigger doesn't set.
   if (data.user) {
@@ -149,13 +171,11 @@ export async function addTeamMember(formData: FormData) {
     // Small delay to let the trigger create the profile
     await new Promise((r) => setTimeout(r, 500));
 
-    // Always store phone on the profile if provided (phone is also the
-    // auth identifier in phone mode). The trigger has already set
-    // role + salon_id from metadata.
     await adminSupabase
       .from("profiles")
       .update({
-        phone: phone || null,
+        phone,
+        email: email || null,
         job_title: (formData.get("job_title") as string) || null,
         group_id: groupId || null,
         salary: parseFloat(formData.get("salary") as string) || 0,
@@ -170,19 +190,151 @@ export async function addTeamMember(formData: FormData) {
 export async function updateTeamMember(id: string, formData: FormData) {
   const supabase = await createClient();
 
-  const groupId = formData.get("group_id") as string;
+  // Auth + role guard. Only owners can reach this page (middleware), but
+  // we double-check at the action layer for defense in depth.
+  const editor = await getCurrentProfile();
+  if (!editor) return { error: "Not authenticated" };
+  if (editor.role !== "owner") return { error: "Not authorized" };
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      full_name: formData.get("full_name") as string,
-      phone: (formData.get("phone") as string) || null,
-      job_title: (formData.get("job_title") as string) || null,
-      role: formData.get("role") as string,
-      group_id: groupId || null,
-      salary: parseFloat(formData.get("salary") as string) || 0,
-    })
-    .eq("id", id);
+  // Self-edit guard: when an owner edits their own row, we silently drop
+  // any auth-credential changes. The UI hides those fields, but the
+  // server is the source of truth — never let an owner change their own
+  // password/email/phone via this flow (they have a settings page).
+  const isSelf = editor.id === id;
+
+  const groupId = formData.get("group_id") as string;
+  const newEmail = ((formData.get("email") as string) || "").trim();
+  const newPhone = ((formData.get("phone") as string) || "").trim();
+  const newPassword = ((formData.get("password") as string) || "").trim();
+
+  // Profile-only fields. These are always editable.
+  const profileUpdate: Record<string, unknown> = {
+    full_name: formData.get("full_name") as string,
+    job_title: (formData.get("job_title") as string) || null,
+    role: formData.get("role") as string,
+    group_id: groupId || null,
+    salary: parseFloat(formData.get("salary") as string) || 0,
+  };
+
+  // Auth-credential changes (only when editing someone else).
+  if (!isSelf && (newEmail !== "" || newPhone !== "" || newPassword !== "")) {
+    // Fetch the existing values so we know whether email/phone actually
+    // changed — duplicate-check should skip "you already own this".
+    const { data: existing, error: fetchErr } = await supabase
+      .from("profiles")
+      .select("email, phone, full_name")
+      .eq("id", id)
+      .single();
+    if (fetchErr) return { error: fetchErr.message };
+
+    const emailChanged = newEmail !== "" && newEmail !== (existing.email ?? "");
+    const phoneChanged = newPhone !== "" && newPhone !== (existing.phone ?? "");
+
+    // Validate format
+    if (newEmail && !isValidEmail(newEmail)) {
+      return { error: "Email format is invalid" };
+    }
+    if (phoneChanged && !isValidPhone(newPhone)) {
+      return { error: "Phone must be in international format (e.g. +971501234567)" };
+    }
+    if (newPassword && newPassword.length < 6) {
+      return { error: "Password must be at least 6 characters" };
+    }
+
+    // Duplicate check on the *new* values — but only against fields that
+    // actually changed, otherwise we'd flag the user's own existing row.
+    if (emailChanged || phoneChanged) {
+      const adminResult = await getAdminClient();
+      if ("error" in adminResult) return { error: adminResult.error };
+      const adminSupabase = adminResult.admin;
+
+      const { data: avail, error: availErr } = await adminSupabase.rpc(
+        "check_signup_availability",
+        {
+          p_email: emailChanged ? newEmail : null,
+          p_phone: phoneChanged ? newPhone : null,
+        }
+      );
+      if (availErr) return { error: availErr.message };
+      const row = Array.isArray(avail) ? avail[0] : avail;
+      if (emailChanged && row?.email_taken) {
+        return { error: "That email is already used by another member." };
+      }
+      if (phoneChanged && row?.phone_taken) {
+        return { error: "That phone number is already used by another member." };
+      }
+
+      // Apply the auth-side update via the admin API. Same client.
+      const authPatch: { email?: string; phone?: string; password?: string } = {};
+      if (emailChanged) authPatch.email = newEmail;
+      if (phoneChanged) authPatch.phone = newPhone;
+      if (newPassword) authPatch.password = newPassword;
+
+      const { error: authErr } = await adminSupabase.auth.admin.updateUserById(
+        id,
+        authPatch
+      );
+      if (authErr) return { error: authErr.message };
+
+      // Mirror the new identifiers onto the profile row so they stay in sync.
+      if (emailChanged) profileUpdate.email = newEmail;
+      if (phoneChanged) profileUpdate.phone = newPhone;
+
+      // Audit log — one entry per change, with no PII in the description.
+      const performerName = editor.full_name || "Owner";
+      const targetName = existing.full_name || "team member";
+      const logEntries: Array<{ action: string; description: string }> = [];
+      if (emailChanged) {
+        logEntries.push({
+          action: "credential_changed",
+          description: `${performerName} updated email for ${targetName}`,
+        });
+      }
+      if (phoneChanged) {
+        logEntries.push({
+          action: "credential_changed",
+          description: `${performerName} updated phone for ${targetName}`,
+        });
+      }
+      if (newPassword) {
+        logEntries.push({
+          action: "credential_changed",
+          description: `${performerName} reset password for ${targetName}`,
+        });
+      }
+      if (logEntries.length > 0) {
+        await supabase.from("activity_log").insert(
+          logEntries.map((e) => ({
+            appointment_id: null,
+            action: e.action,
+            description: e.description,
+            performed_by: editor.id,
+          }))
+        );
+      }
+    } else if (newPassword) {
+      // Password-only reset (no identifier change).
+      const adminResult = await getAdminClient();
+      if ("error" in adminResult) return { error: adminResult.error };
+      const adminSupabase = adminResult.admin;
+
+      const { error: authErr } = await adminSupabase.auth.admin.updateUserById(id, {
+        password: newPassword,
+      });
+      if (authErr) return { error: authErr.message };
+
+      const performerName = editor.full_name || "Owner";
+      const targetName = existing.full_name || "team member";
+      await supabase.from("activity_log").insert({
+        appointment_id: null,
+        action: "credential_changed",
+        description: `${performerName} reset password for ${targetName}`,
+        performed_by: editor.id,
+      });
+    }
+  }
+
+  const { error } = await supabase.from("profiles").update(profileUpdate).eq("id", id);
 
   if (error) return { error: error.message };
   revalidatePath("/team");

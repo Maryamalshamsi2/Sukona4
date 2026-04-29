@@ -103,3 +103,37 @@ export async function getStaffMembers() {
   if (error) throw error;
   return data;
 }
+
+// Reviews submitted in the date window. We filter by review submitted_at
+// (not appointment date) because that's when the customer actually rated us
+// — i.e. it's the period that "earned" the rating.
+export async function getReportReviews(from: string, to: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("reviews")
+    .select(`
+      id,
+      rating,
+      comment,
+      wants_followup,
+      redirected_externally,
+      submitted_at,
+      appointment_id,
+      appointments:appointment_id (
+        id,
+        date,
+        time,
+        clients ( id, name ),
+        appointment_services (
+          staff_id,
+          services:service_id ( name )
+        )
+      )
+    `)
+    .gte("submitted_at", `${from}T00:00:00`)
+    .lte("submitted_at", `${to}T23:59:59`)
+    .order("submitted_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}

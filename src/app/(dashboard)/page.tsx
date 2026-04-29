@@ -30,6 +30,7 @@ import {
   cancelAppointment,
   getBundlesForBooking,
   getStaffSchedulesForDate,
+  markShareSent,
 } from "./calendar/actions";
 
 interface ActivityItem {
@@ -415,6 +416,11 @@ export default function HomePage() {
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            onShareSent={async () => {
+              if (!selectedAppointment) return;
+              await markShareSent(selectedAppointment.id);
+              loadData();
+            }}
             canEdit={currentUser?.role !== "staff"}
           />
         )}

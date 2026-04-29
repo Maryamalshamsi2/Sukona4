@@ -35,13 +35,18 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // If not logged in and not on an auth page, redirect to login
+  // If not logged in and not on an auth page, redirect to login.
+  // /r/* is the public review page and /receipt/* is the public receipt
+  // page — anyone with a token can access them, so they must NOT redirect
+  // to login.
   if (
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/signup") &&
     !request.nextUrl.pathname.startsWith("/auth/") &&
-    !request.nextUrl.pathname.startsWith("/api/")
+    !request.nextUrl.pathname.startsWith("/api/") &&
+    !request.nextUrl.pathname.startsWith("/r/") &&
+    !request.nextUrl.pathname.startsWith("/receipt/")
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/sidebar";
+import NotificationBell from "@/components/notification-bell";
 import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/app/(dashboard)/actions";
 import { UserContext, type CurrentUser } from "@/lib/user-context";
@@ -86,7 +87,7 @@ export default function DashboardLayout({
           {/* Spacer pushes search + avatar to the right */}
           <div className="flex-1" />
 
-          {/* Search bar + User avatar (right-aligned) */}
+          {/* Search bar + Notifications + User avatar (right-aligned) */}
           <div className="flex items-center gap-3">
             {/* Search bar — hidden on small mobile */}
             <div className="hidden sm:block relative">
@@ -102,6 +103,10 @@ export default function DashboardLayout({
                 className="w-56 rounded-xl border-0 bg-surface-active py-2 pl-9 pr-4 text-body-sm text-text-primary placeholder-text-tertiary transition-all focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-200 lg:w-72"
               />
             </div>
+
+            {/* Notification bell — only render once we have a current user
+                so we don't fire actions for an unauthenticated state */}
+            {currentUser && <NotificationBell />}
 
             {/* User avatar */}
             <div className="relative">

@@ -1,4 +1,14 @@
--- Migration 011: Staff work schedules and days off
+-- ============================================
+-- MIGRATION 011: Staff work schedules and days off
+--
+-- - staff_schedules: weekly recurring schedule, one row per staff per
+--   day of week (0=Sunday … 6=Saturday).
+-- - staff_days_off: one-off days off (vacation, sick, etc.).
+--
+-- Idempotent: safe to re-run.
+-- ============================================
+
+begin;
 
 -- Weekly recurring schedule: one row per staff per day of week
 create table if not exists staff_schedules (
@@ -14,9 +24,11 @@ create table if not exists staff_schedules (
 
 alter table staff_schedules enable row level security;
 
+drop policy if exists "Authenticated users can read staff_schedules" on staff_schedules;
 create policy "Authenticated users can read staff_schedules"
   on staff_schedules for select to authenticated using (true);
 
+drop policy if exists "Owner/admin can manage staff_schedules" on staff_schedules;
 create policy "Owner/admin can manage staff_schedules"
   on staff_schedules for all to authenticated using (is_owner_or_admin());
 
@@ -32,8 +44,14 @@ create table if not exists staff_days_off (
 
 alter table staff_days_off enable row level security;
 
+drop policy if exists "Authenticated users can read staff_days_off" on staff_days_off;
 create policy "Authenticated users can read staff_days_off"
   on staff_days_off for select to authenticated using (true);
 
+drop policy if exists "Owner/admin can manage staff_days_off" on staff_days_off;
 create policy "Owner/admin can manage staff_days_off"
   on staff_days_off for all to authenticated using (is_owner_or_admin());
+
+notify pgrst, 'reload schema';
+
+commit;

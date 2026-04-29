@@ -39,7 +39,8 @@ export async function getAppointmentsForDate(date: string) {
         is_parallel,
         sort_order,
         services:service_id ( id, name, price, duration_minutes )
-      )
+      ),
+      reviews ( id, rating, comment, submitted_at )
     `)
     .eq("date", date)
     .neq("status", "cancelled")
@@ -47,6 +48,42 @@ export async function getAppointmentsForDate(date: string) {
 
   if (error) throw error;
   return data;
+}
+
+/**
+ * Mark the moment a review link was shared (via WhatsApp, etc.). Used
+ * to show "Sent" state on the detail view so the owner doesn't double-send.
+ */
+export async function markReviewSent(appointmentId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ review_sent_at: new Date().toISOString() })
+    .eq("id", appointmentId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/calendar");
+  revalidatePath("/");
+  return { success: true };
+}
+
+/**
+ * Combined receipt + review share marker — bumps both timestamps in one
+ * round-trip. Called after the owner taps "Send receipt + review" since
+ * the wa.me message contains both links.
+ */
+export async function markShareSent(appointmentId: string) {
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ review_sent_at: now, receipt_sent_at: now })
+    .eq("id", appointmentId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/calendar");
+  revalidatePath("/");
+  return { success: true };
 }
 
 export async function getStaffMembers() {

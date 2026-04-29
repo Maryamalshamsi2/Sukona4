@@ -26,6 +26,10 @@ export interface Salon {
   whatsapp_phone_number_id: string | null;
   whatsapp_business_account_id: string | null;
   whatsapp_access_token: string | null;
+  /** VAT percentage (0–100). 0 = not VAT-registered, no VAT line on receipts. */
+  vat_percent: number;
+  /** Tax Registration Number — required if vat_percent > 0 (UAE legal req). */
+  vat_trn: string | null;
   is_onboarded: boolean;
   owner_id: string | null;
   created_at: string;
@@ -204,4 +208,64 @@ export interface ServiceBundle {
   // joined
   service_categories?: ServiceCategory | null;
   service_bundle_items?: ServiceBundleItem[];
+}
+
+export interface Review {
+  id: string;
+  appointment_id: string;
+  salon_id: string;
+  rating: number; // 1-5
+  comment: string | null;
+  wants_followup: boolean;
+  redirected_externally: boolean;
+  submitted_at: string;
+}
+
+/** Joined shape returned from get_receipt_context RPC. */
+export interface ReceiptServiceLine {
+  name: string;
+  price: number;
+}
+
+export interface ReceiptPaymentLine {
+  amount: number;
+  method: PaymentMethod;
+  paid_at: string;
+}
+
+export interface ReceiptContext {
+  appointment_id: string;
+  receipt_number: string;
+  client_name: string;
+  client_phone: string | null;
+  appointment_date: string;
+  appointment_time: string;
+  appointment_status: AppointmentStatus;
+  service_lines: ReceiptServiceLine[];
+  payment_lines: ReceiptPaymentLine[];
+  subtotal: number;
+  vat_percent: number;
+  vat_amount: number;
+  total_paid: number;
+  total_due: number;
+  salon_id: string;
+  salon_name: string;
+  salon_phone: string | null;
+  salon_brand_color: string | null;
+  salon_signoff: string | null;
+  salon_vat_trn: string | null;
+  is_voided: boolean;
+}
+
+/** Joined shape returned from get_review_context RPC. */
+export interface ReviewContext {
+  appointment_id: string;
+  client_name: string;
+  service_summary: string;
+  appointment_date: string;
+  salon_id: string;
+  salon_name: string;
+  brand_color: string | null;
+  public_review_url: string | null;
+  already_submitted: boolean;
 }

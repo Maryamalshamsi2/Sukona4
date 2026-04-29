@@ -30,6 +30,8 @@ interface SalonSettings {
   public_review_url: string | null;
   signoff: string | null;
   default_language: string;
+  vat_percent: number;
+  vat_trn: string | null;
   is_onboarded: boolean;
 }
 
@@ -354,8 +356,17 @@ function SalonSection({
   const [reviewUrl, setReviewUrl] = useState(salon.public_review_url || "");
   const [signoff, setSignoff] = useState(salon.signoff || "");
   const [language, setLanguage] = useState(salon.default_language || "en");
+  // VAT is stored as a string in the input so we can show "" instead of "0"
+  // when the salon hasn't set anything (cleaner UX). Coerced on submit.
+  const [vatPercent, setVatPercent] = useState(
+    salon.vat_percent ? String(salon.vat_percent) : ""
+  );
+  const [vatTrn, setVatTrn] = useState(salon.vat_trn || "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const vatNum = Number(vatPercent || 0);
+  const vatActive = vatNum > 0;
 
   const hasChanges =
     name !== salon.name ||
@@ -363,7 +374,9 @@ function SalonSection({
     contactPhone !== (salon.contact_phone || "") ||
     reviewUrl !== (salon.public_review_url || "") ||
     signoff !== (salon.signoff || "") ||
-    language !== (salon.default_language || "en");
+    language !== (salon.default_language || "en") ||
+    vatNum !== (salon.vat_percent || 0) ||
+    vatTrn.trim() !== (salon.vat_trn || "");
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -381,6 +394,15 @@ function SalonSection({
       });
       return;
     }
+    // VAT bounds + TRN-required-if-charging.
+    if (!Number.isFinite(vatNum) || vatNum < 0 || vatNum > 100) {
+      setMessage({ type: "error", text: "VAT must be between 0 and 100" });
+      return;
+    }
+    if (vatNum > 0 && !vatTrn.trim()) {
+      setMessage({ type: "error", text: "TRN is required when VAT is charged" });
+      return;
+    }
 
     setSaving(true);
     const result = await updateSalon({
@@ -390,6 +412,8 @@ function SalonSection({
       public_review_url: reviewUrl.trim() || null,
       signoff: signoff.trim() || null,
       default_language: language,
+      vat_percent: vatNum,
+      vat_trn: vatTrn.trim() || null,
     });
 
     if (result.error) {
@@ -515,6 +539,58 @@ function SalonSection({
           <p className="mt-1 text-caption text-text-tertiary">
             Appears at the end of every notification message.
           </p>
+        </div>
+
+        {/* Tax — VAT% + TRN. TRN field only renders when VAT > 0 to keep
+            the form quiet for salons (like Ateeq) that don't charge VAT. */}
+        <div className="rounded-xl bg-neutral-50 ring-1 ring-border p-4">
+          <p className="text-body-sm font-semibold text-text-primary">Tax</p>
+          <p className="mt-0.5 text-caption text-text-tertiary">
+            Set VAT % to 0 if you don&apos;t charge VAT. Receipts will skip the VAT line entirely.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
+            <div>
+              <label className="block text-body-sm font-semibold text-text-primary mb-1">
+                VAT %
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={vatPercent}
+                  onChange={(e) => setVatPercent(e.target.value)}
+                  className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 pr-9 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  placeholder="0"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-body-sm text-text-tertiary">
+                  %
+                </span>
+              </div>
+            </div>
+
+            {vatActive && (
+              <div>
+                <label className="block text-body-sm font-semibold text-text-primary mb-1">
+                  TRN <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={vatTrn}
+                  onChange={(e) => setVatTrn(e.target.value)}
+                  maxLength={32}
+                  className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  placeholder="100123456700003"
+                />
+                <p className="mt-1 text-caption text-text-tertiary">
+                  Tax Registration Number — required when VAT is charged. Shown on receipts.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {message && (

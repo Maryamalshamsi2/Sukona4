@@ -81,7 +81,7 @@ export async function getSalon() {
   const { data, error } = await supabase
     .from("salons")
     .select(
-      "id, name, slug, brand_color, contact_phone, public_review_url, signoff, default_language, is_onboarded"
+      "id, name, slug, brand_color, contact_phone, public_review_url, signoff, default_language, vat_percent, vat_trn, is_onboarded"
     )
     .eq("id", profile.salon_id)
     .single();
@@ -102,6 +102,8 @@ export async function updateSalon(input: {
   public_review_url: string | null;
   signoff: string | null;
   default_language: string;
+  vat_percent: number;
+  vat_trn: string | null;
 }) {
   const profile = await getCurrentProfile();
   if (!profile) return { error: "Not authenticated" };
@@ -113,6 +115,17 @@ export async function updateSalon(input: {
   if (!name) return { error: "Salon name is required" };
   if (name.length > 80) return { error: "Salon name is too long (max 80)" };
 
+  // VAT validation — bounds match the DB check constraint.
+  const vatPercent = Number(input.vat_percent);
+  if (!Number.isFinite(vatPercent) || vatPercent < 0 || vatPercent > 100) {
+    return { error: "VAT must be between 0 and 100" };
+  }
+  // If VAT is charged, TRN is legally required (UAE).
+  const trnTrimmed = (input.vat_trn || "").trim();
+  if (vatPercent > 0 && !trnTrimmed) {
+    return { error: "TRN is required when VAT is charged" };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("salons")
@@ -123,6 +136,8 @@ export async function updateSalon(input: {
       public_review_url: input.public_review_url || null,
       signoff: input.signoff || null,
       default_language: input.default_language || "en",
+      vat_percent: vatPercent,
+      vat_trn: trnTrimmed || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", profile.salon_id);

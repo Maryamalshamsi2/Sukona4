@@ -1,11 +1,27 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import type { PaymentMethod } from "@/types";
 
+/**
+ * 16-char URL-safe token for the public review page.
+ * 12 random bytes = 96 bits of entropy — comfortably unguessable.
+ */
+function generateReviewToken(): string {
+  return randomBytes(12).toString("base64url");
+}
+
 // Record a payment against an appointment.
 // Caller should then transition the appointment status to 'paid'.
+//
+// Side effect — two tokens are minted (idempotently) at this point:
+//   1. review_token  → unlocks the "Send review link" button.
+//   2. receipt_token + receipt_number  → unlocks the "Send receipt"
+//      button + powers the public /receipt/[token] page.
+// We mint here (rather than on the status transition) because "payment
+// recorded" is the strongest signal that the visit was completed.
 export async function recordPayment(
   appointmentId: string,
   amount: number,
@@ -22,6 +38,28 @@ export async function recordPayment(
     receipt_url: receiptUrl,
   });
   if (error) return { error: error.message };
+
+  // Generate review token (idempotent — only sets if not already present).
+  const { data: existing } = await supabase
+    .from("appointments")
+    .select("review_token")
+    .eq("id", appointmentId)
+    .single();
+
+  if (existing && !existing.review_token) {
+    await supabase
+      .from("appointments")
+      .update({ review_token: generateReviewToken() })
+      .eq("id", appointmentId);
+  }
+
+  // Mint receipt token + number atomically. The RPC is idempotent —
+  // re-calling for an appointment that already has a token returns the
+  // existing values without bumping the counter, so deposit + balance
+  // payments share one receipt.
+  await supabase.rpc("mint_receipt_for_appointment", {
+    p_appointment_id: appointmentId,
+  });
 
   revalidatePath("/payments");
   revalidatePath("/reports");

@@ -17,9 +17,11 @@ import {
   addStaffDayOff,
   deleteStaffDayOff,
 } from "./actions";
-import type { Profile, TeamGroup, StaffSchedule, StaffDayOff } from "@/types";
+import type { Profile, TeamGroup, StaffDayOff } from "@/types";
+import { useCurrentUser } from "@/lib/user-context";
 
 export default function TeamPage() {
+  const currentUser = useCurrentUser();
   const [members, setMembers] = useState<Profile[]>([]);
   const [groups, setGroups] = useState<TeamGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,8 +38,14 @@ export default function TeamPage() {
   const [editingMember, setEditingMember] = useState<Profile | null>(null);
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [memberPhone, setMemberPhone] = useState("");
-  // Auth identifier method when ADDING a new member (email or phone).
-  const [addAuthMethod, setAddAuthMethod] = useState<"email" | "phone">("email");
+  const [showPassword, setShowPassword] = useState(false);
+  // True when the owner is editing their own row — auth fields hide,
+  // role stays editable but a self-demotion warning lives elsewhere.
+  const editingSelf = !!editingMember && !!currentUser && editingMember.id === currentUser.id;
+  // True when auth credential fields should be visible:
+  // - Always when adding a new member
+  // - When editing someone OTHER than yourself
+  const showAuthFields = isAddingMember || (!!editingMember && !editingSelf);
 
   // Schedule state
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -132,7 +140,7 @@ export default function TeamPage() {
     setEditingMember(null);
     setIsAddingMember(true);
     setMemberPhone("");
-    setAddAuthMethod("email");
+    setShowPassword(false);
     setMemberModalOpen(true);
   }
 
@@ -140,6 +148,7 @@ export default function TeamPage() {
     setEditingMember(member);
     setIsAddingMember(false);
     setMemberPhone(member.phone || "");
+    setShowPassword(false);
     setScheduleData(DEFAULT_SCHEDULE);
     setDaysOff([]);
     setNewDayOffDate("");
@@ -465,73 +474,7 @@ export default function TeamPage() {
         size={isAddingMember ? "md" : "lg"}
       >
         <form action={handleMemberSubmit} className="space-y-6">
-          {/* Only show email/phone + password when adding */}
-          {isAddingMember && (
-            <>
-              <input type="hidden" name="auth_method" value={addAuthMethod} />
-              <div>
-                <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-                  Sign-in method *
-                </label>
-                <div className="flex gap-1 rounded-xl bg-neutral-100/80 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setAddAuthMethod("email")}
-                    className={`flex-1 rounded-lg px-3 py-2 text-body-sm font-semibold transition-all ${
-                      addAuthMethod === "email"
-                        ? "bg-white text-text-primary shadow-sm"
-                        : "text-text-secondary hover:text-text-primary"
-                    }`}
-                  >
-                    Email
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddAuthMethod("phone")}
-                    className={`flex-1 rounded-lg px-3 py-2 text-body-sm font-semibold transition-all ${
-                      addAuthMethod === "phone"
-                        ? "bg-white text-text-primary shadow-sm"
-                        : "text-text-secondary hover:text-text-primary"
-                    }`}
-                  >
-                    Phone
-                  </button>
-                </div>
-                <p className="mt-1.5 text-caption text-text-tertiary">
-                  This is what they&apos;ll use to sign in.
-                </p>
-              </div>
-              {addAuthMethod === "email" && (
-                <div>
-                  <label htmlFor="mem-email" className="block text-body-sm font-semibold text-text-primary">
-                    Email *
-                  </label>
-                  <input
-                    id="mem-email"
-                    name="email"
-                    type="email"
-                    required
-                    className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
-                  />
-                </div>
-              )}
-              <div>
-                <label htmlFor="mem-password" className="block text-body-sm font-semibold text-text-primary">
-                  Password *
-                </label>
-                <input
-                  id="mem-password"
-                  name="password"
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="Min 6 characters"
-                  className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
-                />
-              </div>
-            </>
-          )}
-
+          {/* Name */}
           <div>
             <label htmlFor="mem-name" className="block text-body-sm font-semibold text-text-primary">
               Full Name *
@@ -546,9 +489,93 @@ export default function TeamPage() {
             />
           </div>
 
+          {/* Auth identifiers — Phone (required), Email (optional), Password.
+              Hidden when an owner is editing their own row to prevent
+              accidental self-lockout (they can use Settings instead). */}
+          {showAuthFields ? (
+            <>
+              <div>
+                <label className="block text-body-sm font-semibold text-text-primary">
+                  Phone *
+                </label>
+                <input type="hidden" name="phone" value={memberPhone} />
+                <div className="mt-1.5">
+                  <PhoneInput
+                    value={memberPhone}
+                    onChange={setMemberPhone}
+                    required={isAddingMember}
+                  />
+                </div>
+                <p className="mt-1.5 text-caption text-text-tertiary">
+                  {isAddingMember
+                    ? "They'll use this number to sign in."
+                    : "Used for sign-in. Leave unchanged to keep current."}
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="mem-email" className="block text-body-sm font-semibold text-text-primary">
+                  Email <span className="font-normal text-text-tertiary">(optional)</span>
+                </label>
+                <input
+                  id="mem-email"
+                  name="email"
+                  type="email"
+                  defaultValue={editingMember?.email ?? ""}
+                  placeholder="name@example.com"
+                  className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                />
+                <p className="mt-1.5 text-caption text-text-tertiary">
+                  If provided, they can sign in with phone OR email.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="mem-password" className="block text-body-sm font-semibold text-text-primary">
+                  {isAddingMember ? "Password *" : "New Password"}
+                </label>
+                <div className="relative mt-1.5">
+                  <input
+                    id="mem-password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    required={isAddingMember}
+                    minLength={isAddingMember ? 6 : undefined}
+                    placeholder={isAddingMember ? "Min 6 characters" : "Leave blank to keep current"}
+                    className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 pr-11 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-tertiary hover:text-text-secondary"
+                  >
+                    {showPassword ? (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            editingSelf && (
+              <p className="rounded-xl bg-surface-active px-4 py-3 text-caption text-text-secondary">
+                Edit your own sign-in credentials in Settings.
+              </p>
+            )
+          )}
+
+          {/* Job Title */}
           <div>
             <label htmlFor="mem-title" className="block text-body-sm font-semibold text-text-primary">
-              Job Title
+              Job Title <span className="font-normal text-text-tertiary">(optional)</span>
             </label>
             <input
               id="mem-title"
@@ -560,28 +587,10 @@ export default function TeamPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-body-sm font-semibold text-text-primary">
-              Phone{isAddingMember && addAuthMethod === "phone" ? " *" : ""}
-            </label>
-            <input type="hidden" name="phone" value={memberPhone} />
-            <div className="mt-1.5">
-              <PhoneInput
-                value={memberPhone}
-                onChange={setMemberPhone}
-                required={isAddingMember && addAuthMethod === "phone"}
-              />
-            </div>
-            {isAddingMember && addAuthMethod === "phone" && (
-              <p className="mt-1.5 text-caption text-text-tertiary">
-                They&apos;ll sign in with this phone number.
-              </p>
-            )}
-          </div>
-
+          {/* Role */}
           <div>
             <label htmlFor="mem-role" className="block text-body-sm font-semibold text-text-primary">
-              Role
+              Role *
             </label>
             <select
               id="mem-role"
@@ -595,10 +604,11 @@ export default function TeamPage() {
             </select>
           </div>
 
+          {/* Group + Salary (both optional) */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="mem-group" className="block text-body-sm font-semibold text-text-primary">
-                Group
+                Group <span className="font-normal text-text-tertiary">(optional)</span>
               </label>
               <select
                 id="mem-group"
@@ -616,7 +626,7 @@ export default function TeamPage() {
             </div>
             <div>
               <label htmlFor="mem-salary" className="block text-body-sm font-semibold text-text-primary">
-                Salary (AED/mo)
+                Salary (AED/mo) <span className="font-normal text-text-tertiary">(optional)</span>
               </label>
               <input
                 id="mem-salary"
@@ -629,14 +639,6 @@ export default function TeamPage() {
               />
             </div>
           </div>
-
-          {editingMember && (
-            <p className="text-caption text-text-tertiary">
-              {editingMember.email
-                ? <>Email: {editingMember.email} (cannot be changed)</>
-                : <>Sign-in phone: {editingMember.phone || "—"} (cannot be changed)</>}
-            </p>
-          )}
 
           {/* Work Schedule — only when editing */}
           {editingMember && (
