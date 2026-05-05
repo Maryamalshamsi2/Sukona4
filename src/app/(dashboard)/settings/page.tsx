@@ -8,7 +8,12 @@ import {
   updatePassword,
   getSalon,
   updateSalon,
+  getWhatsAppSettings,
+  updateWhatsAppSettings,
+  getWhatsAppLogs,
+  sendWhatsAppTestMessage,
 } from "./actions";
+import type { WhatsAppSendLog } from "@/types";
 import PhoneInput from "@/components/phone-input";
 import { useCurrentUser } from "@/lib/user-context";
 
@@ -35,7 +40,7 @@ interface SalonSettings {
   is_onboarded: boolean;
 }
 
-type SettingsTab = "profile" | "salon" | "security";
+type SettingsTab = "profile" | "salon" | "whatsapp" | "security";
 
 export default function SettingsPage() {
   const currentUser = useCurrentUser();
@@ -62,10 +67,15 @@ export default function SettingsPage() {
 
   if (loading) return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
 
-  // Salon tab is owner-only — staff/admin don't see it.
+  // Salon + WhatsApp tabs are owner-only — staff/admin don't see them.
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: "profile", label: "Profile" },
-    ...(isOwner ? ([{ key: "salon", label: "Salon" }] as const) : []),
+    ...(isOwner
+      ? ([
+          { key: "salon", label: "Salon" },
+          { key: "whatsapp", label: "WhatsApp" },
+        ] as const)
+      : []),
     { key: "security", label: "Security" },
   ];
 
@@ -97,6 +107,8 @@ export default function SettingsPage() {
       {tab === "salon" && isOwner && salon && (
         <SalonSection salon={salon} onUpdate={loadData} />
       )}
+
+      {tab === "whatsapp" && isOwner && <WhatsAppSection />}
 
       {tab === "security" && (
         <SecuritySection />
@@ -610,5 +622,341 @@ function SalonSection({
         </div>
       </form>
     </div>
+  );
+}
+
+// ---- WhatsApp Section (owner only) ----
+
+interface WhatsAppCreds {
+  phone_number_id: string | null;
+  business_account_id: string | null;
+  hasAccessToken: boolean;
+  accessTokenMask: string | null;
+}
+
+/**
+ * Owner-only panel for connecting Meta WhatsApp Cloud API and auditing
+ * recent sends. Three sub-sections:
+ *
+ *   1. Credentials form — phone number id, business account id, access
+ *      token. The current token isn't shown back; instead we render
+ *      "…last4" so the owner can confirm a token is on file. Saving
+ *      with the token field empty *keeps* the existing token.
+ *
+ *   2. Test send — fires a real `appointment_confirmation` template to
+ *      a phone number the owner enters. Easiest way to verify the
+ *      connection without booking a real appointment.
+ *
+ *   3. Recent sends log — last 50 rows from `whatsapp_send_log` with
+ *      status pill, retry button on failures, and template name.
+ *
+ * If credentials aren't configured, the app silently falls back to the
+ * wa.me deep link path everywhere else — so this panel is the single
+ * gate for turning "real auto-send" on or off per salon.
+ */
+function WhatsAppSection() {
+  const [creds, setCreds] = useState<WhatsAppCreds | null>(null);
+  const [logs, setLogs] = useState<WhatsAppSendLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [businessAccountId, setBusinessAccountId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const [testPhone, setTestPhone] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const [c, l] = await Promise.all([getWhatsAppSettings(), getWhatsAppLogs()]);
+    setCreds(c);
+    setLogs(l as WhatsAppSendLog[]);
+    if (c) {
+      setPhoneNumberId(c.phone_number_id ?? "");
+      setBusinessAccountId(c.business_account_id ?? "");
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function handleSaveCreds(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setSavedMsg(null);
+    const result = await updateWhatsAppSettings({
+      phone_number_id: phoneNumberId,
+      business_account_id: businessAccountId,
+      access_token: accessToken,
+    });
+    if (result.error) {
+      setSavedMsg({ type: "error", text: result.error });
+    } else {
+      setSavedMsg({ type: "success", text: "WhatsApp settings saved" });
+      setAccessToken("");
+      refresh();
+    }
+    setSaving(false);
+  }
+
+  async function handleTest(e: React.FormEvent) {
+    e.preventDefault();
+    setTesting(true);
+    setTestMsg(null);
+    const result = await sendWhatsAppTestMessage(testPhone);
+    if (result.error) {
+      setTestMsg({ type: "error", text: result.error });
+    } else {
+      setTestMsg({ type: "success", text: "Test message sent — check WhatsApp" });
+      refresh();
+    }
+    setTesting(false);
+  }
+
+  async function handleRetry(logId: string) {
+    setRetryingId(logId);
+    try {
+      const res = await fetch(`/api/whatsapp/retry/${logId}`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setTestMsg({
+          type: "error",
+          text: json.error ?? "Retry failed",
+        });
+      } else {
+        setTestMsg({ type: "success", text: "Retry sent — log updated" });
+        refresh();
+      }
+    } catch (err) {
+      setTestMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Retry failed",
+      });
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  if (loading) {
+    return <p className="text-text-secondary text-body-sm">Loading...</p>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 1. Credentials */}
+      <div className="rounded-2xl ring-1 ring-border bg-white">
+        <div className="border-b border-border px-5 py-4">
+          <h3 className="text-body-sm font-semibold text-text-primary">
+            WhatsApp Cloud API
+          </h3>
+          <p className="mt-0.5 text-caption text-text-secondary">
+            Connect your Meta WhatsApp Business account so messages send
+            automatically. Without these, the app falls back to wa.me links.
+          </p>
+        </div>
+
+        <form onSubmit={handleSaveCreds} className="p-6 space-y-5">
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Phone Number ID
+            </label>
+            <input
+              type="text"
+              value={phoneNumberId}
+              onChange={(e) => setPhoneNumberId(e.target.value)}
+              placeholder="e.g. 1234567890"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+            <p className="mt-1 text-caption text-text-tertiary">
+              From Meta Business → WhatsApp → API Setup.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Business Account ID
+            </label>
+            <input
+              type="text"
+              value={businessAccountId}
+              onChange={(e) => setBusinessAccountId(e.target.value)}
+              placeholder="e.g. 9876543210"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Access Token
+            </label>
+            <input
+              type="password"
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              placeholder={
+                creds?.hasAccessToken
+                  ? `Token saved (${creds.accessTokenMask}). Leave blank to keep.`
+                  : "Paste permanent system-user token"
+              }
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+            <p className="mt-1 text-caption text-text-tertiary">
+              Use a permanent system-user token (not the temporary 24-hour one).
+              Stored encrypted at rest by Supabase.
+            </p>
+          </div>
+
+          {savedMsg && (
+            <p
+              className={`text-body-sm ${
+                savedMsg.type === "success" ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {savedMsg.text}
+            </p>
+          )}
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Credentials"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 2. Test send */}
+      <div className="rounded-2xl ring-1 ring-border bg-white">
+        <div className="border-b border-border px-5 py-4">
+          <h3 className="text-body-sm font-semibold text-text-primary">
+            Send a Test Message
+          </h3>
+          <p className="mt-0.5 text-caption text-text-secondary">
+            Verify your connection by sending an Appointment Confirmation
+            template to your own phone.
+          </p>
+        </div>
+
+        <form onSubmit={handleTest} className="p-6 space-y-4">
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Recipient
+            </label>
+            <PhoneInput value={testPhone} onChange={setTestPhone} />
+          </div>
+
+          {testMsg && (
+            <p
+              className={`text-body-sm ${
+                testMsg.type === "success" ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {testMsg.text}
+            </p>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={testing || !testPhone}
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-body-sm font-semibold text-white hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {testing ? "Sending..." : "Send Test"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 3. Recent sends log */}
+      <div className="rounded-2xl ring-1 ring-border bg-white">
+        <div className="border-b border-border px-5 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-body-sm font-semibold text-text-primary">
+              Recent Sends
+            </h3>
+            <p className="mt-0.5 text-caption text-text-secondary">
+              Last 50 outbound messages (newest first).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refresh()}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-caption font-semibold text-text-secondary hover:bg-gray-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {logs.length === 0 ? (
+          <p className="p-6 text-body-sm text-text-tertiary">
+            No messages sent yet.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {logs.map((log) => (
+              <li key={log.id} className="px-5 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-body-sm font-semibold text-text-primary">
+                        {log.template_name}
+                      </span>
+                      <StatusPill status={log.status} />
+                      {log.retried_from && (
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-caption text-blue-700">
+                          retry
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-caption text-text-secondary">
+                      To {log.recipient_phone}
+                      <span className="mx-1.5 text-text-tertiary">·</span>
+                      {new Date(log.created_at).toLocaleString()}
+                    </p>
+                    {log.error_message && (
+                      <p className="mt-1 text-caption text-red-600 break-words">
+                        {log.error_message}
+                      </p>
+                    )}
+                  </div>
+                  {log.status === "failed" && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetry(log.id)}
+                      disabled={retryingId === log.id}
+                      className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-caption font-semibold text-text-primary hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {retryingId === log.id ? "Retrying..." : "Retry"}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const cls =
+    status === "sent"
+      ? "bg-green-50 text-green-700"
+      : status === "failed"
+      ? "bg-red-50 text-red-700"
+      : "bg-gray-100 text-text-secondary";
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-caption font-medium ${cls}`}>
+      {status}
+    </span>
   );
 }

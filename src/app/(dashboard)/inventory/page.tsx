@@ -67,9 +67,6 @@ export default function InventoryPage() {
     return true;
   });
 
-  const lowStockCount = items.filter((i) => i.quantity > 0 && i.quantity <= i.low_stock_threshold).length;
-  const outOfStockCount = items.filter((i) => i.quantity === 0).length;
-
   async function handleQuickQuantity(item: InventoryItem, delta: number) {
     const newQty = Math.max(0, item.quantity + delta);
     const result = await updateInventoryQuantity(item.id, newQty);
@@ -84,15 +81,6 @@ export default function InventoryPage() {
       <div className="flex items-center justify-between gap-3 mb-6 sm:mb-6">
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Inventory</h1>
-          <p className="mt-0.5 text-body-sm text-text-secondary">
-            {items.length} item{items.length !== 1 ? "s" : ""}
-            {lowStockCount > 0 && (
-              <span className="ml-2 text-amber-600">· {lowStockCount} low stock</span>
-            )}
-            {outOfStockCount > 0 && (
-              <span className="ml-2 text-error-700">· {outOfStockCount} out of stock</span>
-            )}
-          </p>
         </div>
         <button
           onClick={() => setAddModalOpen(true)}

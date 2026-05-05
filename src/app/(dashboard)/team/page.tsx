@@ -277,9 +277,6 @@ export default function TeamPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Team</h1>
-          <p className="mt-0.5 text-body-sm text-text-secondary">
-            {members.length} members &middot; {groups.length} groups
-          </p>
         </div>
         <div className="relative shrink-0" ref={addDropdownRef}>
           <button

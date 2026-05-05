@@ -51,6 +51,41 @@ const EXPENSE_TYPES = [
   "Other",
 ];
 
+type DatePreset = "today" | "week" | "month" | "custom";
+
+const PRESET_LABELS: Record<DatePreset, string> = {
+  today: "Today",
+  week: "Week",
+  month: "Month",
+  custom: "Custom",
+};
+
+function toISODate(d: Date) {
+  return d.toISOString().split("T")[0];
+}
+
+function getPresetRange(preset: DatePreset): { from: string; to: string } {
+  const now = new Date();
+  const today = toISODate(now);
+
+  switch (preset) {
+    case "today":
+      return { from: today, to: today };
+    case "week": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 6);
+      return { from: toISODate(d), to: today };
+    }
+    case "month": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 29);
+      return { from: toISODate(d), to: today };
+    }
+    default:
+      return { from: today, to: today };
+  }
+}
+
 function formatCurrency(amount: number) {
   return `AED ${amount.toFixed(2)}`;
 }
@@ -84,6 +119,9 @@ export default function ExpensesPage() {
   const [selected, setSelected] = useState<Expense | null>(null);
   const [filterType, setFilterType] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePreset>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   // Petty cash
   const [pettyCashBalance, setPettyCashBalance] = useState(0);
@@ -115,8 +153,18 @@ export default function ExpensesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const dateRange =
+    datePreset === "custom" && customFrom && customTo
+      ? { from: customFrom, to: customTo }
+      : datePreset === "custom"
+        ? null
+        : getPresetRange(datePreset);
+
   const filtered = expenses.filter((e) => {
     if (filterType && e.expense_type !== filterType) return false;
+    if (dateRange) {
+      if (e.date < dateRange.from || e.date > dateRange.to) return false;
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return e.description.toLowerCase().includes(q) || e.expense_type.toLowerCase().includes(q);
@@ -130,7 +178,80 @@ export default function ExpensesPage() {
 
   return (
     <div>
-      {/* Petty Cash Card */}
+      {/* Title row */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h1 className="text-title-page font-bold tracking-tight text-text-primary">Expenses</h1>
+        <button
+          onClick={() => setAddModalOpen(true)}
+          aria-label="Add expense"
+          className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Date range presets */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setDatePreset(p)}
+            className={`rounded-lg px-2.5 py-1.5 text-caption font-semibold transition-colors sm:px-3 sm:text-body-sm ${
+              datePreset === p
+                ? "bg-neutral-900 text-text-inverse"
+                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+            }`}
+          >
+            {PRESET_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      {/* Custom date inputs */}
+      {datePreset === "custom" && (
+        <div className="mb-4 flex items-center gap-3">
+          <input
+            type="date"
+            value={customFrom}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+          <span className="text-body-sm text-text-tertiary">to</span>
+          <input
+            type="date"
+            value={customTo}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
+      )}
+
+      {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-body-sm text-error-700">{error}</p>}
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <input
+          type="text"
+          placeholder="Search expenses..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        >
+          <option value="">All Types</option>
+          {EXPENSE_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Petty Cash Card (moved below search) */}
       <div className="mb-6 rounded-2xl ring-1 ring-border bg-white p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -161,47 +282,6 @@ export default function ExpensesPage() {
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-3 mb-6 sm:mb-6">
-        <div className="min-w-0">
-          <h1 className="text-title-page font-bold tracking-tight text-text-primary">Expenses</h1>
-          <p className="mt-0.5 text-body-sm text-text-secondary">
-            Total: {formatCurrency(totalAmount)} · {filtered.length} expense{filtered.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <button
-          onClick={() => setAddModalOpen(true)}
-          aria-label="Add expense"
-          className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      </div>
-
-      {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-body-sm text-error-700">{error}</p>}
-
-      {/* Filters */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-        <input
-          type="text"
-          placeholder="Search expenses..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="">All Types</option>
-          {EXPENSE_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
       </div>
 
       {/* Expense List */}
@@ -254,6 +334,14 @@ export default function ExpensesPage() {
               </span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Bottom total — reflects the currently-visible filtered set */}
+      {filtered.length > 0 && (
+        <div className="mt-4 flex items-center justify-end gap-2 text-body-sm">
+          <span className="text-text-tertiary">Total</span>
+          <span className="font-semibold text-text-primary">{formatCurrency(totalAmount)}</span>
         </div>
       )}
 

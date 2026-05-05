@@ -238,10 +238,13 @@ export default function CatalogPage() {
 
   return (
     <div>
-      {/* Floating "+" add button (no page title / counts) */}
-      {!isStaff && (
-      <div className="flex justify-end">
-        <div className="relative" ref={addDropdownRef}>
+      {/* Page title + "+" add button — matches the layout of Clients / Team. */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-title-page font-bold tracking-tight text-text-primary">Catalog</h1>
+        </div>
+        {!isStaff && (
+        <div className="relative shrink-0" ref={addDropdownRef}>
           <button
             onClick={() => setAddDropdownOpen(!addDropdownOpen)}
             aria-label="Add"
@@ -283,8 +286,8 @@ export default function CatalogPage() {
             </div>
           )}
         </div>
+        )}
       </div>
-      )}
 
       {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 

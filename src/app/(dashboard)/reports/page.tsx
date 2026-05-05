@@ -5,7 +5,6 @@ import {
   getReportAppointments,
   getReportPayments,
   getReportExpenses,
-  getStaffMembers,
   getReportReviews,
 } from "./actions";
 
@@ -56,12 +55,6 @@ interface ReportExpense {
   time: string | null;
   notes: string | null;
   created_at: string;
-}
-
-interface StaffMember {
-  id: string;
-  full_name: string;
-  job_title: string | null;
 }
 
 interface ReportReview {
@@ -175,7 +168,6 @@ export default function ReportsPage() {
   const [appointments, setAppointments] = useState<ReportAppointment[]>([]);
   const [payments, setPayments] = useState<ReportPayment[]>([]);
   const [expenses, setExpenses] = useState<ReportExpense[]>([]);
-  const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [reviews, setReviews] = useState<ReportReview[]>([]);
 
   const getRange = useCallback(() => {
@@ -189,17 +181,15 @@ export default function ReportsPage() {
     setLoading(true);
     try {
       const { from, to } = getRange();
-      const [appts, pays, exps, staff, revs] = await Promise.all([
+      const [appts, pays, exps, revs] = await Promise.all([
         getReportAppointments(from, to),
         getReportPayments(from, to),
         getReportExpenses(from, to),
-        getStaffMembers(),
         getReportReviews(from, to),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
       setExpenses(exps as unknown as ReportExpense[]);
-      setStaffList(staff as StaffMember[]);
       setReviews(revs as unknown as ReportReview[]);
     } catch {
       // silently handle
@@ -242,45 +232,6 @@ export default function ReportsPage() {
   const expectedRevenue = appointments
     .filter((a) => a.status !== "cancelled")
     .reduce((s, a) => s + getApptRevenue(a), 0);
-
-  // Staff name lookup
-  const staffName = (id: string | null) => {
-    if (!id) return "Unassigned";
-    return staffList.find((s) => s.id === id)?.full_name || "Unknown";
-  };
-
-  // ---- Review aggregates ----
-  const reviewCount = reviews.length;
-  const reviewAvg =
-    reviewCount > 0
-      ? reviews.reduce((s, r) => s + r.rating, 0) / reviewCount
-      : 0;
-  const lowReviews = reviews.filter((r) => r.rating <= 3);
-  const followupCount = reviews.filter((r) => r.wants_followup).length;
-
-  // Per-staff aggregates: walk every (review, staff) pair via the appointment's
-  // service rows. A multi-staff appointment counts toward each staff's avg —
-  // imperfect but the most useful default for a salon owner.
-  const staffReviewMap: Record<string, { sum: number; count: number }> = {};
-  for (const r of reviews) {
-    const staffIds = new Set<string>();
-    for (const as2 of r.appointments?.appointment_services || []) {
-      if (as2.staff_id) staffIds.add(as2.staff_id);
-    }
-    for (const sid of staffIds) {
-      if (!staffReviewMap[sid]) staffReviewMap[sid] = { sum: 0, count: 0 };
-      staffReviewMap[sid].sum += r.rating;
-      staffReviewMap[sid].count += 1;
-    }
-  }
-  const staffReviewRows = Object.entries(staffReviewMap)
-    .map(([sid, v]) => ({
-      id: sid,
-      name: staffName(sid),
-      avg: v.sum / v.count,
-      count: v.count,
-    }))
-    .sort((a, b) => b.avg - a.avg);
 
   // ---- Tab content ----
 
@@ -359,8 +310,8 @@ export default function ReportsPage() {
           {/* ===== OVERVIEW TAB ===== */}
           {tab === "overview" && (
             <div className="space-y-6">
-              {/* Top stats */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+              {/* 2x2 stat grid */}
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <StatCard label="Revenue" value={formatCurrency(totalRevenue)} color="text-green-700" />
                 <StatCard label="Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
                 <StatCard
@@ -371,56 +322,33 @@ export default function ReportsPage() {
                 <StatCard label="Appointments" value={String(totalAppointments)} sub={`${completedOrPaid} completed`} />
               </div>
 
-              {/* Two-column detail */}
+              {/* Trimmed two-column breakdowns */}
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {/* Revenue breakdown */}
-                <div className="rounded-2xl bg-white ring-1 ring-border">
-                  <div className="border-b border-border px-5 py-4">
-                    <h3 className="text-body-sm font-semibold text-text-primary">Revenue Breakdown</h3>
-                  </div>
-                  <div className="divide-y divide-border px-5">
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-body-sm text-text-primary">Cash Payments</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cashTotal)}</span>
-                        <span className="ml-2 text-caption text-text-tertiary">({cashPayments.length})</span>
-                      </div>
+                <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
+                  <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Revenue</p>
+                  <div className="mt-2 divide-y divide-border">
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-body-sm text-text-secondary">Cash</span>
+                      <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cashTotal)}</span>
                     </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-2 rounded-full bg-blue-500" />
-                        <span className="text-body-sm text-text-primary">Card Payments</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
-                        <span className="ml-2 text-caption text-text-tertiary">({cardPayments.length})</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-2 rounded-full bg-gray-500" />
-                        <span className="text-body-sm text-text-primary">Expected (from services)</span>
-                      </div>
-                      <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(expectedRevenue)}</span>
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-body-sm text-text-secondary">Card</span>
+                      <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Expense breakdown */}
-                <div className="rounded-2xl bg-white ring-1 ring-border">
-                  <div className="border-b border-border px-5 py-4">
-                    <h3 className="text-body-sm font-semibold text-text-primary">Expense Breakdown</h3>
-                  </div>
+                <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
+                  <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Expenses</p>
                   {expenseBreakdown.length === 0 ? (
-                    <p className="px-5 py-8 text-center text-body-sm text-text-tertiary">No expenses in this period</p>
+                    <p className="mt-2 py-2.5 text-body-sm text-text-tertiary">None this period</p>
                   ) : (
-                    <div className="divide-y divide-border px-5">
+                    <div className="mt-2 divide-y divide-border">
                       {expenseBreakdown.map(([type, amount]) => (
-                        <div key={type} className="flex items-center justify-between py-3">
-                          <span className="text-body-sm text-text-primary">{type}</span>
+                        <div key={type} className="flex items-center justify-between py-2.5">
+                          <span className="text-body-sm text-text-secondary">{type}</span>
                           <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(amount)}</span>
                         </div>
                       ))}
@@ -609,15 +537,6 @@ export default function ReportsPage() {
           {/* ===== EXPENSES TAB ===== */}
           {tab === "expenses" && (
             <div className="space-y-4">
-              {/* Expense summary cards */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <StatCard label="Total Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
-                <StatCard label="Entries" value={String(expenses.length)} />
-                {expenseBreakdown.length > 0 && (
-                  <StatCard label="Top Category" value={expenseBreakdown[0][0]} sub={formatCurrency(expenseBreakdown[0][1])} />
-                )}
-              </div>
-
               <div className="rounded-2xl bg-white ring-1 ring-border">
                 <div className="border-b border-border px-5 py-4 flex items-center justify-between">
                   <h3 className="text-body-sm font-semibold text-text-primary">
@@ -675,6 +594,12 @@ export default function ReportsPage() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Total under list */}
+                    <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 text-body-sm">
+                      <span className="text-text-tertiary">Total</span>
+                      <span className="font-semibold text-red-600">{formatCurrency(totalExpenses)}</span>
+                    </div>
                   </>
                 )}
               </div>
@@ -709,52 +634,7 @@ export default function ReportsPage() {
           {/* ===== REVIEWS TAB ===== */}
           {tab === "reviews" && (
             <div className="space-y-4">
-              {/* Review summary cards */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard
-                  label="Avg Rating"
-                  value={reviewCount > 0 ? `${reviewAvg.toFixed(1)} / 5` : "—"}
-                  sub={reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? "" : "s"}` : undefined}
-                  color={reviewCount > 0 && reviewAvg >= 4 ? "text-green-700" : undefined}
-                />
-                <StatCard label="Reviews" value={String(reviewCount)} />
-                <StatCard
-                  label="Low (≤3★)"
-                  value={String(lowReviews.length)}
-                  color={lowReviews.length > 0 ? "text-red-600" : undefined}
-                />
-                <StatCard
-                  label="Wants Follow-up"
-                  value={String(followupCount)}
-                  color={followupCount > 0 ? "text-amber-700" : undefined}
-                />
-              </div>
-
-              {/* Per-staff averages */}
-              {staffReviewRows.length > 0 && (
-                <div className="rounded-2xl bg-white ring-1 ring-border">
-                  <div className="border-b border-border px-5 py-4">
-                    <h3 className="text-body-sm font-semibold text-text-primary">By Staff</h3>
-                  </div>
-                  <div className="divide-y divide-border px-5">
-                    {staffReviewRows.map((row) => (
-                      <div key={row.id} className="flex items-center justify-between py-3">
-                        <span className="text-body-sm text-text-primary">{row.name}</span>
-                        <div className="text-right">
-                          <span className="text-body-sm font-semibold text-text-primary">
-                            {row.avg.toFixed(1)} / 5
-                          </span>
-                          <span className="ml-2 text-caption text-text-tertiary">
-                            ({row.count})
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Recent reviews list */}
+              {/* Recent reviews list (only) */}
               <div className="rounded-2xl bg-white ring-1 ring-border">
                 <div className="border-b border-border px-5 py-4 flex items-center justify-between">
                   <h3 className="text-body-sm font-semibold text-text-primary">

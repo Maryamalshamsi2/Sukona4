@@ -268,7 +268,6 @@ export default function ClientsPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Clients</h1>
-          <p className="mt-1 text-body-sm text-text-secondary">{clients.length} clients</p>
         </div>
         {!isStaff && (
           <button

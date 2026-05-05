@@ -160,3 +160,152 @@ export async function getTeamMembers() {
   if (error) throw error;
   return data;
 }
+
+// ---- WHATSAPP CLOUD API SETTINGS (owner-only) ----
+
+/**
+ * Fetch WABA credential status for the owner-only Settings → WhatsApp
+ * panel. We deliberately return only **partial** values so the access
+ * token never round-trips to the browser:
+ *
+ *   - `phone_number_id` and `business_account_id` are returned in full
+ *     (they're not secrets — they're references to Meta resources).
+ *   - `access_token` is returned as `accessTokenMask` (last 4 chars
+ *     prefixed with `…`) plus `hasAccessToken`. The form shows this so
+ *     the owner can confirm a token is present without exposing it.
+ */
+export async function getWhatsAppSettings() {
+  const profile = await getCurrentProfile();
+  if (!profile) return null;
+  if (profile.role !== "owner") return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("salons")
+    .select(
+      "whatsapp_phone_number_id, whatsapp_business_account_id, whatsapp_access_token"
+    )
+    .eq("id", profile.salon_id)
+    .single();
+
+  if (error || !data) return null;
+
+  const token = data.whatsapp_access_token;
+  return {
+    phone_number_id: data.whatsapp_phone_number_id,
+    business_account_id: data.whatsapp_business_account_id,
+    hasAccessToken: !!token,
+    accessTokenMask: token
+      ? `…${token.slice(-4)}`
+      : null,
+  };
+}
+
+/**
+ * Save WABA credentials. The access token is optional on update — pass
+ * an empty string to *keep* the existing token (so the masked form
+ * doesn't accidentally clear it on save). Pass a new value to replace.
+ */
+export async function updateWhatsAppSettings(input: {
+  phone_number_id: string;
+  business_account_id: string;
+  /** "" = keep existing, anything else = replace. */
+  access_token: string;
+}) {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner") {
+    return { error: "Only the salon owner can edit WhatsApp settings" };
+  }
+
+  const supabase = await createClient();
+  const update: Record<string, string | null> = {
+    whatsapp_phone_number_id: input.phone_number_id.trim() || null,
+    whatsapp_business_account_id: input.business_account_id.trim() || null,
+  };
+  if (input.access_token.trim()) {
+    update.whatsapp_access_token = input.access_token.trim();
+  }
+
+  const { error } = await supabase
+    .from("salons")
+    .update(update)
+    .eq("id", profile.salon_id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  return { success: true };
+}
+
+/**
+ * Recent WhatsApp send log rows for the owner-only audit view. Capped
+ * at 50 (the table is intended for spot-checking, not deep history —
+ * that's what an export would be for).
+ */
+export async function getWhatsAppLogs() {
+  const profile = await getCurrentProfile();
+  if (!profile) return [];
+  if (profile.role !== "owner" && profile.role !== "admin") return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("whatsapp_send_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) return [];
+  return data;
+}
+
+/**
+ * Send a quick "test" template message so the owner can verify their
+ * credentials work without booking a real appointment. Uses the
+ * `appointment_confirmation` template with placeholder values.
+ */
+export async function sendWhatsAppTestMessage(toPhone: string) {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner") {
+    return { error: "Only the salon owner can send a test message" };
+  }
+  if (!toPhone || toPhone.replace(/\D/g, "").length < 7) {
+    return { error: "Enter a valid phone number" };
+  }
+
+  const supabase = await createClient();
+  const { data: salon } = await supabase
+    .from("salons")
+    .select("name, contact_phone")
+    .eq("id", profile.salon_id)
+    .single();
+
+  // Build a sample appointment_confirmation send with today's date and
+  // a generic service. Used only to verify credentials end-to-end.
+  const today = new Date().toISOString().slice(0, 10);
+  const { sendAppointmentConfirmation } = await import(
+    "@/lib/whatsapp/templates"
+  );
+  const result = await sendAppointmentConfirmation({
+    salonId: profile.salon_id,
+    toPhone,
+    salonName: salon?.name ?? "Sukona",
+    salonPhone: salon?.contact_phone ?? "",
+    customerName: "there",
+    date: today,
+    time: "10:00",
+    services: [{ name: "Test service" }],
+  });
+
+  if (!result.ok) {
+    if (result.error === "NOT_CONFIGURED") {
+      return {
+        error:
+          "WhatsApp credentials are missing. Save phone number ID + access token first.",
+      };
+    }
+    return { error: result.errorMessage ?? "Test send failed" };
+  }
+  revalidatePath("/settings");
+  return { success: true };
+}

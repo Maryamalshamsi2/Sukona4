@@ -257,6 +257,37 @@ export interface ReceiptContext {
   is_voided: boolean;
 }
 
+// ---- WhatsApp ----
+
+export type WhatsAppSendStatus = "pending" | "sent" | "failed";
+
+/**
+ * The set of Meta-approved template names this app sends. Free text in
+ * the DB so adding a new template doesn't need a migration, but we keep
+ * a typed union here to catch typos in code.
+ */
+export type WhatsAppTemplateName =
+  | "appointment_confirmation"
+  | "appointment_updated"
+  | "appointment_cancelled"
+  | "staff_on_the_way"
+  | "staff_arrived"
+  | "payment_paid";
+
+export interface WhatsAppSendLog {
+  id: string;
+  salon_id: string;
+  appointment_id: string | null;
+  template_name: string;
+  recipient_phone: string;
+  variables: string[];
+  status: WhatsAppSendStatus;
+  meta_message_id: string | null;
+  error_message: string | null;
+  retried_from: string | null;
+  created_at: string;
+}
+
 /** Joined shape returned from get_review_context RPC. */
 export interface ReviewContext {
   appointment_id: string;
