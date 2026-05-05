@@ -162,7 +162,22 @@ export async function addTeamMember(formData: FormData) {
     user_metadata: userMetadata,
   });
 
-  if (signUpError) return { error: signUpError.message };
+  if (signUpError) {
+    // Translate Supabase's raw duplicate errors into per-field messages
+    // so the UI stays consistent with the pre-check messages above.
+    // This covers any post-race duplicate or normalization mismatch.
+    const msg = signUpError.message.toLowerCase();
+    if (msg.includes("phone") && (msg.includes("registered") || msg.includes("exists") || msg.includes("duplicate"))) {
+      return { error: "That phone number is already used by another member." };
+    }
+    if (msg.includes("email") && (msg.includes("registered") || msg.includes("exists") || msg.includes("duplicate"))) {
+      return { error: "That email is already used by another member." };
+    }
+    if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("duplicate")) {
+      return { error: "That email or phone is already used by another member." };
+    }
+    return { error: signUpError.message };
+  }
 
   // Update the profile with extra fields the trigger doesn't set.
   if (data.user) {
@@ -274,7 +289,16 @@ export async function updateTeamMember(id: string, formData: FormData) {
         id,
         authPatch
       );
-      if (authErr) return { error: authErr.message };
+      if (authErr) {
+        const msg = authErr.message.toLowerCase();
+        if (msg.includes("phone") && (msg.includes("registered") || msg.includes("exists") || msg.includes("duplicate"))) {
+          return { error: "That phone number is already used by another member." };
+        }
+        if (msg.includes("email") && (msg.includes("registered") || msg.includes("exists") || msg.includes("duplicate"))) {
+          return { error: "That email is already used by another member." };
+        }
+        return { error: authErr.message };
+      }
 
       // Mirror the new identifiers onto the profile row so they stay in sync.
       if (emailChanged) profileUpdate.email = newEmail;
