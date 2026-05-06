@@ -99,12 +99,17 @@ export default function PhoneInput({
   required,
   className,
   size = "normal",
+  variant = "default",
 }: {
   value: string;
   onChange: (fullPhone: string) => void;
   required?: boolean;
   className?: string;
   size?: "normal" | "small";
+  /** "default" = standalone with own border + bg (used in modals/forms).
+   *  "ios" = transparent inner button + input, intended to sit inside
+   *  a parent rounded grey container (used on the auth signup page). */
+  variant?: "default" | "ios";
 }) {
   const parsed = parsePhone(value);
   const [countryCode, setCountryCode] = useState(parsed.countryCode);
@@ -163,18 +168,30 @@ export default function PhoneInput({
     : COUNTRY_CODES;
 
   const isSmall = size === "small";
+  const isIos = variant === "ios";
   const inputCls = isSmall
     ? "text-body-sm px-3 py-2"
     : "text-body px-4 py-3 sm:py-2.5";
+  // iOS variant strips the standalone field styling so the component
+  // can sit flush inside a parent rounded grey container.
+  const buttonClass = isIos
+    ? `flex items-center gap-1 bg-transparent text-body text-text-primary focus:outline-none ${isSmall ? "min-w-[80px]" : "min-w-[72px]"}`
+    : `flex items-center gap-1 rounded-xl border-[1.5px] border-neutral-200 bg-white transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls} ${isSmall ? "min-w-[80px]" : "min-w-[88px]"}`;
+  const inputClass = isIos
+    ? "block flex-1 bg-transparent text-body text-text-primary focus:outline-none sm:text-body-sm"
+    : `block flex-1 rounded-xl border-[1.5px] border-neutral-200 transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls}`;
+  const wrapperClass = isIos
+    ? `flex items-center gap-2 ${className || ""}`
+    : `flex gap-2 ${className || ""}`;
 
   return (
-    <div className={`flex gap-2 ${className || ""}`}>
+    <div className={wrapperClass}>
       {/* Country code selector */}
       <div className="relative shrink-0" ref={dropdownRef}>
         <button
           type="button"
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className={`flex items-center gap-1 rounded-xl border-[1.5px] border-neutral-200 bg-white transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls} ${isSmall ? "min-w-[80px]" : "min-w-[88px]"}`}
+          className={buttonClass}
         >
           <span className="font-medium text-text-primary">{countryCode}</span>
           <svg className="h-3.5 w-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -221,8 +238,8 @@ export default function PhoneInput({
         value={number}
         onChange={(e) => handleNumberChange(e.target.value)}
         required={required}
-        placeholder="Phone number"
-        className={`block flex-1 rounded-xl border-[1.5px] border-neutral-200 transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls}`}
+        placeholder={isIos ? undefined : "Phone number"}
+        className={inputClass}
       />
     </div>
   );
