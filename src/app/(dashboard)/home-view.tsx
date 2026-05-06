@@ -286,7 +286,7 @@ export default function HomeView({
                     className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-hover sm:px-6 ${
                       i > 0 ? "border-t border-gray-100/80" : ""
                     } ${
-                      isStaff && isMine ? "bg-violet-50/40 border-l-2 border-l-violet-400" : ""
+                      isStaff && isMine ? "border-l-[3px] border-l-primary-500" : ""
                     } ${isPaid ? "opacity-35" : ""}`}
                   >
                     {/* Time range */}
