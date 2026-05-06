@@ -387,6 +387,50 @@ export async function cancelAppointment(id: string) {
   return { success: true };
 }
 
+// ---- DELETE ----
+//
+// Hard-deletes an appointment and everything tied to it. FK cascades take
+// care of: appointment_services, payments, activity_log, reviews. The
+// whatsapp_send_log row stays (set null on appointment_id) so the audit
+// trail of attempted sends remains.
+//
+// Use this when you want the appointment GONE from records and reports —
+// not just hidden as cancelled.
+export async function deleteAppointment(id: string) {
+  const supabase = await createClient();
+
+  // Read first so we can name the activity log entry (the appointment
+  // row itself is about to vanish, but the log entry is unparented anyway
+  // because the FK is cascade-delete — we'll log against null).
+  const { data: current } = await supabase
+    .from("appointments")
+    .select("client_id")
+    .eq("id", id)
+    .single();
+  const { data: client } = current?.client_id
+    ? await supabase.from("clients").select("name").eq("id", current.client_id).single()
+    : { data: null };
+
+  const { error } = await supabase.from("appointments").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  // Log against null appointment_id since the row is now gone. We keep
+  // a global "deleted" trace so the activity feed shows what happened.
+  await logActivity(
+    supabase,
+    null,
+    "deleted",
+    `${client?.name || "Unknown"}'s appointment was deleted`,
+  );
+
+  revalidatePath("/calendar");
+  revalidatePath("/payments");
+  revalidatePath("/reports");
+  revalidatePath("/clients");
+  revalidatePath("/");
+  return { success: true };
+}
+
 // ---- DRAG: UPDATE TIME ----
 
 export async function updateAppointmentTime(id: string, newTime: string) {

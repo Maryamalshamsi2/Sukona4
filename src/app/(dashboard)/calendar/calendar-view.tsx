@@ -35,6 +35,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  deleteAppointment,
   updateAppointmentTime,
   updateAppointmentDuration,
   createCalendarBlock,
@@ -783,6 +784,16 @@ export default function CalendarView({
     reload();
   }
 
+  async function handleDelete() {
+    if (!selectedAppointment) return;
+    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
+    const result = await deleteAppointment(selectedAppointment.id);
+    if (result.error) { setError(result.error); return; }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    reload();
+  }
+
   // Get appointments for a specific staff member (those that have at least one service assigned to them)
   // Orphan appointments = no appointment_services rows (old data)
   const orphanAppts = appointments.filter(
@@ -1431,6 +1442,7 @@ export default function CalendarView({
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            onDelete={handleDelete}
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);

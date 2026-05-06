@@ -24,6 +24,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  deleteAppointment,
   markShareSent,
 } from "./calendar/actions";
 
@@ -229,6 +230,16 @@ export default function HomeView({
     reload();
   }
 
+  async function handleDelete() {
+    if (!selectedAppointment) return;
+    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
+    const result = await deleteAppointment(selectedAppointment.id);
+    if (result.error) { setError(result.error); return; }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    reload();
+  }
+
   const statusLabel = (status: string) =>
     STATUS_FLOW.find((s) => s.value === status)?.label || status;
   const statusColor = (status: string) =>
@@ -377,6 +388,7 @@ export default function HomeView({
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            onDelete={handleDelete}
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);

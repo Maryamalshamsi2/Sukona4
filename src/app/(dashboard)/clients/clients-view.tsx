@@ -14,6 +14,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  deleteAppointment,
   getBundlesForBooking,
   getStaffSchedulesForDate,
 } from "../calendar/actions";
@@ -225,6 +226,19 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   async function handleAppointmentCancel() {
     if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
     const result = await cancelAppointment(selectedAppointment.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    refreshClientAppointments();
+  }
+
+  async function handleAppointmentDelete() {
+    if (!selectedAppointment) return;
+    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
+    const result = await deleteAppointment(selectedAppointment.id);
     if (result.error) {
       setError(result.error);
       return;
@@ -546,6 +560,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             onStatusUpdate={handleStatusUpdate}
             onEdit={openAppointmentEdit}
             onCancel={handleAppointmentCancel}
+            onDelete={handleAppointmentDelete}
             canEdit={currentUser?.role !== "staff"}
           />
         )}
