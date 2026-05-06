@@ -7,6 +7,7 @@ import {
   getReportExpenses,
   getReportReviews,
 } from "./actions";
+import { deleteAppointment } from "../calendar/actions";
 
 // ---- Types ----
 
@@ -221,6 +222,20 @@ export default function ReportsView({
     loadData();
   }, [loadData]);
 
+  // ---- Delete appointment (used by the trash button in the appointments tab) ----
+  async function handleDeleteAppointment(id: string) {
+    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
+    const result = await deleteAppointment(id);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    // Optimistic in-memory update so the row disappears immediately,
+    // then reload to keep payments/expenses/reviews in sync.
+    setAppointments((prev) => prev.filter((a) => a.id !== id));
+    loadData();
+  }
+
   // ---- Computed stats ----
 
   const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
@@ -404,6 +419,7 @@ export default function ReportsView({
                           <th className="px-5 py-3">Services</th>
                           <th className="px-5 py-3 text-right">Amount</th>
                           <th className="px-5 py-3">Status</th>
+                          <th className="px-3 py-3 w-10" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -413,7 +429,7 @@ export default function ReportsView({
                             .map((as2) => as2.services?.name || "Unknown")
                             .join(", ");
                           return (
-                            <tr key={appt.id} className="hover:bg-surface-hover">
+                            <tr key={appt.id} className="group hover:bg-surface-hover">
                               <td className="whitespace-nowrap px-5 py-3 text-text-primary">{formatDate(appt.date)}</td>
                               <td className="whitespace-nowrap px-5 py-3 text-text-secondary">{formatTime12(appt.time)}</td>
                               <td className="px-5 py-3 font-normal text-text-primary">{appt.clients?.name || "Unknown"}</td>
@@ -423,6 +439,18 @@ export default function ReportsView({
                                 <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${STATUS_COLORS[appt.status] || "bg-gray-100 text-text-primary"}`}>
                                   {STATUS_LABELS[appt.status] || appt.status}
                                 </span>
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                <button
+                                  onClick={() => handleDeleteAppointment(appt.id)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary opacity-0 transition-all group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
+                                  title="Delete appointment (removes from records)"
+                                  aria-label="Delete appointment"
+                                >
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                  </svg>
+                                </button>
                               </td>
                             </tr>
                           );
@@ -439,18 +467,30 @@ export default function ReportsView({
                         .map((as2) => as2.services?.name || "Unknown")
                         .join(", ");
                       return (
-                        <div key={appt.id} className="px-4 py-3">
-                          <div className="flex items-center justify-between">
-                            <p className="text-body-sm font-normal text-text-primary">{appt.clients?.name || "Unknown"}</p>
-                            <span className={`rounded-full px-2 py-0.5 text-caption font-medium ${STATUS_COLORS[appt.status] || "bg-gray-100 text-text-primary"}`}>
-                              {STATUS_LABELS[appt.status] || appt.status}
-                            </span>
+                        <div key={appt.id} className="flex items-start gap-2 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-body-sm font-normal text-text-primary">{appt.clients?.name || "Unknown"}</p>
+                              <span className={`rounded-full px-2 py-0.5 text-caption font-medium ${STATUS_COLORS[appt.status] || "bg-gray-100 text-text-primary"}`}>
+                                {STATUS_LABELS[appt.status] || appt.status}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-caption text-text-secondary truncate">{serviceNames}</p>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-caption text-text-tertiary">{formatDate(appt.date)} at {formatTime12(appt.time)}</span>
+                              <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(total)}</span>
+                            </div>
                           </div>
-                          <p className="mt-0.5 text-caption text-text-secondary truncate">{serviceNames}</p>
-                          <div className="mt-1 flex items-center justify-between">
-                            <span className="text-caption text-text-tertiary">{formatDate(appt.date)} at {formatTime12(appt.time)}</span>
-                            <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(total)}</span>
-                          </div>
+                          <button
+                            onClick={() => handleDeleteAppointment(appt.id)}
+                            className="-mr-1 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-red-50 hover:text-red-600"
+                            title="Delete appointment"
+                            aria-label="Delete appointment"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
                         </div>
                       );
                     })}
