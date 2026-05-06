@@ -178,7 +178,7 @@ export default function SignupPage() {
                   setGoogleLoading(false);
                 }
               }}
-              className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#F2F2F7] px-4 py-3 text-body-sm font-semibold text-text-primary transition-colors hover:bg-[#EBEBF0] active:scale-[0.98] disabled:opacity-50 sm:py-2.5"
+              className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-body-sm font-semibold text-text-primary ring-1 ring-black/[0.08] transition-all hover:bg-neutral-50 active:scale-[0.98] disabled:opacity-50 sm:py-2.5"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
