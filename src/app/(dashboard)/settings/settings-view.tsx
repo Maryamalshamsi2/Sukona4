@@ -101,7 +101,7 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
       </div>
 
       {tab === "profile" && profile && (
-        <ProfileSection profile={profile} onUpdate={loadData} />
+        <ProfileSection profile={profile} onUpdate={loadData} isStaff={currentUser?.role === "staff"} />
       )}
 
       {tab === "salon" && isOwner && salon && (
@@ -133,7 +133,7 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
 
 // ---- Profile Section ----
 
-function ProfileSection({ profile, onUpdate }: { profile: Profile; onUpdate: () => void }) {
+function ProfileSection({ profile, onUpdate, isStaff }: { profile: Profile; onUpdate: () => void; isStaff: boolean }) {
   const [fullName, setFullName] = useState(profile.full_name || "");
   const [phone, setPhone] = useState(profile.phone || "");
   const [jobTitle, setJobTitle] = useState(profile.job_title || "");
@@ -199,7 +199,8 @@ function ProfileSection({ profile, onUpdate }: { profile: Profile; onUpdate: () 
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+971 XX XXX XXXX"
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              disabled={isStaff}
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-neutral-50 disabled:text-text-secondary disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -209,10 +210,16 @@ function ProfileSection({ profile, onUpdate }: { profile: Profile; onUpdate: () 
               value={jobTitle}
               onChange={(e) => setJobTitle(e.target.value)}
               placeholder="e.g. Nail Technician"
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              disabled={isStaff}
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-neutral-50 disabled:text-text-secondary disabled:cursor-not-allowed"
             />
           </div>
         </div>
+        {isStaff && (
+          <p className="text-caption text-text-tertiary">
+            Phone and job title are managed by your owner. Ask them to update these for you.
+          </p>
+        )}
 
         <div>
           <label className="block text-body-sm font-semibold text-text-primary mb-1">Role</label>

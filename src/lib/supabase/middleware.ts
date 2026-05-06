@@ -69,11 +69,16 @@ export async function updateSession(request: NextRequest) {
       pathname.startsWith("/api/");
 
     const ownerOnlyPrefixes = ["/team", "/reports"];
+    // Routes hidden from staff (admins + owners can still see them).
+    const nonStaffPrefixes = ["/clients"];
     const needsOwner = ownerOnlyPrefixes.some(
       (p) => pathname === p || pathname.startsWith(p + "/")
     );
+    const blockStaff = nonStaffPrefixes.some(
+      (p) => pathname === p || pathname.startsWith(p + "/")
+    );
 
-    if (!skipOnboardingCheck || needsOwner) {
+    if (!skipOnboardingCheck || needsOwner || blockStaff) {
       // Single combined fetch — avoids two round-trips for the common case
       // of an authenticated dashboard request.
       const { data: profile } = await supabase
@@ -98,6 +103,13 @@ export async function updateSession(request: NextRequest) {
 
       // Owner-only URL guard.
       if (needsOwner && profile?.role !== "owner") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/";
+        return NextResponse.redirect(url);
+      }
+
+      // Non-staff URL guard (e.g. /clients — staff don't see customer data).
+      if (blockStaff && profile?.role === "staff") {
         const url = request.nextUrl.clone();
         url.pathname = "/";
         return NextResponse.redirect(url);

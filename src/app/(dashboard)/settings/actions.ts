@@ -23,13 +23,27 @@ export async function updateProfile(fullName: string, phone: string, jobTitle: s
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
+  // Look up the caller's role so we can decide which fields they may change.
+  const { data: caller } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  // Staff can only edit their full name. Phone + job title are managed by
+  // their owner via the team page. Server-side enforcement matches the UI.
+  const update: Record<string, string | null> =
+    caller?.role === "staff"
+      ? { full_name: fullName }
+      : {
+          full_name: fullName,
+          phone: phone || null,
+          job_title: jobTitle || null,
+        };
+
   const { error } = await supabase
     .from("profiles")
-    .update({
-      full_name: fullName,
-      phone: phone || null,
-      job_title: jobTitle || null,
-    })
+    .update(update)
     .eq("id", user.id);
 
   if (error) return { error: error.message };

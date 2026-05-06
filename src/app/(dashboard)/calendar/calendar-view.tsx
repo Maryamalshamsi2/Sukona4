@@ -1081,21 +1081,12 @@ export default function CalendarView({
                 <div
                   key={member.id}
                   className={`min-w-[100px] sm:min-w-[180px] flex-1 border-r border-border last:border-r-0 ${
-                    isOwnColumn ? "bg-[#FFF8F0]" : ""
+                    isOwnColumn ? "border-l-[3px] border-l-primary-500" : ""
                   }`}
                 >
                   {/* Staff header */}
-                  <div
-                    className={`sticky top-0 z-10 flex items-center justify-center gap-2 border-b border-border px-2 py-2 sm:h-12 ${
-                      isOwnColumn ? "bg-[#FFF8F0]" : "bg-white"
-                    }`}
-                  >
+                  <div className="sticky top-0 z-10 flex items-center justify-center gap-2 border-b border-border bg-white px-2 py-2 sm:h-12">
                     <span className="text-body-sm font-semibold text-text-primary truncate">{member.full_name}</span>
-                    {isOwnColumn && (
-                      <span className="shrink-0 rounded-full bg-[#FFD9A0] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#CC7700]">
-                        You
-                      </span>
-                    )}
                   </div>
 
                   {/* Grid */}
