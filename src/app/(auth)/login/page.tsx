@@ -73,7 +73,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-gradient-to-br from-violet-50 via-white to-violet-100/60">
+    <div className="flex min-h-[100dvh] flex-col bg-[#FFF8F1]">
       {/* Header logo */}
       <header className="px-6 pt-12 pb-4 text-center sm:pt-16">
         <img src="/logo-dark.png" alt="Sukona" className="mx-auto h-[46px] w-auto sm:h-[50px]" />
