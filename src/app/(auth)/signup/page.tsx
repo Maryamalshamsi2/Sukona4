@@ -56,7 +56,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-[#FFF8F1]">
+    <div className="flex min-h-[100dvh] flex-col bg-[#FFFBF6]">
       {/* Header logo */}
       <header className="px-6 pt-12 pb-4 text-center sm:pt-16">
         <img src="/logo-dark.png" alt="Sukona" className="mx-auto h-[46px] w-auto sm:h-[50px]" />
@@ -80,7 +80,7 @@ export default function SignupPage() {
                 type="text"
                 required
                 autoComplete="name"
-                className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
+                className="block w-full rounded-xl bg-white/80 px-4 py-3 text-body shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.05)] backdrop-blur-sm transition-all focus:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_2px_rgba(240,140,45,0.5)] focus:outline-none sm:py-2.5 sm:text-body-sm"
               />
             </div>
 
@@ -96,7 +96,7 @@ export default function SignupPage() {
                 autoComplete="email"
                 autoCapitalize="off"
                 spellCheck={false}
-                className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
+                className="block w-full rounded-xl bg-white/80 px-4 py-3 text-body shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.05)] backdrop-blur-sm transition-all focus:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_2px_rgba(240,140,45,0.5)] focus:outline-none sm:py-2.5 sm:text-body-sm"
               />
             </div>
 
@@ -122,7 +122,7 @@ export default function SignupPage() {
                   required
                   minLength={6}
                   autoComplete="new-password"
-                  className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 pr-10 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
+                  className="block w-full rounded-xl bg-white/80 px-4 py-3 pr-10 text-body shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.05)] backdrop-blur-sm transition-all focus:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_2px_rgba(240,140,45,0.5)] focus:outline-none sm:py-2.5 sm:text-body-sm"
                 />
                 <button
                   type="button"
@@ -178,7 +178,7 @@ export default function SignupPage() {
                   setGoogleLoading(false);
                 }
               }}
-              className="flex w-full items-center justify-center gap-3 rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 text-body-sm font-semibold text-text-primary transition-all hover:bg-white hover:shadow-sm active:scale-[0.98] disabled:opacity-50 sm:py-2.5"
+              className="flex w-full items-center justify-center gap-3 rounded-xl bg-white/80 px-4 py-3 text-body-sm font-semibold text-text-primary shadow-[0_1px_2px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.05)] backdrop-blur-sm transition-all hover:bg-white hover:shadow-[0_2px_8px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.05)] active:scale-[0.98] disabled:opacity-50 sm:py-2.5"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

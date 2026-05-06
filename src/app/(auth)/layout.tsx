@@ -12,16 +12,16 @@ import type { Viewport } from "next";
  * NOT lavender. Theme color is picked to blend with both edges.
  */
 export const viewport: Viewport = {
-  themeColor: "#FFF8F1",
+  themeColor: "#FFFBF6",
 };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       {/* Override the root layout's gray body bg for auth routes only.
-          Without this, iOS overscroll/bounce shows #F5F5F7 instead of
-          blending with the warm gradient. */}
-      <style>{`body { background-color: #FFF8F1; }`}</style>
+          Keeps iOS overscroll bounce + system chrome blending with the
+          page's solid cream. */}
+      <style>{`body { background-color: #FFFBF6; }`}</style>
       {children}
     </>
   );
