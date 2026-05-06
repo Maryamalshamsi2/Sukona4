@@ -3,23 +3,25 @@ import type { Viewport } from "next";
 /**
  * Tints the iOS Safari URL bar and bottom toolbar so they blend with
  * the gradient on the auth pages instead of showing the default
- * light gray. Applies only to pages under the (auth) route group.
+ * light gray.
  *
- * Picked #F4F2FF — a soft lavender that sits between violet-50 (the
- * gradient's top) and violet-100/60 (the gradient's bottom), so both
- * the top and bottom system bars blend cleanly.
+ * The auth pages use `bg-gradient-to-br from-violet-50 via-white
+ * to-violet-100/60` — note that "violet" is remapped in globals.css
+ * to a warm peach palette (--color-violet-50: #FFF8F1, --color-violet-100:
+ * #FEEAD2). So the gradient is actually a soft cream → white → soft peach,
+ * NOT lavender. Theme color is picked to blend with both edges.
  */
 export const viewport: Viewport = {
-  themeColor: "#F4F2FF",
+  themeColor: "#FFF8F1",
 };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       {/* Override the root layout's gray body bg for auth routes only.
-          Without this, iOS's overscroll/bounce reveals the default
-          #F5F5F7 instead of blending with the gradient. */}
-      <style>{`body { background-color: #F4F2FF; }`}</style>
+          Without this, iOS overscroll/bounce shows #F5F5F7 instead of
+          blending with the warm gradient. */}
+      <style>{`body { background-color: #FFF8F1; }`}</style>
       {children}
     </>
   );
