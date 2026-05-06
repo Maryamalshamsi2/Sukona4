@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-[100dvh] items-center justify-center px-4 bg-gradient-to-br from-violet-50 via-white to-violet-100/60">
       <div className="w-full max-w-sm rounded-3xl border border-white/60 bg-white/70 px-6 py-8 shadow-xl backdrop-blur-xl sm:px-8 sm:py-10">
         <div className="mb-8 text-center">
-          <img src="/logo-dark.png" alt="Sukona" className="mx-auto h-12" />
+          <img src="/logo-dark.png" alt="Sukona" className="mx-auto h-[46px] w-auto sm:h-[50px]" />
           <h1 className="mt-4 text-title-page font-bold tracking-tight text-text-primary">
             {success ? "Password updated!" : "Set new password"}
           </h1>
