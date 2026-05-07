@@ -72,6 +72,14 @@ export interface AppointmentData {
   receipt_sent_at?: string | null;
   clients: { id: string; name: string; phone: string | null; address: string | null; map_link: string | null } | null;
   appointment_services: AppointmentServiceData[];
+  // Payment rows attached to this appointment. We mainly use the latest
+  // payment's receipt_url to surface the uploaded receipt image (paperclip
+  // preview) on the detail drawer + reports table.
+  payments?: Array<{
+    id?: string;
+    receipt_url: string | null;
+    created_at?: string;
+  }>;
   // Joined: 0 or 1 review rows (unique on appointment_id). Supabase returns
   // it as an array — we treat reviews[0] as "the review for this appointment".
   reviews?: Array<{
@@ -231,11 +239,42 @@ export function DetailView({
     : null;
   const isActive = ["scheduled", "on_the_way", "arrived"].includes(appointment.status);
 
+  // Latest uploaded receipt image (if any payment row carries one). When
+  // present, we surface it as a small paperclip button next to the status
+  // pill that opens a lightbox preview.
+  const uploadedReceiptUrl =
+    [...(appointment.payments ?? [])]
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+      .find((p) => p.receipt_url)?.receipt_url ?? null;
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+
   return (
     <div className="space-y-6">
+      {/* ---- Status (top) ---- */}
+      <div>
+        <h3 className="text-body font-bold text-text-primary mb-2">Status</h3>
+        <div className="flex items-center gap-2">
+          <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_FLOW.find((s) => s.value === appointment.status)?.color || "bg-gray-100 text-text-primary"}`}>
+            {STATUS_FLOW.find((s) => s.value === appointment.status)?.label || appointment.status}
+          </span>
+          {uploadedReceiptUrl && (
+            <button
+              type="button"
+              onClick={() => setReceiptPreviewOpen(true)}
+              aria-label="View uploaded receipt"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* ---- Date & Time ---- */}
       <div>
-        <h3 className="text-body-sm font-bold text-text-primary mb-2">Date & Time</h3>
+        <h3 className="text-body font-bold text-text-primary mb-2">Date & Time</h3>
         <div className="space-y-1 text-body-sm text-text-secondary">
           <p>{appointment.date}</p>
           <p>{formatTime12(appointment.time)} – {formatTime12(endTime)}</p>
@@ -245,7 +284,7 @@ export function DetailView({
 
       {/* ---- Client ---- */}
       <div>
-        <h3 className="text-body-sm font-bold text-text-primary mb-2">Client</h3>
+        <h3 className="text-body font-bold text-text-primary mb-2">Client</h3>
         <div className="space-y-1 text-body-sm">
           <p className="font-semibold text-text-primary">{appointment.clients?.name || "Unknown"}</p>
           {appointment.clients?.phone && <p className="text-text-secondary">{appointment.clients.phone}</p>}
@@ -266,7 +305,7 @@ export function DetailView({
       {/* ---- Services ---- */}
       {timings.length > 0 && (
         <div>
-          <h3 className="text-body-sm font-bold text-text-primary mb-2.5">Services</h3>
+          <h3 className="text-body font-bold text-text-primary mb-2.5">Services</h3>
           <div className="space-y-2.5">
             {timings.map((t, i) => {
               const staffMember = staff.find((s) => s.id === t.svc.staff_id);
@@ -298,18 +337,10 @@ export function DetailView({
         </div>
       )}
 
-      {/* ---- Status ---- */}
-      <div>
-        <h3 className="text-body-sm font-bold text-text-primary mb-2">Status</h3>
-        <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_FLOW.find((s) => s.value === appointment.status)?.color || "bg-gray-100 text-text-primary"}`}>
-          {STATUS_FLOW.find((s) => s.value === appointment.status)?.label || appointment.status}
-        </span>
-      </div>
-
       {/* ---- Notes ---- */}
       {appointment.notes && (
         <div>
-          <h3 className="text-body-sm font-bold text-text-primary mb-2">Notes</h3>
+          <h3 className="text-body font-bold text-text-primary mb-2">Notes</h3>
           <p className="text-body-sm text-text-secondary">{appointment.notes}</p>
         </div>
       )}
@@ -357,6 +388,29 @@ export function DetailView({
           </button>
         )}
       </div>
+
+      {/* Receipt-image lightbox — opened by tapping the paperclip near
+          the status pill above. Backdrop or close button dismisses. */}
+      {receiptPreviewOpen && uploadedReceiptUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setReceiptPreviewOpen(false)}
+        >
+          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setReceiptPreviewOpen(false)}
+              aria-label="Close"
+              className="absolute -top-3 -right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-text-primary shadow-lg hover:bg-neutral-100"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={uploadedReceiptUrl} alt="Receipt" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -443,7 +497,7 @@ function ShareSection({
       {/* Receipt summary */}
       {receiptUrl && (
         <div>
-          <h3 className="text-body-sm font-bold text-text-primary mb-2">Receipt</h3>
+          <h3 className="text-body font-bold text-text-primary mb-2">Receipt</h3>
           <div className="flex items-center justify-between rounded-xl bg-surface-hover px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-body-sm font-semibold text-text-primary truncate">
@@ -466,7 +520,7 @@ function ShareSection({
       {/* Submitted review readout — shown after the customer rates */}
       {review && (
         <div>
-          <h3 className="text-body-sm font-bold text-text-primary mb-2">Review</h3>
+          <h3 className="text-body font-bold text-text-primary mb-2">Review</h3>
           <div className="rounded-xl bg-surface-hover px-3 py-2.5">
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
@@ -514,8 +568,9 @@ function ShareSection({
           </p>
         )}
 
-        {/* Copy fallbacks — only show what's available */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {/* Copy fallbacks — full-width on every breakpoint so they match
+            the Send button's width above. */}
+        <div className="grid grid-cols-1 gap-2">
           {receiptUrl && (
             <button
               onClick={() => handleCopy(receiptUrl)}

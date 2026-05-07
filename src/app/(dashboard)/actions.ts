@@ -138,7 +138,8 @@ export async function getTodayAppointments(date: string) {
         is_parallel,
         sort_order,
         services:service_id ( id, name, price, duration_minutes )
-      )
+      ),
+      payments ( id, receipt_url, created_at )
     `)
     .eq("date", date)
     .neq("status", "cancelled")

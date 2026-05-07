@@ -34,7 +34,8 @@ export async function getReportAppointments(from: string, to: string) {
         is_parallel,
         sort_order,
         services:service_id ( id, name, price, duration_minutes )
-      )
+      ),
+      payments ( id, receipt_url, created_at )
     `)
     .gte("date", from)
     .lte("date", to)
