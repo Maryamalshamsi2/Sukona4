@@ -711,6 +711,7 @@ export default function CatalogView({
             ))
           ) : (
             <DndContext
+              id="catalog-categories"
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleCategoryDragEnd}
@@ -801,6 +802,7 @@ export default function CatalogView({
         <div className="mt-4 flex flex-col gap-6">
           {tabServices.length > 0 && (
             <DndContext
+              id="catalog-services"
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={(e) => handleServicesDragEnd(e, tabServices.map((s) => s.id))}
@@ -832,6 +834,7 @@ export default function CatalogView({
 
           {tabBundles.length > 0 && (
             <DndContext
+              id="catalog-bundles"
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={(e) => handleBundlesDragEnd(e, tabBundles.map((b) => b.id))}
