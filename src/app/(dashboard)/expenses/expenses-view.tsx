@@ -132,6 +132,9 @@ export default function ExpensesView({
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selected, setSelected] = useState<Expense | null>(null);
+  // URL of the receipt image being previewed in the lightbox. Tapping the
+  // paperclip icon on a row sets this; backdrop or close-button clears it.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [filterType, setFilterType] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
@@ -361,10 +364,22 @@ export default function ExpensesView({
       ) : (
         <div className="rounded-2xl ring-1 ring-border bg-white divide-y divide-border">
           {filtered.map((expense) => (
-            <button
+            // Row is a div+role=button (instead of <button>) so the receipt
+            // icon inside can be its own real <button> — nested <button>
+            // is invalid HTML.
+            <div
               key={expense.id}
+              role="button"
+              tabIndex={0}
               onClick={() => { setSelected(expense); setEditModalOpen(true); }}
-              className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-surface-hover sm:gap-4 sm:px-6"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelected(expense);
+                  setEditModalOpen(true);
+                }
+              }}
+              className="flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-surface-hover sm:gap-4 sm:px-6"
             >
               {/* Description */}
               <div className="min-w-0 flex-1">
@@ -382,18 +397,29 @@ export default function ExpensesView({
                 </p>
               </div>
 
-              {/* Receipt indicator */}
+              {/* Receipt — tappable preview button. stopPropagation keeps
+                  the row's edit-modal click from firing. */}
               {expense.receipt_url && (
-                <svg className="h-5 w-5 shrink-0 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                </svg>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewUrl(expense.receipt_url);
+                  }}
+                  aria-label="View receipt"
+                  className="shrink-0 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-text-primary"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                  </svg>
+                </button>
               )}
 
               {/* Amount */}
               <span className="shrink-0 text-body-sm font-semibold text-text-primary">
                 {formatCurrency(Number(expense.amount))}
               </span>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -506,6 +532,33 @@ export default function ExpensesView({
           )}
         </div>
       </Modal>
+
+      {/* Receipt preview lightbox — opened by tapping the paperclip on a row.
+          Backdrop click + close button both dismiss. */}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewUrl(null)}
+              className="absolute -top-3 -right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-text-primary shadow-lg hover:bg-neutral-100"
+              aria-label="Close"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt="Receipt"
+              className="max-h-[90vh] max-w-[90vw] rounded-lg"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
