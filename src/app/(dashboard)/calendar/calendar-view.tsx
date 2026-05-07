@@ -1080,12 +1080,15 @@ export default function CalendarView({
               return (
                 <div
                   key={member.id}
-                  className={`min-w-[100px] sm:min-w-[180px] flex-1 border-r border-border last:border-r-0 ${
-                    isOwnColumn ? "border-l-[3px] border-l-primary-500" : ""
-                  }`}
+                  className="min-w-[100px] sm:min-w-[180px] flex-1 border-r border-border last:border-r-0"
                 >
-                  {/* Staff header */}
-                  <div className="sticky top-0 z-10 flex items-center justify-center gap-2 border-b border-border bg-white px-2 py-2 sm:h-12">
+                  {/* Staff header — for the staff's own column, the entire header box
+                      is outlined in 1px orange instead of just a grey bottom divider. */}
+                  <div
+                    className={`sticky top-0 z-10 flex items-center justify-center gap-2 bg-white px-2 py-2 sm:h-12 ${
+                      isOwnColumn ? "border border-primary-500" : "border-b border-border"
+                    }`}
+                  >
                     <span className="text-body-sm font-semibold text-text-primary truncate">{member.full_name}</span>
                   </div>
 
