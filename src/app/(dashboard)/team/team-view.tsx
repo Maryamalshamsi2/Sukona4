@@ -43,6 +43,10 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [memberPhone, setMemberPhone] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // Track role + appears_on_calendar in state so we can conditionally
+  // show the calendar toggle only when the role is staff.
+  const [memberRole, setMemberRole] = useState<string>("staff");
+  const [appearsOnCalendar, setAppearsOnCalendar] = useState(true);
   // True when the owner is editing their own row — auth fields hide,
   // role stays editable but a self-demotion warning lives elsewhere.
   const editingSelf = !!editingMember && !!currentUser && editingMember.id === currentUser.id;
@@ -139,6 +143,8 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     setIsAddingMember(true);
     setMemberPhone("");
     setShowPassword(false);
+    setMemberRole("staff");
+    setAppearsOnCalendar(true);
     setMemberModalOpen(true);
   }
 
@@ -147,6 +153,8 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     setIsAddingMember(false);
     setMemberPhone(member.phone || "");
     setShowPassword(false);
+    setMemberRole(member.role);
+    setAppearsOnCalendar(member.appears_on_calendar ?? true);
     setScheduleData(DEFAULT_SCHEDULE);
     setDaysOff([]);
     setNewDayOffDate("");
@@ -586,7 +594,8 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             <select
               id="mem-role"
               name="role"
-              defaultValue={editingMember?.role ?? "staff"}
+              value={memberRole}
+              onChange={(e) => setMemberRole(e.target.value)}
               className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             >
               <option value="owner">Owner</option>
@@ -594,6 +603,36 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               <option value="staff">Staff</option>
             </select>
           </div>
+
+          {/* Appears on calendar — only meaningful for staff role.
+              Toggle off for drivers, managers, etc. who don't take
+              appointments. They can still log in and view the schedule. */}
+          {memberRole === "staff" && (
+            <div className="flex items-start justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-body-sm font-semibold text-text-primary">Appears on calendar</p>
+                <p className="mt-0.5 text-caption text-text-tertiary">
+                  Turn off for staff who don&apos;t take appointments (drivers, managers, etc.). They can still log in and view the schedule.
+                </p>
+              </div>
+              <input type="hidden" name="appears_on_calendar" value={appearsOnCalendar ? "true" : "false"} />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={appearsOnCalendar}
+                onClick={() => setAppearsOnCalendar((v) => !v)}
+                className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  appearsOnCalendar ? "bg-primary-500" : "bg-neutral-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    appearsOnCalendar ? "translate-x-[22px]" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {/* Group + Salary (both optional) */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

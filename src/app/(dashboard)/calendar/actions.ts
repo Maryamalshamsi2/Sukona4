@@ -100,6 +100,10 @@ export async function getStaffMembers() {
     .from("profiles")
     .select("id, full_name, job_title")
     .eq("role", "staff")
+    // Hide staff that the owner has flagged as off-calendar (drivers,
+    // managers, etc.). They can still log in and read appointments via
+    // RLS — they just don't appear as a column or as an assignable staff.
+    .eq("appears_on_calendar", true)
     .order("created_at", { ascending: true });
 
   if (error) throw error;

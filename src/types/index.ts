@@ -61,6 +61,9 @@ export interface Profile {
   group_id: string | null;
   salary: number;
   job_title: string | null;
+  /** Owners can hide a staff member from the calendar (drivers, managers,
+   *  etc. who view but don't take appointments). Default true. */
+  appears_on_calendar: boolean;
   created_at: string;
   // joined from team_groups
   team_groups?: TeamGroup | null;

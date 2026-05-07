@@ -186,6 +186,10 @@ export async function addTeamMember(formData: FormData) {
     // Small delay to let the trigger create the profile
     await new Promise((r) => setTimeout(r, 500));
 
+    // Whether the new member appears on the calendar — only meaningful
+    // for staff role. The form sends "true"/"false" as a string.
+    const appearsOnCalendar = (formData.get("appears_on_calendar") as string) !== "false";
+
     await adminSupabase
       .from("profiles")
       .update({
@@ -194,6 +198,7 @@ export async function addTeamMember(formData: FormData) {
         job_title: (formData.get("job_title") as string) || null,
         group_id: groupId || null,
         salary: parseFloat(formData.get("salary") as string) || 0,
+        appears_on_calendar: requestedRole === "staff" ? appearsOnCalendar : true,
       })
       .eq("id", data.user.id);
   }
@@ -223,12 +228,17 @@ export async function updateTeamMember(id: string, formData: FormData) {
   const newPassword = ((formData.get("password") as string) || "").trim();
 
   // Profile-only fields. These are always editable.
+  const newRole = formData.get("role") as string;
+  const appearsOnCalendar = (formData.get("appears_on_calendar") as string) !== "false";
   const profileUpdate: Record<string, unknown> = {
     full_name: formData.get("full_name") as string,
     job_title: (formData.get("job_title") as string) || null,
-    role: formData.get("role") as string,
+    role: newRole,
     group_id: groupId || null,
     salary: parseFloat(formData.get("salary") as string) || 0,
+    // Calendar visibility — only meaningful for staff role. For owner/admin
+    // we force true so toggling them back to staff later doesn't surprise.
+    appears_on_calendar: newRole === "staff" ? appearsOnCalendar : true,
   };
 
   // Auth-credential changes (only when editing someone else).

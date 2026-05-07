@@ -834,10 +834,18 @@ export default function CalendarView({
   }
 
   // Get appointments for a specific staff member (those that have at least one service assigned to them)
-  // Orphan appointments = no appointment_services rows (old data)
-  const orphanAppts = appointments.filter(
-    (a) => a.appointment_services.length === 0
-  );
+  // "Orphan" appointments are appointments with no visible owner — either:
+  //   - no appointment_services rows at all (legacy / old data), OR
+  //   - every assigned staff_id is hidden from the calendar (owner toggled
+  //     "Appears on calendar" off — e.g. driver, manager). Without this we'd
+  //     silently lose those appointments from the grid.
+  const visibleStaffIds = new Set(staff.map((s) => s.id));
+  const orphanAppts = appointments.filter((a) => {
+    if (a.appointment_services.length === 0) return true;
+    return !a.appointment_services.some(
+      (as2) => as2.staff_id && visibleStaffIds.has(as2.staff_id)
+    );
+  });
 
   function getStaffAppointments(staffId: string, staffIdx: number) {
     const assigned = appointments.filter((a) =>
