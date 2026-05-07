@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/sidebar";
+import BottomTabBar from "@/components/bottom-tab-bar";
 import NotificationBell from "@/components/notification-bell";
 import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/app/(dashboard)/actions";
@@ -69,15 +70,11 @@ export default function DashboardLayout({
       <div className="flex h-[100dvh] flex-col overflow-hidden">
         {/* Top bar */}
         <header className="relative flex h-16 shrink-0 items-center bg-[#F5F5F7]/80 px-3 sm:h-20 sm:px-4">
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="relative z-10 rounded-lg p-2 text-text-tertiary hover:text-text-secondary lg:hidden"
-          >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
-          </button>
+          {/* The hamburger menu used to live here; replaced by the
+              bottom tab bar on mobile. We keep a tiny spacer so the
+              centered logo doesn't drift when the search/avatar group
+              on the right has a different width than nothing on the left. */}
+          <div className="w-10 shrink-0 lg:hidden" aria-hidden />
 
           {/* Logo — centered on mobile, left-aligned on desktop — click returns to dashboard */}
           <div className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 lg:flex lg:shrink-0">
@@ -148,11 +145,17 @@ export default function DashboardLayout({
         <div className="flex flex-1 overflow-hidden">
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-          {/* Page content */}
-          <main className="relative flex-1 overflow-y-auto bg-[#F5F5F7] px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 lg:px-8 lg:pt-4 lg:pb-8">
+          {/* Page content. Extra bottom padding on mobile leaves room for
+              the fixed bottom tab bar (~58px) plus the iPhone home-indicator
+              safe area. Desktop padding stays the same since the tab bar
+              hides on lg+. */}
+          <main className="relative flex-1 overflow-y-auto bg-[#F5F5F7] px-4 pt-3 pb-[calc(76px+env(safe-area-inset-bottom))] sm:px-6 sm:pt-4 lg:px-8 lg:pt-4 lg:pb-8">
             {children}
           </main>
         </div>
+
+        {/* Mobile bottom navigation. Hidden on lg+. */}
+        <BottomTabBar />
       </div>
     </UserContext.Provider>
     </SearchProvider>
