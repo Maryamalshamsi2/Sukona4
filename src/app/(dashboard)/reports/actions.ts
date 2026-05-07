@@ -56,6 +56,7 @@ export async function getReportPayments(from: string, to: string) {
       appointment_id,
       amount,
       method,
+      receipt_url,
       created_at,
       appointments:appointment_id (
         id,

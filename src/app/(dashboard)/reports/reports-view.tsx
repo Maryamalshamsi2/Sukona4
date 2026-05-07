@@ -45,6 +45,8 @@ export interface ReportPayment {
   appointment_id: string;
   amount: number;
   method: string;
+  /** Uploaded receipt image URL (paperclip preview on the row). */
+  receipt_url: string | null;
   created_at: string;
   appointments: {
     id: string;
@@ -278,14 +280,6 @@ export default function ReportsView({
   function getApptRevenue(appt: ReportAppointment) {
     return appt.appointment_services.reduce((s, as2) => s + (as2.services?.price || 0), 0);
   }
-  // Latest payment's uploaded receipt image (if any) per appointment.
-  // Used to surface a paperclip cell in the appointments tab.
-  function getApptReceiptUrl(appt: ReportAppointment): string | null {
-    if (!appt.payments || appt.payments.length === 0) return null;
-    return [...appt.payments]
-      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
-      .find((p) => p.receipt_url)?.receipt_url ?? null;
-  }
   const expectedRevenue = appointments
     .filter((a) => a.status !== "cancelled")
     .reduce((s, a) => s + getApptRevenue(a), 0);
@@ -443,13 +437,11 @@ export default function ReportsView({
                           <th className="px-5 py-3 text-right">Amount</th>
                           <th className="px-5 py-3">Status</th>
                           <th className="px-3 py-3 w-10" />
-                          <th className="px-3 py-3 w-10" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {appointments.map((appt) => {
                           const total = getApptRevenue(appt);
-                          const receiptUrl = getApptReceiptUrl(appt);
                           const serviceNames = appt.appointment_services
                             .map((as2) => as2.services?.name || "Unknown")
                             .join(", ");
@@ -464,19 +456,6 @@ export default function ReportsView({
                                 <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${STATUS_COLORS[appt.status] || "bg-gray-100 text-text-primary"}`}>
                                   {STATUS_LABELS[appt.status] || appt.status}
                                 </span>
-                              </td>
-                              <td className="px-3 py-3 text-right">
-                                {receiptUrl && (
-                                  <button
-                                    onClick={() => setPreviewUrl(receiptUrl)}
-                                    aria-label="View receipt"
-                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-active hover:text-text-primary"
-                                  >
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                                    </svg>
-                                  </button>
-                                )}
                               </td>
                               <td className="px-3 py-3 text-right">
                                 <button
@@ -501,7 +480,6 @@ export default function ReportsView({
                   <div className="sm:hidden divide-y divide-border">
                     {appointments.map((appt) => {
                       const total = getApptRevenue(appt);
-                      const receiptUrl = getApptReceiptUrl(appt);
                       const serviceNames = appt.appointment_services
                         .map((as2) => as2.services?.name || "Unknown")
                         .join(", ");
@@ -520,17 +498,6 @@ export default function ReportsView({
                               <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(total)}</span>
                             </div>
                           </div>
-                          {receiptUrl && (
-                            <button
-                              onClick={() => setPreviewUrl(receiptUrl)}
-                              aria-label="View receipt"
-                              className="-mr-1 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-surface-active hover:text-text-primary"
-                            >
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                              </svg>
-                            </button>
-                          )}
                           <button
                             onClick={() => handleDeleteAppointment(appt.id)}
                             className="-mr-1 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-red-50 hover:text-red-600"
@@ -594,13 +561,26 @@ export default function ReportsView({
                                 <td className="whitespace-nowrap px-5 py-3 text-text-primary">{date}</td>
                                 <td className="px-5 py-3 font-normal text-text-primary">{clientName}</td>
                                 <td className="px-5 py-3">
-                                  <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${
-                                    pay.method === "cash"
-                                      ? "bg-green-50 text-green-700"
-                                      : "bg-blue-50 text-blue-700"
-                                  }`}>
-                                    {pay.method === "cash" ? "Cash" : "Card"}
-                                  </span>
+                                  <div className="inline-flex items-center gap-2">
+                                    <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${
+                                      pay.method === "cash"
+                                        ? "bg-green-50 text-green-700"
+                                        : "bg-blue-50 text-blue-700"
+                                    }`}>
+                                      {pay.method === "cash" ? "Cash" : "Card"}
+                                    </span>
+                                    {pay.receipt_url && (
+                                      <button
+                                        onClick={() => setPreviewUrl(pay.receipt_url)}
+                                        aria-label="View receipt"
+                                        className="flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-active hover:text-text-primary"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-text-primary">{formatCurrency(pay.amount)}</td>
                               </tr>
@@ -623,15 +603,28 @@ export default function ReportsView({
                               <p className="text-body-sm font-normal text-text-primary">{clientName}</p>
                               <p className="text-caption text-text-tertiary">{date}</p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-body-sm font-semibold text-text-primary">{formatCurrency(pay.amount)}</p>
-                              <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${
-                                pay.method === "cash"
-                                  ? "bg-green-50 text-green-700"
-                                  : "bg-blue-50 text-blue-700"
-                              }`}>
-                                {pay.method === "cash" ? "Cash" : "Card"}
-                              </span>
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <p className="text-body-sm font-semibold text-text-primary">{formatCurrency(pay.amount)}</p>
+                                <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${
+                                  pay.method === "cash"
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-blue-50 text-blue-700"
+                                }`}>
+                                  {pay.method === "cash" ? "Cash" : "Card"}
+                                </span>
+                              </div>
+                              {pay.receipt_url && (
+                                <button
+                                  onClick={() => setPreviewUrl(pay.receipt_url)}
+                                  aria-label="View receipt"
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-surface-active hover:text-text-primary"
+                                >
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
