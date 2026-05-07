@@ -604,7 +604,12 @@ function ExpenseForm({
   const [notes, setNotes] = useState(defaultValues?.notes || "");
   const [receiptUrl, setReceiptUrl] = useState(defaultValues?.receipt_url || "");
   const [isPrivate, setIsPrivate] = useState(defaultValues?.is_private || false);
-  const [paidFromPettyCash, setPaidFromPettyCash] = useState(defaultValues?.paid_from_petty_cash || false);
+  // Default ON for new expenses — most expenses are paid from petty cash
+  // in practice. When editing an existing row we honor whatever it was
+  // saved with (?? handles the false/undefined distinction correctly).
+  const [paidFromPettyCash, setPaidFromPettyCash] = useState(
+    defaultValues?.paid_from_petty_cash ?? true,
+  );
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -713,7 +718,9 @@ function ExpenseForm({
           />
         </div>
         <div>
-          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Type</label>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+            Type <span className="font-normal text-text-tertiary">(optional)</span>
+          </label>
           <select
             value={expenseType}
             onChange={(e) => setExpenseType(e.target.value)}
@@ -726,9 +733,10 @@ function ExpenseForm({
         </div>
       </div>
 
-      {/* Date + Time — stacked on mobile so the native date/time pickers
-          have room to render their values + icons without overlapping. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Date + Time — full width at every breakpoint so they match the
+          width of all other form fields (Description, Notes, etc.) for
+          visual consistency. */}
+      <div className="space-y-6">
         <div>
           <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Date</label>
           <input
