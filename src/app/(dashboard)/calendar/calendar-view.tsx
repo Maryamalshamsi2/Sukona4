@@ -1369,9 +1369,12 @@ export default function CalendarView({
         );
       })()}
 
-      {/* ==== MOBILE FAB (floating action button) ==== */}
+      {/* ==== MOBILE FAB (floating action button) ====
+           bottom is computed from the tab bar height (~58px) plus
+           the iPhone home-indicator safe-area inset, plus 18px of
+           breathing room so the "+" never visually touches the bar. */}
       {!isStaff && (
-      <div className="fixed bottom-6 right-6 z-40 sm:hidden">
+      <div className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
         {fabOpen && (
           <>
             <div className="fixed inset-0" onClick={() => setFabOpen(false)} />

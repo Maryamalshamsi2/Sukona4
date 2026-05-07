@@ -154,7 +154,7 @@ export default function BottomTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-white lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-black/[0.08] bg-white shadow-[0_-2px_12px_-4px_rgba(0,0,0,0.06)] lg:hidden">
         <div className="flex pb-[env(safe-area-inset-bottom)]">
           {PRIMARY_TABS.map((tab) => {
             const isActive =

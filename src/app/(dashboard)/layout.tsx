@@ -147,9 +147,10 @@ export default function DashboardLayout({
 
           {/* Page content. Extra bottom padding on mobile leaves room for
               the fixed bottom tab bar (~58px) plus the iPhone home-indicator
-              safe area. Desktop padding stays the same since the tab bar
-              hides on lg+. */}
-          <main className="relative flex-1 overflow-y-auto bg-[#F5F5F7] px-4 pt-3 pb-[calc(76px+env(safe-area-inset-bottom))] sm:px-6 sm:pt-4 lg:px-8 lg:pt-4 lg:pb-8">
+              safe area, plus enough breathing room that page content doesn't
+              feel pinned to the tab bar. Desktop padding stays the same
+              since the tab bar hides on lg+. */}
+          <main className="relative flex-1 overflow-y-auto bg-[#F5F5F7] px-4 pt-3 pb-[calc(96px+env(safe-area-inset-bottom))] sm:px-6 sm:pt-4 lg:px-8 lg:pt-4 lg:pb-8">
             {children}
           </main>
         </div>
