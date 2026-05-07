@@ -448,12 +448,6 @@ export default function CatalogView({
           </div>
         </div>
 
-        {service.service_categories && (
-          <span className="mt-2 inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
-            {service.service_categories.name}
-          </span>
-        )}
-
         {!service.is_active && (
           <span className="mt-2 ml-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
             Inactive
