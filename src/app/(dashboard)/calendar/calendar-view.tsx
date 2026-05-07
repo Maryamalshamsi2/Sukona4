@@ -511,8 +511,40 @@ export default function CalendarView({
     loadData();
   }, [loadData]);
 
+  // ---- Auto-scroll to current time ----
+  // Scrolls the calendar grid so the red "now" line sits about 20% from
+  // the top of the viewport, matching the Google/iOS Calendar pattern:
+  // a small bit of context behind, plenty of room ahead.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolledRef = useRef(false);
+
+  const scrollToNow = useCallback((smooth = true) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const nowPx = ((nowMinutes - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+    const target = Math.max(0, nowPx - container.clientHeight * 0.2);
+    container.scrollTo({ top: target, behavior: smooth ? "smooth" : "auto" });
+  }, [nowMinutes]);
+
+  // On initial mount, if we're viewing today, scroll once to "now".
+  // Doesn't re-fire on data refetches or on prev/next nav — only on first
+  // render and on Today button clicks (handled inside goToday).
+  useEffect(() => {
+    if (hasAutoScrolledRef.current) return;
+    const todayStr = formatDate(new Date());
+    if (dateStr !== todayStr) return;
+    hasAutoScrolledRef.current = true;
+    // Small delay so the grid has its final laid-out height before we scroll.
+    const t = setTimeout(() => scrollToNow(true), 100);
+    return () => clearTimeout(t);
+  }, [dateStr, scrollToNow]);
+
   // ---- Date navigation ----
-  const goToday = () => setSelectedDate(new Date());
+  const goToday = () => {
+    setSelectedDate(new Date());
+    // Wait one tick for the date state to settle, then scroll.
+    setTimeout(() => scrollToNow(true), 50);
+  };
   const goPrev = () =>
     setSelectedDate((d) => { const p = new Date(d); p.setDate(p.getDate() - 1); return p; });
   const goNext = () =>
@@ -1052,7 +1084,7 @@ export default function CalendarView({
       {error && <p className="px-5 py-2.5 text-body-sm text-error-700 bg-red-50">{error}</p>}
 
       {/* ---- Calendar grid ---- */}
-      <div className="flex-1 overflow-auto bg-[#FAFAFA]">
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto bg-[#FAFAFA]">
         <div className="inline-flex min-w-full">
           {/* Time column */}
           <div className="sticky left-0 z-10 w-12 shrink-0 border-r border-border bg-[#FAFAFA] sm:w-16">
