@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Modal from "@/components/modal";
+import { useSearchQuery } from "@/lib/search-context";
 import {
   getInventoryItems,
   createInventoryItem,
@@ -40,7 +41,27 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStock, setFilterStock] = useState<"all" | "low" | "out">("all");
-  const [searchQuery, setSearchQuery] = useState("");
+
+  // Search query is owned by the dashboard layout's header input via
+  // SearchContext — typing there filters this list automatically.
+  const searchQuery = useSearchQuery();
+
+  // Combined Category + Stock filter dropdown — opens via the funnel-icon
+  // button next to "+", matching the expenses + calendar filter pattern.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filterOpen) return;
+    function handler(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
+
+  const hasActiveFilter = filterCategory !== "" || filterStock !== "all";
 
   const loadData = useCallback(async () => {
     try {
@@ -75,48 +96,98 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Inventory</h1>
         </div>
-        <button
-          onClick={() => setAddModalOpen(true)}
-          aria-label="Add item"
-          className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Combined Category + Stock filter — funnel icon, mirrors the
+              expenses + calendar filter for cross-page consistency. */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              aria-label="Filter"
+              className={`rounded-lg p-2 ${
+                hasActiveFilter
+                  ? "bg-surface-active text-text-primary"
+                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+              }`}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+            </button>
+
+            {filterOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                {/* Category section */}
+                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Category
+                </p>
+                {[{ value: "", label: "All Categories" }, ...CATEGORIES.map((c) => ({ value: c, label: c }))].map((opt) => (
+                  <button
+                    key={`cat-${opt.value || "all"}`}
+                    onClick={() => setFilterCategory(opt.value)}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                      filterCategory === opt.value ? "text-text-primary font-semibold" : "text-text-secondary"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      filterCategory === opt.value ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                    }`}>
+                      {filterCategory === opt.value && (
+                        <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </span>
+                    {opt.label}
+                  </button>
+                ))}
+
+                <div className="my-1 border-t border-border" />
+
+                {/* Stock section */}
+                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Stock
+                </p>
+                {([
+                  { value: "all", label: "All Stock" },
+                  { value: "low", label: "Low Stock" },
+                  { value: "out", label: "Out of Stock" },
+                ] as const).map((opt) => (
+                  <button
+                    key={`stock-${opt.value}`}
+                    onClick={() => setFilterStock(opt.value)}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                      filterStock === opt.value ? "text-text-primary font-semibold" : "text-text-secondary"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      filterStock === opt.value ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                    }`}>
+                      {filterStock === opt.value && (
+                        <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </span>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setAddModalOpen(true)}
+            aria-label="Add item"
+            className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-body-sm text-error-700">{error}</p>}
-
-      {/* Filters */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-        <input
-          type="text"
-          placeholder="Search items..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="">All Categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        <select
-          value={filterStock}
-          onChange={(e) => setFilterStock(e.target.value as "all" | "low" | "out")}
-          className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="all">All Stock</option>
-          <option value="low">Low Stock</option>
-          <option value="out">Out of Stock</option>
-        </select>
-      </div>
 
       {/* Inventory List */}
       {filtered.length === 0 ? (
