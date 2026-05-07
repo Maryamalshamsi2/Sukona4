@@ -32,7 +32,7 @@ type MoreItem = {
 const MORE_ITEMS: MoreItem[] = [
   { href: "/clients",   label: "Clients",   icon: "users",    allow: ["owner", "admin"] },
   { href: "/team",      label: "Team",      icon: "team",     allow: ["owner"] },
-  { href: "/expenses",  label: "Expenses",  icon: "receipt",  allow: ["owner", "admin", "staff"] },
+  { href: "/catalog",   label: "Catalog",   icon: "catalog",  allow: ["owner", "admin", "staff"] },
   { href: "/inventory", label: "Inventory", icon: "package",  allow: ["owner", "admin", "staff"] },
   { href: "/reports",   label: "Reports",   icon: "chart",    allow: ["owner"] },
   { href: "/settings",  label: "Settings",  icon: "settings", allow: ["owner", "admin", "staff"] },
@@ -42,7 +42,7 @@ const MORE_ITEMS: MoreItem[] = [
 const PRIMARY_TABS: Array<{ href: string; label: string; icon: Icon }> = [
   { href: "/",         label: "Home",     icon: "home" },
   { href: "/calendar", label: "Calendar", icon: "calendar" },
-  { href: "/catalog",  label: "Catalog",  icon: "catalog" },
+  { href: "/expenses", label: "Expenses", icon: "receipt" },
 ];
 
 function NavIcon({ icon, className }: { icon: Icon; className?: string }) {
