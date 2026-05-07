@@ -16,8 +16,118 @@ import {
   addBundle,
   updateBundle,
   deleteBundle,
+  reorderServices,
+  reorderBundles,
+  reorderCategories,
 } from "./actions";
 import type { Service, ServiceCategory, ServiceBundle } from "@/types";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function DragHandleIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+    </svg>
+  );
+}
+
+// Sortable wrapper for a category pill in the horizontal tab row.
+function SortableCategoryPill({
+  cat,
+  active,
+  count,
+  onSelect,
+}: {
+  cat: ServiceCategory;
+  active: boolean;
+  count: number;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: cat.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+    touchAction: "none",
+  };
+  return (
+    <button
+      ref={setNodeRef}
+      style={style}
+      onClick={onSelect}
+      {...attributes}
+      {...listeners}
+      className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors cursor-grab active:cursor-grabbing ${
+        active
+          ? "bg-neutral-900 text-text-inverse"
+          : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+      }`}
+    >
+      {cat.name} ({count})
+    </button>
+  );
+}
+
+// Sortable wrapper for a service card.
+function SortableServiceCard({
+  id,
+  showHandle,
+  children,
+}: {
+  id: string;
+  showHandle: boolean;
+  children: (handle: React.ReactNode) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+  const handle = showHandle ? (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      aria-label="Reorder"
+      className="cursor-grab active:cursor-grabbing text-text-tertiary hover:text-text-secondary p-1 -m-1 touch-none"
+      style={{ touchAction: "none" }}
+    >
+      <DragHandleIcon />
+    </button>
+  ) : null;
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children(handle)}
+    </div>
+  );
+}
 
 export interface CatalogViewProps {
   initialCategories: ServiceCategory[];
@@ -54,6 +164,13 @@ export default function CatalogView({
 
   const [bundleModalOpen, setBundleModalOpen] = useState(false);
   const [editingBundle, setEditingBundle] = useState<ServiceBundle | null>(null);
+
+  // dnd-kit sensors. The 5px distance threshold prevents accidental drag
+  // starts when the user just intends to tap (open edit modal) or scroll.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   async function loadData() {
     try {
@@ -97,13 +214,6 @@ export default function CatalogView({
       categoryId: b.category_id,
     })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-  const filteredItems =
-    activeTab === "all"
-      ? catalogItems
-      : activeTab === "uncategorized"
-        ? catalogItems.filter((item) => !item.categoryId)
-        : catalogItems.filter((item) => item.categoryId === activeTab);
 
   // Per-category counts (services + bundles combined)
   const countForCategory = (categoryId: string) =>
@@ -204,6 +314,85 @@ export default function CatalogView({
     loadData();
   }
 
+  // ---- Drag-and-drop handlers ----
+  // Each one optimistically updates state, fires the server action, and
+  // reverts if the action returns { error }. Categories reorder applies
+  // only to user-defined IDs (the All / Uncategorized pills aren't in
+  // the sortable set). Service / bundle reorder sends the IDs of the
+  // items currently visible in the active tab.
+  async function handleCategoryDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = categories.findIndex((c) => c.id === active.id);
+    const newIndex = categories.findIndex((c) => c.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const previous = categories;
+    const next = arrayMove(categories, oldIndex, newIndex);
+    setCategories(next);
+    const result = await reorderCategories(next.map((c) => c.id));
+    if (result.error) {
+      setCategories(previous);
+      setError(result.error);
+    }
+  }
+
+  async function handleServicesDragEnd(event: DragEndEvent, visibleIds: string[]) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = visibleIds.indexOf(active.id as string);
+    const newIndex = visibleIds.indexOf(over.id as string);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(visibleIds, oldIndex, newIndex);
+    // Reorder the global services list so visible items appear in the new
+    // order while preserving their original positions among other-category
+    // items. We extract the visible-position slots and re-fill them.
+    const previous = services;
+    const visibleSet = new Set(visibleIds);
+    const slotPositions: number[] = [];
+    services.forEach((s, i) => {
+      if (visibleSet.has(s.id)) slotPositions.push(i);
+    });
+    const byId = new Map(services.map((s) => [s.id, s]));
+    const next = [...services];
+    newOrder.forEach((id, k) => {
+      const svc = byId.get(id);
+      if (svc) next[slotPositions[k]] = svc;
+    });
+    setServices(next);
+    const result = await reorderServices(newOrder);
+    if (result.error) {
+      setServices(previous);
+      setError(result.error);
+    }
+  }
+
+  async function handleBundlesDragEnd(event: DragEndEvent, visibleIds: string[]) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = visibleIds.indexOf(active.id as string);
+    const newIndex = visibleIds.indexOf(over.id as string);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(visibleIds, oldIndex, newIndex);
+    const previous = bundles;
+    const visibleSet = new Set(visibleIds);
+    const slotPositions: number[] = [];
+    bundles.forEach((b, i) => {
+      if (visibleSet.has(b.id)) slotPositions.push(i);
+    });
+    const byId = new Map(bundles.map((b) => [b.id, b]));
+    const next = [...bundles];
+    newOrder.forEach((id, k) => {
+      const bdl = byId.get(id);
+      if (bdl) next[slotPositions[k]] = bdl;
+    });
+    setBundles(next);
+    const result = await reorderBundles(newOrder);
+    if (result.error) {
+      setBundles(previous);
+      setError(result.error);
+    }
+  }
+
   function formatDuration(minutes: number) {
     if (minutes < 60) return `${minutes}min`;
     const h = Math.floor(minutes / 60);
@@ -234,6 +423,206 @@ export default function CatalogView({
       (sum, item) => sum + (item.services?.duration_minutes || 0), 0
     );
   }
+
+  // Renders the inner card body for a service. The drag handle is passed
+  // in (or null) so the sortable wrapper controls drag wiring.
+  function renderServiceCard(service: Service, handle: React.ReactNode) {
+    return (
+      <div
+        className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
+          service.is_active ? "" : "opacity-50"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-text-primary">{service.name}</h3>
+            <p className="mt-1 text-body-sm text-text-secondary">
+              {formatDuration(service.duration_minutes)}
+            </p>
+          </div>
+          <div className="flex items-start gap-3 shrink-0">
+            <p className="text-lg font-semibold text-text-primary">
+              AED {service.price}
+            </p>
+            {handle}
+          </div>
+        </div>
+
+        {service.service_categories && (
+          <span className="mt-2 inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
+            {service.service_categories.name}
+          </span>
+        )}
+
+        {!service.is_active && (
+          <span className="mt-2 ml-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
+            Inactive
+          </span>
+        )}
+
+        {!isStaff && (
+          <div className="mt-4 flex gap-3 border-t border-border pt-3">
+            <button
+              onClick={() => openEditService(service)}
+              className="text-body-sm text-text-secondary hover:text-text-primary"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => handleDeleteService(service.id)}
+              className="text-body-sm text-error-500 hover:text-error-700"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderBundleCard(bundle: ServiceBundle, handle: React.ReactNode) {
+    const originalPrice = getBundleOriginalPrice(bundle);
+    const bundlePrice = getBundlePrice(bundle);
+    const duration = getBundleDuration(bundle);
+    const savings = originalPrice - bundlePrice;
+    const activeServices = (bundle.service_bundle_items || []).filter(
+      (bi) => bi.services?.is_active !== false
+    );
+    return (
+      <div
+        className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
+          bundle.is_active ? "" : "opacity-50"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-text-primary">{bundle.name}</h3>
+              <span className="rounded-full bg-violet-50 px-2 py-0.5 text-caption font-semibold text-violet-600">
+                Bundle
+              </span>
+            </div>
+            <p className="mt-1 text-body-sm text-text-secondary">
+              {formatDuration(duration)} &middot; {activeServices.length} services
+            </p>
+          </div>
+          <div className="flex items-start gap-3 shrink-0">
+            <div className="text-right">
+              <p className="text-lg font-semibold text-text-primary">
+                AED {bundlePrice.toFixed(0)}
+              </p>
+              {savings > 0 && (
+                <p className="text-caption text-text-tertiary line-through">
+                  AED {originalPrice.toFixed(0)}
+                </p>
+              )}
+            </div>
+            {handle}
+          </div>
+        </div>
+
+        {/* Included services */}
+        <div className="mt-3 flex flex-wrap gap-1">
+          {activeServices.map((bi) => (
+            <span
+              key={bi.id}
+              className="rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary"
+            >
+              {bi.services?.name}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-1">
+          {bundle.service_categories && (
+            <span className="inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
+              {bundle.service_categories.name}
+            </span>
+          )}
+          {savings > 0 && (
+            <span className="inline-block rounded-full bg-green-50 px-2 py-0.5 text-caption font-semibold text-green-700">
+              Save AED {savings.toFixed(0)}
+              {bundle.discount_type === "percentage" && bundle.discount_percentage
+                ? ` (${bundle.discount_percentage}%)`
+                : ""}
+            </span>
+          )}
+          {!bundle.is_active && (
+            <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
+              Inactive
+            </span>
+          )}
+        </div>
+
+        {!isStaff && (
+          <div className="mt-4 flex gap-3 border-t border-border pt-3">
+            <button
+              onClick={() => openEditBundle(bundle)}
+              className="text-body-sm text-text-secondary hover:text-text-primary"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => handleDeleteBundle(bundle.id)}
+              className="text-body-sm text-error-500 hover:text-error-700"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Per-tab visible items (used to compute draggable ID sets).
+  const tabServices: Service[] =
+    activeTab === "all"
+      ? services
+      : activeTab === "uncategorized"
+        ? services.filter((s) => !s.category_id)
+        : services.filter((s) => s.category_id === activeTab);
+
+  const tabBundles: ServiceBundle[] =
+    activeTab === "all"
+      ? bundles
+      : activeTab === "uncategorized"
+        ? bundles.filter((b) => !b.category_id)
+        : bundles.filter((b) => b.category_id === activeTab);
+
+  // Drag is enabled for owners/admins on category & uncategorized tabs only.
+  const dragEnabled = !isStaff && activeTab !== "all";
+
+  // For the All view, group items by category in `categories` order, then
+  // uncategorized at the end. Within each category, services first then
+  // bundles. This is purely a derived display order — no drag here.
+  type AllGroup = {
+    key: string;
+    label: string | null; // null = no header
+    services: Service[];
+    bundles: ServiceBundle[];
+  };
+  const allGroups: AllGroup[] =
+    activeTab === "all"
+      ? [
+          ...categories.map((cat) => ({
+            key: cat.id,
+            label: cat.name,
+            services: services.filter((s) => s.category_id === cat.id),
+            bundles: bundles.filter((b) => b.category_id === cat.id),
+          })),
+          {
+            key: "__uncat",
+            label: "Uncategorized",
+            services: services.filter((s) => !s.category_id),
+            bundles: bundles.filter((b) => !b.category_id),
+          },
+        ].filter((g) => g.services.length > 0 || g.bundles.length > 0)
+      : [];
+
+  const isEmpty =
+    activeTab === "all"
+      ? services.length === 0 && bundles.length === 0
+      : tabServices.length === 0 && tabBundles.length === 0;
 
   return (
     <div>
@@ -291,7 +680,10 @@ export default function CatalogView({
       {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 
       {/* ======= CATALOG (services + bundles, merged) ======= */}
-      {/* Category tabs — single horizontal line, left-aligned (scrolls if overflow) */}
+      {/* Category tabs — single horizontal line, left-aligned (scrolls if overflow).
+          For owners/admins, the user-defined category pills are draggable to
+          reorder. The "All" and "Uncategorized" pills sit outside the
+          sortable set so they always anchor the row. */}
       <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
           <button
             onClick={() => setActiveTab("all")}
@@ -303,19 +695,42 @@ export default function CatalogView({
           >
             All ({catalogItems.length})
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveTab(cat.id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
-                activeTab === cat.id
-                  ? "bg-neutral-900 text-text-inverse"
-                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-              }`}
+          {isStaff ? (
+            categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveTab(cat.id)}
+                className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
+                  activeTab === cat.id
+                    ? "bg-neutral-900 text-text-inverse"
+                    : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+                }`}
+              >
+                {cat.name} ({countForCategory(cat.id)})
+              </button>
+            ))
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleCategoryDragEnd}
             >
-              {cat.name} ({countForCategory(cat.id)})
-            </button>
-          ))}
+              <SortableContext
+                items={categories.map((c) => c.id)}
+                strategy={horizontalListSortingStrategy}
+              >
+                {categories.map((cat) => (
+                  <SortableCategoryPill
+                    key={cat.id}
+                    cat={cat}
+                    active={activeTab === cat.id}
+                    count={countForCategory(cat.id)}
+                    onSelect={() => setActiveTab(cat.id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
           {uncategorizedCount > 0 && (
             <button
               onClick={() => setActiveTab("uncategorized")}
@@ -351,164 +766,97 @@ export default function CatalogView({
         </div>
       )}
 
-      {/* Single-column list — services & bundles stack vertically */}
-      {filteredItems.length === 0 ? (
+      {/* Single-column list — services & bundles stack vertically.
+          - On a category tab (or Uncategorized): services list first, then
+            bundles. Each is its own DndContext + SortableContext so they
+            reorder independently.
+          - On the All tab: items are grouped by category in `categories`
+            order, with services-then-bundles inside each. Drag is disabled
+            because All is a derived view. */}
+      {isEmpty ? (
         <div className="mt-6 rounded-2xl ring-1 ring-border bg-white p-8 text-center text-text-secondary">
           {isStaff
             ? "Nothing here yet."
-            : "Nothing here yet. Click \u201C+\u201D to add a service or bundle."}
+            : "Nothing here yet. Click “+” to add a service or bundle."}
+        </div>
+      ) : activeTab === "all" ? (
+        <div className="mt-4 flex flex-col gap-6">
+          {allGroups.map((group) => (
+            <div key={group.key} className="flex flex-col gap-4">
+              {group.label && (
+                <h2 className="text-body-sm font-semibold uppercase tracking-wide text-text-tertiary">
+                  {group.label}
+                </h2>
+              )}
+              {group.services.map((service) => (
+                <div key={`s-${service.id}`}>{renderServiceCard(service, null)}</div>
+              ))}
+              {group.bundles.map((bundle) => (
+                <div key={`b-${bundle.id}`}>{renderBundleCard(bundle, null)}</div>
+              ))}
+            </div>
+          ))}
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-4">
-          {filteredItems.map((item) => {
-            if (item.kind === "service") {
-              const service = item.service;
-              return (
-                <div
-                  key={`s-${service.id}`}
-                  className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
-                    service.is_active ? "" : "opacity-50"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-text-primary">{service.name}</h3>
-                      <p className="mt-1 text-body-sm text-text-secondary">
-                        {formatDuration(service.duration_minutes)}
-                      </p>
-                    </div>
-                    <p className="text-lg font-semibold text-text-primary">
-                      AED {service.price}
-                    </p>
-                  </div>
-
-                  {service.service_categories && (
-                    <span className="mt-2 inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
-                      {service.service_categories.name}
-                    </span>
-                  )}
-
-                  {!service.is_active && (
-                    <span className="mt-2 ml-1 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
-                      Inactive
-                    </span>
-                  )}
-
-                  {!isStaff && (
-                    <div className="mt-4 flex gap-3 border-t border-border pt-3">
-                      <button
-                        onClick={() => openEditService(service)}
-                        className="text-body-sm text-text-secondary hover:text-text-primary"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteService(service.id)}
-                        className="text-body-sm text-error-500 hover:text-error-700"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            // Bundle
-            const bundle = item.bundle;
-            const originalPrice = getBundleOriginalPrice(bundle);
-            const bundlePrice = getBundlePrice(bundle);
-            const duration = getBundleDuration(bundle);
-            const savings = originalPrice - bundlePrice;
-            const activeServices = (bundle.service_bundle_items || []).filter(
-              (bi) => bi.services?.is_active !== false
-            );
-
-            return (
-              <div
-                key={`b-${bundle.id}`}
-                className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
-                  bundle.is_active ? "" : "opacity-50"
-                }`}
+        <div className="mt-4 flex flex-col gap-6">
+          {tabServices.length > 0 && (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => handleServicesDragEnd(e, tabServices.map((s) => s.id))}
+            >
+              <SortableContext
+                items={tabServices.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-text-primary">{bundle.name}</h3>
-                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-caption font-semibold text-violet-600">
-                        Bundle
-                      </span>
-                    </div>
-                    <p className="mt-1 text-body-sm text-text-secondary">
-                      {formatDuration(duration)} &middot; {activeServices.length} services
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-semibold text-text-primary">
-                      AED {bundlePrice.toFixed(0)}
-                    </p>
-                    {savings > 0 && (
-                      <p className="text-caption text-text-tertiary line-through">
-                        AED {originalPrice.toFixed(0)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Included services */}
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {activeServices.map((bi) => (
-                    <span
-                      key={bi.id}
-                      className="rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary"
+                <div className="flex flex-col gap-4">
+                  {tabServices.map((service) => (
+                    <SortableServiceCard
+                      key={`s-${service.id}`}
+                      id={service.id}
+                      showHandle={dragEnabled}
                     >
-                      {bi.services?.name}
-                    </span>
+                      {(handle) => renderServiceCard(service, handle)}
+                    </SortableServiceCard>
                   ))}
                 </div>
+              </SortableContext>
+            </DndContext>
+          )}
 
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {bundle.service_categories && (
-                    <span className="inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
-                      {bundle.service_categories.name}
-                    </span>
-                  )}
-                  {savings > 0 && (
-                    <span className="inline-block rounded-full bg-green-50 px-2 py-0.5 text-caption font-semibold text-green-700">
-                      Save AED {savings.toFixed(0)}
-                      {bundle.discount_type === "percentage" && bundle.discount_percentage
-                        ? ` (${bundle.discount_percentage}%)`
-                        : ""}
-                    </span>
-                  )}
-                  {!bundle.is_active && (
-                    <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
-                      Inactive
-                    </span>
-                  )}
+          {tabServices.length > 0 && tabBundles.length > 0 && (
+            <h2 className="text-body-sm font-semibold uppercase tracking-wide text-text-tertiary">
+              Bundles
+            </h2>
+          )}
+
+          {tabBundles.length > 0 && (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => handleBundlesDragEnd(e, tabBundles.map((b) => b.id))}
+            >
+              <SortableContext
+                items={tabBundles.map((b) => b.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="flex flex-col gap-4">
+                  {tabBundles.map((bundle) => (
+                    <SortableServiceCard
+                      key={`b-${bundle.id}`}
+                      id={bundle.id}
+                      showHandle={dragEnabled}
+                    >
+                      {(handle) => renderBundleCard(bundle, handle)}
+                    </SortableServiceCard>
+                  ))}
                 </div>
-
-                {!isStaff && (
-                  <div className="mt-4 flex gap-3 border-t border-border pt-3">
-                    <button
-                      onClick={() => openEditBundle(bundle)}
-                      className="text-body-sm text-text-secondary hover:text-text-primary"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBundle(bundle.id)}
-                      className="text-body-sm text-error-500 hover:text-error-700"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
       )}
+
 
       {/* ---- Category Modal ---- */}
       <Modal
