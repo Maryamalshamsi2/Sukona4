@@ -28,6 +28,7 @@ import {
   formatTime12Short,
   getApptTotalDuration,
   getApptEndTime,
+  getApptTotal,
   DetailView,
   AppointmentForm,
   timeToMinutes,
@@ -570,11 +571,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       <MarkPaidModal
         open={markPaidOpen}
         appointmentId={selectedAppointment?.id ?? null}
-        defaultAmount={
-          selectedAppointment?.appointment_services.reduce(
-            (sum, as2) => sum + (as2.services?.price || 0), 0
-          ) || 0
-        }
+        defaultAmount={selectedAppointment ? getApptTotal(selectedAppointment) : 0}
         clientName={selectedAppointment?.clients?.name}
         onClose={() => setMarkPaidOpen(false)}
         onPaid={handlePaidComplete}
@@ -594,9 +591,9 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             staff={allStaff}
             bundles={allBundles}
             staffSchedules={staffScheduleMap}
-            onSubmit={async (clientId, date, time, notes, entries) => {
+            onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
               setError(null);
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries);
+              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
               if (result.error) { setError(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
@@ -614,6 +611,10 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
               date: selectedAppointment.date,
               time: selectedAppointment.time,
               notes: selectedAppointment.notes || "",
+              transportation_charge: selectedAppointment.transportation_charge ?? null,
+              discount_type: selectedAppointment.discount_type ?? null,
+              discount_value: selectedAppointment.discount_value ?? null,
+              total_override: selectedAppointment.total_override ?? null,
               serviceEntries: selectedAppointment.appointment_services
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((as2) => ({

@@ -18,6 +18,7 @@ import {
   formatDuration,
   getServiceTimings,
   getApptTotalDuration,
+  getApptTotal,
   getStaffServiceBlocks,
   getServiceName,
   DetailView,
@@ -1459,9 +1460,9 @@ export default function CalendarView({
           staffSchedules={staffScheduleMap}
           prefillTime={prefillTime}
           prefillStaffId={prefillStaffId}
-          onSubmit={async (clientId, date, time, notes, entries) => {
+          onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
             setError(null);
-            const result = await createAppointment(clientId, date, time, notes, entries);
+            const result = await createAppointment(clientId, date, time, notes, entries, adjustments);
             if (result.error) { setError(result.error); return; }
             setAddModalOpen(false);
             setPrefillTime(null);
@@ -1502,11 +1503,7 @@ export default function CalendarView({
       <MarkPaidModal
         open={markPaidOpen}
         appointmentId={selectedAppointment?.id ?? null}
-        defaultAmount={
-          selectedAppointment?.appointment_services.reduce(
-            (sum, as2) => sum + (as2.services?.price || 0), 0
-          ) || 0
-        }
+        defaultAmount={selectedAppointment ? getApptTotal(selectedAppointment) : 0}
         clientName={selectedAppointment?.clients?.name}
         onClose={() => setMarkPaidOpen(false)}
         onPaid={handlePaidComplete}
@@ -1522,9 +1519,9 @@ export default function CalendarView({
             staff={staff}
             bundles={bundles}
             staffSchedules={staffScheduleMap}
-            onSubmit={async (clientId, date, time, notes, entries) => {
+            onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
               setError(null);
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries);
+              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
               if (result.error) { setError(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
@@ -1549,6 +1546,10 @@ export default function CalendarView({
                   staff_id: as2.staff_id || "",
                   is_parallel: as2.is_parallel,
                 })),
+              transportation_charge: selectedAppointment.transportation_charge ?? null,
+              discount_type: selectedAppointment.discount_type ?? null,
+              discount_value: selectedAppointment.discount_value ?? null,
+              total_override: selectedAppointment.total_override ?? null,
             }}
           />
         )}

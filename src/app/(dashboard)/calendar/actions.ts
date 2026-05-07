@@ -176,12 +176,20 @@ export interface ServiceEntry {
   sort_order?: number;
 }
 
+export interface AppointmentAdjustments {
+  transportation_charge: number;
+  discount_type: "percentage" | "fixed";
+  discount_value: number;
+  total_override: number | null;
+}
+
 export async function createAppointment(
   clientId: string,
   date: string,
   time: string,
   notes: string,
-  serviceEntries: ServiceEntry[]
+  serviceEntries: ServiceEntry[],
+  adjustments?: AppointmentAdjustments
 ) {
   const supabase = await createClient();
 
@@ -201,6 +209,10 @@ export async function createAppointment(
       date,
       time,
       notes: notes || null,
+      transportation_charge: adjustments?.transportation_charge ?? 0,
+      discount_type: adjustments?.discount_type ?? "fixed",
+      discount_value: adjustments?.discount_value ?? 0,
+      total_override: adjustments?.total_override ?? null,
     })
     .select()
     .single();
@@ -253,7 +265,8 @@ export async function updateAppointment(
   date: string,
   time: string,
   notes: string,
-  serviceEntries: ServiceEntry[]
+  serviceEntries: ServiceEntry[],
+  adjustments?: AppointmentAdjustments
 ) {
   const supabase = await createClient();
 
@@ -289,6 +302,14 @@ export async function updateAppointment(
       date,
       time,
       notes: notes || null,
+      // Always write the adjustment fields when provided so a user can
+      // also CLEAR them by leaving the form fields empty.
+      ...(adjustments && {
+        transportation_charge: adjustments.transportation_charge,
+        discount_type: adjustments.discount_type,
+        discount_value: adjustments.discount_value,
+        total_override: adjustments.total_override,
+      }),
     })
     .eq("id", id);
 

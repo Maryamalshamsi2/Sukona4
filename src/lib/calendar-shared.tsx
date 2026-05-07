@@ -88,6 +88,31 @@ export interface AppointmentData {
     comment: string | null;
     submitted_at: string;
   }>;
+  // Optional appointment-level price adjustments (migration 024). Each
+  // defaults to a neutral state so existing appointments behave the same:
+  // total = sum of services. With these set, total =
+  // total_override ?? (services + transport - discount).
+  transportation_charge?: number | null;
+  discount_type?: "percentage" | "fixed" | null;
+  discount_value?: number | null;
+  /** When set, replaces the computed total entirely. */
+  total_override?: number | null;
+}
+
+/**
+ * Appointment-level price adjustments collected by the form. The server
+ * action persists these on the `appointments` row (migration 024).
+ *
+ *   - transportation_charge: flat AED, default 0
+ *   - discount_type + discount_value: discount can be % or fixed AED
+ *   - total_override: optional manual override; when set, the computed
+ *     subtotal/transport/discount are ignored
+ */
+export interface AppointmentAdjustments {
+  transportation_charge: number;
+  discount_type: "percentage" | "fixed";
+  discount_value: number;
+  total_override: number | null;
 }
 
 export interface ServiceEntry {
@@ -185,6 +210,45 @@ export function getApptEndTime(appt: AppointmentData) {
   return minutesToTime(startMin + duration);
 }
 
+// ---- Price helpers (migration 024 adjustments) ----
+//
+// Subtotal: just the sum of service prices.
+// Discount amount: resolved to AED (percentage-of-(subtotal+transport) or
+//   fixed AED). Cannot exceed subtotal+transport.
+// Final total: total_override ?? max(0, subtotal + transport - discount).
+
+export function getApptSubtotal(appt: AppointmentData): number {
+  return appt.appointment_services.reduce((s, as2) => s + (as2.services?.price || 0), 0);
+}
+
+export function getApptTransport(appt: AppointmentData): number {
+  return Number(appt.transportation_charge ?? 0);
+}
+
+export function getApptDiscountAmount(appt: AppointmentData): number {
+  const value = Number(appt.discount_value ?? 0);
+  if (value <= 0) return 0;
+  if (appt.discount_type === "percentage") {
+    const base = getApptSubtotal(appt) + getApptTransport(appt);
+    return Math.min(base, (base * value) / 100);
+  }
+  // fixed
+  return Math.min(getApptSubtotal(appt) + getApptTransport(appt), value);
+}
+
+export function getApptTotal(appt: AppointmentData): number {
+  if (appt.total_override != null) return Number(appt.total_override);
+  return Math.max(0, getApptSubtotal(appt) + getApptTransport(appt) - getApptDiscountAmount(appt));
+}
+
+export function hasAppointmentAdjustments(appt: AppointmentData): boolean {
+  return (
+    getApptTransport(appt) > 0 ||
+    Number(appt.discount_value ?? 0) > 0 ||
+    appt.total_override != null
+  );
+}
+
 export function getStaffServiceBlocks(appt: AppointmentData, staffId: string) {
   const timings = getServiceTimings(appt);
   return timings.filter((t) => t.svc.staff_id === staffId);
@@ -229,9 +293,6 @@ export function DetailView({
   const timings = getServiceTimings(appointment);
   const totalDuration = getApptTotalDuration(appointment);
   const endTime = getApptEndTime(appointment);
-  const totalPrice = appointment.appointment_services.reduce(
-    (sum, as2) => sum + (as2.services?.price || 0), 0
-  );
 
   const currentStatusIdx = STATUS_FLOW.findIndex((s) => s.value === appointment.status);
   const nextStatus = currentStatusIdx >= 0 && currentStatusIdx < STATUS_FLOW.length - 1
@@ -330,9 +391,43 @@ export function DetailView({
               );
             })}
           </div>
-          <div className="flex items-center justify-between mt-3 px-1">
-            <span className="text-body-sm font-bold text-text-primary">Total</span>
-            <span className="text-body-sm font-bold text-text-primary">AED {totalPrice}</span>
+          {/* Subtotal + adjustments + total. The breakdown rows only render
+              when their value is non-zero/set so a clean appointment shows
+              just one "Total" line. */}
+          <div className="mt-3 space-y-1.5 px-1 text-body-sm">
+            {hasAppointmentAdjustments(appointment) && (
+              <div className="flex items-center justify-between text-text-secondary">
+                <span>Subtotal</span>
+                <span>AED {getApptSubtotal(appointment)}</span>
+              </div>
+            )}
+            {getApptTransport(appointment) > 0 && (
+              <div className="flex items-center justify-between text-text-secondary">
+                <span>Transportation</span>
+                <span>+ AED {getApptTransport(appointment)}</span>
+              </div>
+            )}
+            {Number(appointment.discount_value ?? 0) > 0 && (
+              <div className="flex items-center justify-between text-text-secondary">
+                <span>
+                  Discount
+                  {appointment.discount_type === "percentage" && (
+                    <span className="text-text-tertiary"> ({Number(appointment.discount_value)}% off)</span>
+                  )}
+                </span>
+                <span>− AED {getApptDiscountAmount(appointment)}</span>
+              </div>
+            )}
+            {appointment.total_override != null && (
+              <div className="flex items-center justify-between text-caption text-text-tertiary">
+                <span>Manual total override</span>
+                <span></span>
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-body-sm font-bold text-text-primary">Total</span>
+              <span className="text-body-sm font-bold text-text-primary">AED {getApptTotal(appointment)}</span>
+            </div>
           </div>
         </div>
       )}
@@ -622,7 +717,14 @@ export function AppointmentForm({
   staff: StaffMember[];
   bundles?: BundleForBooking[];
   staffSchedules?: Map<string, { isOff: boolean; startMin: number; endMin: number }>;
-  onSubmit: (clientId: string, date: string, time: string, notes: string, entries: ServiceEntry[]) => Promise<void>;
+  onSubmit: (
+    clientId: string,
+    date: string,
+    time: string,
+    notes: string,
+    entries: ServiceEntry[],
+    adjustments: AppointmentAdjustments,
+  ) => Promise<void>;
   onNewClient: (name: string, phone: string, address: string, mapLink: string, notes: string) => Promise<ClientItem | null>;
   onCancel: () => void;
   submitLabel: string;
@@ -632,6 +734,10 @@ export function AppointmentForm({
     time: string;
     notes: string;
     serviceEntries: ServiceEntry[];
+    transportation_charge?: number | null;
+    discount_type?: "percentage" | "fixed" | null;
+    discount_value?: number | null;
+    total_override?: number | null;
   };
   prefillTime?: string | null;
   prefillStaffId?: string | null;
@@ -651,6 +757,28 @@ export function AppointmentForm({
       ? defaultValues.serviceEntries
       : [{ service_id: "", staff_id: prefillStaffId || "", is_parallel: false }]
   );
+
+  // ---- Adjustments (transport / discount / override) ----
+  const [transportCharge, setTransportCharge] = useState<string>(
+    defaultValues?.transportation_charge ? String(defaultValues.transportation_charge) : "",
+  );
+  const [discountType, setDiscountType] = useState<"percentage" | "fixed">(
+    defaultValues?.discount_type ?? "fixed",
+  );
+  const [discountValue, setDiscountValue] = useState<string>(
+    defaultValues?.discount_value ? String(defaultValues.discount_value) : "",
+  );
+  const [totalOverride, setTotalOverride] = useState<string>(
+    defaultValues?.total_override != null ? String(defaultValues.total_override) : "",
+  );
+  // Open by default when editing an appointment that already has any
+  // non-default adjustment, otherwise collapsed.
+  const hasInitialAdjustment =
+    !!defaultValues?.transportation_charge ||
+    !!defaultValues?.discount_value ||
+    defaultValues?.total_override != null;
+  const [adjustmentsOpen, setAdjustmentsOpen] = useState(hasInitialAdjustment);
+
   const [submitting, setSubmitting] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
   const [savedClients, setSavedClients] = useState<ClientItem[]>([]);
@@ -841,7 +969,16 @@ export function AppointmentForm({
       }
     }
 
-    await onSubmit(clientId, date, time, notes, validEntries);
+    // Bundle the adjustment fields into a single object so the server
+    // action signature stays compact. Empty strings → 0 / null.
+    const adjustments: AppointmentAdjustments = {
+      transportation_charge: parseFloat(transportCharge) || 0,
+      discount_type: discountType,
+      discount_value: parseFloat(discountValue) || 0,
+      total_override: totalOverride.trim() === "" ? null : parseFloat(totalOverride) || null,
+    };
+
+    await onSubmit(clientId, date, time, notes, validEntries, adjustments);
     setSubmitting(false);
   }
 
@@ -1074,6 +1211,110 @@ export function AppointmentForm({
                 {formatTime12Short(time)} - {formatTime12Short(endTimeStr)} ({formatDuration(totalDuration)})
               </span>
               <span className="font-semibold">AED {totalPrice}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ---- Adjustments (collapsible) ----
+           Transportation, discount, and a manual total override. Most
+           appointments don't need any of these so the section starts
+           collapsed; if the appointment already has any non-default
+           adjustment it opens automatically. */}
+      <div className="rounded-xl ring-1 ring-border bg-white">
+        <button
+          type="button"
+          onClick={() => setAdjustmentsOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-3 text-body-sm font-semibold text-text-primary"
+        >
+          <span className="flex items-center gap-2">
+            Adjustments
+            {hasInitialAdjustment && !adjustmentsOpen && (
+              <span className="rounded-full bg-primary-50 px-1.5 py-0.5 text-caption font-medium text-primary-700">applied</span>
+            )}
+          </span>
+          <svg
+            className={`h-4 w-4 text-text-tertiary transition-transform ${adjustmentsOpen ? "rotate-180" : ""}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+
+        {adjustmentsOpen && (
+          <div className="space-y-4 border-t border-border px-4 py-4">
+            {/* When override is filled, transport + discount are hidden
+                because the override replaces them entirely. */}
+            {totalOverride.trim() === "" && (
+              <>
+                <div>
+                  <label className="block text-body-sm font-semibold text-text-primary">
+                    Transportation charge <span className="font-normal text-text-tertiary">(AED)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={transportCharge}
+                    onChange={(e) => setTransportCharge(e.target.value)}
+                    placeholder="0"
+                    className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+                    Discount
+                  </label>
+                  <div className="flex gap-2">
+                    {/* % / AED toggle */}
+                    <div className="flex shrink-0 rounded-xl bg-surface-active p-0.5">
+                      {(["percentage", "fixed"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setDiscountType(m)}
+                          className={`rounded-lg px-3 py-1.5 text-caption font-semibold transition-colors ${
+                            discountType === m
+                              ? "bg-white text-text-primary shadow-sm"
+                              : "text-text-secondary hover:text-text-primary"
+                          }`}
+                        >
+                          {m === "percentage" ? "%" : "AED"}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={discountType === "percentage" ? "100" : undefined}
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      placeholder="0"
+                      className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="block text-body-sm font-semibold text-text-primary">
+                Manual total override <span className="font-normal text-text-tertiary">(optional)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={totalOverride}
+                onChange={(e) => setTotalOverride(e.target.value)}
+                placeholder="Leave blank to auto-calculate"
+                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              />
+              <p className="mt-1.5 text-caption text-text-tertiary">
+                When set, this replaces the calculated total — transportation and discount are ignored.
+              </p>
             </div>
           </div>
         )}

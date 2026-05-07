@@ -28,11 +28,15 @@ export interface ReportAppointment {
   status: string;
   notes: string | null;
   created_at: string;
+  // Adjustment fields (migration 024). Used by the Total computation
+  // so revenue lines reflect transport / discount / override.
+  transportation_charge?: number | null;
+  discount_type?: "percentage" | "fixed" | null;
+  discount_value?: number | null;
+  total_override?: number | null;
   clients: { id: string; name: string; phone: string | null } | null;
   appointment_services: AppointmentService[];
-  // Joined: payment rows. We surface the latest payment's receipt_url
-  // as a paperclip cell on each row so owners can preview the uploaded
-  // receipt without leaving the report.
+  // Joined: payment rows.
   payments?: Array<{
     id: string;
     receipt_url: string | null;
@@ -276,9 +280,23 @@ export default function ReportsView({
   const expenseBreakdown = Object.entries(expenseByType)
     .sort((a, b) => b[1] - a[1]);
 
-  // Revenue per appointment (service prices)
+  // Revenue per appointment — includes transportation charge, applies
+  // discount, and honors a manual total_override. Same logic as
+  // getApptTotal in calendar-shared, just inlined here so reports-view
+  // doesn't depend on the AppointmentData type (the report type has a
+  // narrower shape).
   function getApptRevenue(appt: ReportAppointment) {
-    return appt.appointment_services.reduce((s, as2) => s + (as2.services?.price || 0), 0);
+    if (appt.total_override != null) return Number(appt.total_override);
+    const subtotal = appt.appointment_services.reduce((s, as2) => s + (as2.services?.price || 0), 0);
+    const transport = Number(appt.transportation_charge ?? 0);
+    const discountValue = Number(appt.discount_value ?? 0);
+    let discount = 0;
+    if (discountValue > 0) {
+      discount = appt.discount_type === "percentage"
+        ? Math.min(subtotal + transport, ((subtotal + transport) * discountValue) / 100)
+        : Math.min(subtotal + transport, discountValue);
+    }
+    return Math.max(0, subtotal + transport - discount);
   }
   const expectedRevenue = appointments
     .filter((a) => a.status !== "cancelled")

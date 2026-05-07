@@ -26,6 +26,10 @@ export async function getReportAppointments(from: string, to: string) {
       status,
       notes,
       created_at,
+      transportation_charge,
+      discount_type,
+      discount_value,
+      total_override,
       clients ( id, name, phone ),
       appointment_services (
         id,
