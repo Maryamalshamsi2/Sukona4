@@ -19,10 +19,14 @@ async function getCurrentUserRole() {
 export async function getExpenses() {
   const { supabase, role } = await getCurrentUserRole();
 
+  // Chronological order: oldest at the top, newest at the bottom.
+  // Tie-break by created_at so two expenses on the same date appear in
+  // the order they were added to the system.
   let query = supabase
     .from("expenses")
     .select("*")
-    .order("date", { ascending: false });
+    .order("date", { ascending: true })
+    .order("created_at", { ascending: true });
 
   // Staff can only see non-private expenses
   if (role !== "owner") {
