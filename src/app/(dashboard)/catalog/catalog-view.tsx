@@ -482,22 +482,22 @@ export default function CatalogView({
     const activeServices = (bundle.service_bundle_items || []).filter(
       (bi) => bi.services?.is_active !== false
     );
+    const serviceNames = activeServices
+      .map((bi) => bi.services?.name)
+      .filter(Boolean)
+      .join(" · ");
     return (
       <div
         className={`rounded-2xl ring-1 ring-border bg-white p-6 ${
           bundle.is_active ? "" : "opacity-50"
         }`}
       >
+        {/* Header: name + meta on the left, price stack on the right */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-text-primary">{bundle.name}</h3>
-              <span className="rounded-full bg-violet-50 px-2 py-0.5 text-caption font-semibold text-violet-600">
-                Bundle
-              </span>
-            </div>
+            <h3 className="font-semibold text-text-primary">{bundle.name}</h3>
             <p className="mt-1 text-body-sm text-text-secondary">
-              {formatDuration(duration)} &middot; {activeServices.length} services
+              {activeServices.length} services &middot; {formatDuration(duration)}
             </p>
           </div>
           <div className="flex items-start gap-3 shrink-0">
@@ -523,20 +523,16 @@ export default function CatalogView({
           </div>
         </div>
 
-        {/* Included services */}
-        <div className="mt-3 flex flex-wrap gap-1">
-          {activeServices.map((bi) => (
-            <span
-              key={bi.id}
-              className="rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary"
-            >
-              {bi.services?.name}
-            </span>
-          ))}
-        </div>
+        {/* Included services — dot-separated text reads cleaner than a row of
+            pills and matches the iOS Music / track-list pattern. */}
+        {serviceNames && (
+          <p className="mt-3 text-body-sm text-text-secondary">
+            {serviceNames}
+          </p>
+        )}
 
         {!bundle.is_active && (
-          <div className="mt-2">
+          <div className="mt-3">
             <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
               Inactive
             </span>
