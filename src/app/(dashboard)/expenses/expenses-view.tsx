@@ -366,11 +366,6 @@ export default function ExpensesView({
               onClick={() => { setSelected(expense); setEditModalOpen(true); }}
               className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-surface-hover sm:gap-4 sm:px-6"
             >
-              {/* Type badge */}
-              <span className="shrink-0 rounded-lg bg-gray-100 px-2.5 py-1 text-caption font-semibold text-text-secondary">
-                {expense.expense_type}
-              </span>
-
               {/* Description */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -384,9 +379,6 @@ export default function ExpensesView({
                 <p className="text-caption text-text-secondary">
                   {formatDate(expense.date)}
                   {expense.time && <> · {formatTime12(expense.time)}</>}
-                  {expense.paid_from_petty_cash && (
-                    <span className="ml-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-caption font-semibold text-amber-700">Petty Cash</span>
-                  )}
                 </p>
               </div>
 
