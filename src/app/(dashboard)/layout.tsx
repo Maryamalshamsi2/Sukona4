@@ -7,6 +7,7 @@ import NotificationBell from "@/components/notification-bell";
 import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/app/(dashboard)/actions";
 import { UserContext, type CurrentUser } from "@/lib/user-context";
+import { SearchProvider, HeaderSearchInput } from "@/lib/search-context";
 
 export default function DashboardLayout({
   children,
@@ -63,6 +64,7 @@ export default function DashboardLayout({
   }, []);
 
   return (
+    <SearchProvider>
     <UserContext.Provider value={currentUser}>
       <div className="flex h-[100dvh] flex-col overflow-hidden">
         {/* Top bar */}
@@ -97,9 +99,8 @@ export default function DashboardLayout({
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
-              <input
-                type="text"
-                placeholder="Search clients, appointments..."
+              <HeaderSearchInput
+                placeholder="Search..."
                 className="w-56 rounded-xl border-0 bg-surface-active py-2 pl-9 pr-4 text-body-sm text-text-primary placeholder-text-tertiary transition-all focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-200 lg:w-72"
               />
             </div>
@@ -154,5 +155,6 @@ export default function DashboardLayout({
         </div>
       </div>
     </UserContext.Provider>
+    </SearchProvider>
   );
 }

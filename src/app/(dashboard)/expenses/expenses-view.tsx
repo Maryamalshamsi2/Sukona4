@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Modal from "@/components/modal";
+import { useSearchQuery } from "@/lib/search-context";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   getExpenses,
@@ -132,10 +133,28 @@ export default function ExpensesView({
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selected, setSelected] = useState<Expense | null>(null);
   const [filterType, setFilterType] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+
+  // Search query is owned by the dashboard layout's header input via
+  // SearchContext — typing there filters this list automatically.
+  const searchQuery = useSearchQuery();
+
+  // Type filter dropdown — opens via the funnel-icon button next to "+",
+  // matching the staff filter on the calendar page for visual consistency.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filterOpen) return;
+    function handler(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
 
   // Petty cash
   const [pettyCashBalance, setPettyCashBalance] = useState(initialPettyCashBalance);
@@ -189,15 +208,78 @@ export default function ExpensesView({
       {/* Title row */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-title-page font-bold tracking-tight text-text-primary">Expenses</h1>
-        <button
-          onClick={() => setAddModalOpen(true)}
-          aria-label="Add expense"
-          className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Type filter — funnel icon, mirrors the staff filter on calendar
+              for cross-page consistency. */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              aria-label="Filter"
+              className={`rounded-lg p-2 ${
+                filterType
+                  ? "bg-surface-active text-text-primary"
+                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+              }`}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+            </button>
+
+            {filterOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                <button
+                  onClick={() => { setFilterType(""); setFilterOpen(false); }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                    filterType === "" ? "text-text-primary font-semibold" : "text-text-secondary"
+                  }`}
+                >
+                  <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                    filterType === "" ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                  }`}>
+                    {filterType === "" && (
+                      <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    )}
+                  </span>
+                  All Types
+                </button>
+                <div className="my-1 border-t border-border" />
+                {EXPENSE_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setFilterType(t); setFilterOpen(false); }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                      filterType === t ? "text-text-primary font-semibold" : "text-text-secondary"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      filterType === t ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                    }`}>
+                      {filterType === t && (
+                        <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </span>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setAddModalOpen(true)}
+            aria-label="Add expense"
+            className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Date range presets */}
@@ -238,28 +320,7 @@ export default function ExpensesView({
 
       {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-body-sm text-error-700">{error}</p>}
 
-      {/* Filters */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-        <input
-          type="text"
-          placeholder="Search expenses..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="">All Types</option>
-          {EXPENSE_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Petty Cash Card (moved below search) */}
+      {/* Petty Cash Card */}
       <div className="mb-6 rounded-2xl ring-1 ring-border bg-white p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
