@@ -70,14 +70,10 @@ export default function DashboardLayout({
       <div className="flex h-[100dvh] flex-col overflow-hidden">
         {/* Top bar */}
         <header className="relative flex h-16 shrink-0 items-center bg-[#F5F5F7]/80 px-3 sm:h-20 sm:px-4">
-          {/* The hamburger menu used to live here; replaced by the
-              bottom tab bar on mobile. We keep a tiny spacer so the
-              centered logo doesn't drift when the search/avatar group
-              on the right has a different width than nothing on the left. */}
-          <div className="w-10 shrink-0 lg:hidden" aria-hidden />
-
-          {/* Logo — centered on mobile, left-aligned on desktop — click returns to dashboard */}
-          <div className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 lg:flex lg:shrink-0">
+          {/* Logo — left-aligned on every breakpoint now that mobile
+              navigation lives in the bottom tab bar (no more hamburger
+              taking the top-left slot). Click returns to dashboard. */}
+          <div className="flex shrink-0">
             <Link href="/" aria-label="Go to dashboard" className="inline-flex transition-opacity hover:opacity-80">
               <img src="/logo-dark.png" alt="Sukona" className="h-[46px] w-auto sm:h-[50px]" />
             </Link>
