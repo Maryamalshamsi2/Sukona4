@@ -510,6 +510,14 @@ export default function CatalogView({
                   AED {originalPrice.toFixed(0)}
                 </p>
               )}
+              {savings > 0 && (
+                <span className="mt-1.5 inline-block rounded-full bg-green-50 px-2 py-0.5 text-caption font-semibold text-green-700">
+                  Save AED {savings.toFixed(0)}
+                  {bundle.discount_type === "percentage" && bundle.discount_percentage
+                    ? ` (${bundle.discount_percentage}%)`
+                    : ""}
+                </span>
+              )}
             </div>
             {handle}
           </div>
@@ -527,26 +535,13 @@ export default function CatalogView({
           ))}
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-1">
-          {bundle.service_categories && (
-            <span className="inline-block rounded-full bg-surface-active px-2 py-0.5 text-caption text-text-primary">
-              {bundle.service_categories.name}
-            </span>
-          )}
-          {savings > 0 && (
-            <span className="inline-block rounded-full bg-green-50 px-2 py-0.5 text-caption font-semibold text-green-700">
-              Save AED {savings.toFixed(0)}
-              {bundle.discount_type === "percentage" && bundle.discount_percentage
-                ? ` (${bundle.discount_percentage}%)`
-                : ""}
-            </span>
-          )}
-          {!bundle.is_active && (
+        {!bundle.is_active && (
+          <div className="mt-2">
             <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-caption text-text-secondary">
               Inactive
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {!isStaff && (
           <div className="mt-4 flex gap-3 border-t border-border pt-3">
