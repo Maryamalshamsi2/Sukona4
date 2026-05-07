@@ -726,8 +726,9 @@ function ExpenseForm({
         </div>
       </div>
 
-      {/* Date + Time */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Date + Time — stacked on mobile so the native date/time pickers
+          have room to render their values + icons without overlapping. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Date</label>
           <input
