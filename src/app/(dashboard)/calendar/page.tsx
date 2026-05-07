@@ -26,8 +26,14 @@ interface CalendarBlockData {
   block_type: string;
 }
 
+// Returns YYYY-MM-DD in the *local* timezone. See note in (dashboard)/page.tsx
+// — toISOString() would store appointments under the previous day's UTC date
+// for users east of UTC, breaking the homepage "today" filter.
 function formatDate(date: Date) {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function timeToMinutes(time: string) {

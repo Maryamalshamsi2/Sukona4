@@ -82,8 +82,15 @@ const CAL_BLOCK_COLOR = "bg-neutral-100 border-neutral-200 text-text-primary";
 
 // ---- Local Helpers ----
 
+// Local-tz YYYY-MM-DD. See note in (dashboard)/page.tsx — toISOString() would
+// cause the calendar's selectedDate (created from `new Date(y, m-1, d)` which
+// is local-midnight) to convert back to a different UTC date for users east
+// of UTC, leading to appointments being saved against the wrong day.
 function formatDate(date: Date) {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function formatDisplayDate(date: Date) {

@@ -41,8 +41,13 @@ export interface ActivityItem {
 
 type ActivityRange = "today" | "7days" | "30days";
 
+// Local-tz YYYY-MM-DD; see note in (dashboard)/page.tsx for why we don't use
+// toISOString() here.
 function formatDate(date: Date) {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function getRangeFromDate(range: ActivityRange): string {

@@ -15,8 +15,17 @@ import {
   getStaffSchedulesForDate,
 } from "./calendar/actions";
 
+// Returns YYYY-MM-DD in the *local* timezone, not UTC. Using toISOString()
+// here would cause an off-by-one day for users east of UTC because the calendar
+// seeds selectedDate via `new Date(y, m-1, d)` which is local-midnight; that
+// round-trips back through getFullYear/getMonth/getDate but NOT through
+// toISOString. Symptom: appointments created in UAE for "today" stored under
+// yesterday's UTC date and missed by the homepage's "today" filter.
 function formatDate(date: Date) {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function timeToMinutes(time: string) {

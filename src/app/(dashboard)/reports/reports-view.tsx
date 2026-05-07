@@ -101,7 +101,11 @@ function formatTime12(time24: string) {
 }
 
 function toISODate(d: Date) {
-  return d.toISOString().split("T")[0];
+  // Local-tz YYYY-MM-DD; see (dashboard)/page.tsx for the rationale.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getPresetRange(preset: DatePreset): { from: string; to: string } {

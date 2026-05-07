@@ -61,7 +61,12 @@ const PRESET_LABELS: Record<DatePreset, string> = {
 };
 
 function toISODate(d: Date) {
-  return d.toISOString().split("T")[0];
+  // Local-tz YYYY-MM-DD. toISOString() would shift dates back a day for
+  // users east of UTC; see (dashboard)/page.tsx for the full reasoning.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getPresetRange(preset: DatePreset): { from: string; to: string } {
@@ -533,7 +538,7 @@ function ExpenseForm({
   const [description, setDescription] = useState(defaultValues?.description || "");
   const [amount, setAmount] = useState(defaultValues?.amount?.toString() || "");
   const [expenseType, setExpenseType] = useState(defaultValues?.expense_type || "Supplies");
-  const [date, setDate] = useState(defaultValues?.date || new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(defaultValues?.date || toISODate(new Date()));
   const [time, setTime] = useState(defaultValues?.time?.slice(0, 5) || "");
   const [notes, setNotes] = useState(defaultValues?.notes || "");
   const [receiptUrl, setReceiptUrl] = useState(defaultValues?.receipt_url || "");
