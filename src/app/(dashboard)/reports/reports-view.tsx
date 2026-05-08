@@ -196,7 +196,7 @@ export default function ReportsView({
   initialExpenses,
   initialReviews,
 }: ReportsViewProps) {
-  const [tab, setTab] = useState<TabKey>("appointments");
+  const [tab, setTab] = useState<TabKey>("expenses");
   const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -326,12 +326,12 @@ export default function ReportsView({
   // ---- Tab content ----
 
   const TABS: { key: TabKey; label: string }[] = [
-    { key: "appointments", label: "Appointments" },
-    { key: "payments", label: "Payments" },
     // Renamed from "Expenses" since the dashboard already has a top-level
     // Expenses page; this tab also shows Revenue/Profit alongside the
     // expenses list, so "Finance" is more accurate.
     { key: "expenses", label: "Finance" },
+    { key: "payments", label: "Payments" },
+    { key: "appointments", label: "Appointments" },
     { key: "reviews", label: "Reviews" },
   ];
 
