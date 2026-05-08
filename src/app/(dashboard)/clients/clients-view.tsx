@@ -70,6 +70,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [editPaymentOpen, setEditPaymentOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentData | null>(null);
 
   // Supporting data for AppointmentForm
@@ -562,6 +563,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             onEdit={openAppointmentEdit}
             onCancel={handleAppointmentCancel}
             onDelete={handleAppointmentDelete}
+            onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             canEdit={currentUser?.role !== "staff"}
           />
         )}
@@ -575,6 +577,23 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
         clientName={selectedAppointment?.clients?.name}
         onClose={() => setMarkPaidOpen(false)}
         onPaid={handlePaidComplete}
+      />
+
+      {/* ==== Edit Payment Modal ==== */}
+      <MarkPaidModal
+        open={editPaymentOpen}
+        clientName={selectedAppointment?.clients?.name}
+        existingPayment={(() => {
+          const list = selectedAppointment?.payments ?? [];
+          if (list.length === 0) return null;
+          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+        })()}
+        onClose={() => setEditPaymentOpen(false)}
+        onPaid={() => {
+          setEditPaymentOpen(false);
+          setSelectedAppointment(null);
+          refreshClientAppointments();
+        }}
       />
 
       {/* ==== Edit Appointment Modal ==== */}

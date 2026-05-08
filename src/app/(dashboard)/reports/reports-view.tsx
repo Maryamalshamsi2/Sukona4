@@ -8,6 +8,8 @@ import {
   getReportReviews,
 } from "./actions";
 import { deleteAppointment } from "../calendar/actions";
+import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-modal";
+import type { PaymentMethod } from "@/types";
 
 // ---- Types ----
 
@@ -49,6 +51,8 @@ export interface ReportPayment {
   appointment_id: string;
   amount: number;
   method: string;
+  /** Free-text note (used when method = "other"). */
+  note: string | null;
   /** Uploaded receipt image URL (paperclip preview on the row). */
   receipt_url: string | null;
   created_at: string;
@@ -203,6 +207,21 @@ export default function ReportsView({
   // URL of the receipt image being previewed in the lightbox. Tapping a
   // paperclip cell on an appointment row sets this; backdrop dismisses.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Edit-payment modal — opens when a payment row is clicked.
+  const [editingPayment, setEditingPayment] = useState<ExistingPayment | null>(null);
+  const [editingPaymentClient, setEditingPaymentClient] = useState<string | undefined>(undefined);
+
+  function openEditPayment(pay: ReportPayment) {
+    setEditingPayment({
+      id: pay.id,
+      amount: pay.amount,
+      method: pay.method as PaymentMethod,
+      note: pay.note,
+      receipt_url: pay.receipt_url,
+    });
+    setEditingPaymentClient(pay.appointments?.clients?.name);
+  }
 
   // Period filter dropdown — funnel icon in the title row replaces the
   // old inline pill row for the preset buttons.
@@ -569,7 +588,11 @@ export default function ReportsView({
                               ? formatDate(pay.appointments.date)
                               : new Date(pay.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
                             return (
-                              <tr key={pay.id} className="hover:bg-surface-hover">
+                              <tr
+                                key={pay.id}
+                                onClick={() => openEditPayment(pay)}
+                                className="cursor-pointer hover:bg-surface-hover"
+                              >
                                 <td className="whitespace-nowrap px-5 py-3 text-text-primary">{date}</td>
                                 <td className="px-5 py-3 font-normal text-text-primary">{clientName}</td>
                                 <td className="px-5 py-3">
@@ -583,7 +606,7 @@ export default function ReportsView({
                                     </span>
                                     {pay.receipt_url && (
                                       <button
-                                        onClick={() => setPreviewUrl(pay.receipt_url)}
+                                        onClick={(e) => { e.stopPropagation(); setPreviewUrl(pay.receipt_url); }}
                                         aria-label="View receipt"
                                         className="flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-active hover:text-text-primary"
                                       >
@@ -610,7 +633,19 @@ export default function ReportsView({
                           ? formatDate(pay.appointments.date)
                           : new Date(pay.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
                         return (
-                          <div key={pay.id} className="flex items-center justify-between px-4 py-3">
+                          <div
+                            key={pay.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openEditPayment(pay)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openEditPayment(pay);
+                              }
+                            }}
+                            className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-surface-hover"
+                          >
                             <div>
                               <p className="text-body-sm font-normal text-text-primary">{clientName}</p>
                               <p className="text-caption text-text-tertiary">{date}</p>
@@ -628,7 +663,7 @@ export default function ReportsView({
                               </div>
                               {pay.receipt_url && (
                                 <button
-                                  onClick={() => setPreviewUrl(pay.receipt_url)}
+                                  onClick={(e) => { e.stopPropagation(); setPreviewUrl(pay.receipt_url); }}
                                   aria-label="View receipt"
                                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-surface-active hover:text-text-primary"
                                 >
@@ -861,6 +896,18 @@ export default function ReportsView({
           </div>
         </div>
       )}
+
+      {/* Edit-payment modal — opened by clicking a payment row. */}
+      <MarkPaidModal
+        open={editingPayment !== null}
+        clientName={editingPaymentClient}
+        existingPayment={editingPayment}
+        onClose={() => setEditingPayment(null)}
+        onPaid={() => {
+          setEditingPayment(null);
+          loadData();
+        }}
+      />
     </div>
   );
 }

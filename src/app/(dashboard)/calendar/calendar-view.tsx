@@ -226,6 +226,9 @@ export default function CalendarView({
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  // Edit-payment modal — re-uses MarkPaidModal in "edit" mode. Opens
+  // when the owner clicks "Edit payment" in the detail drawer.
+  const [editPaymentOpen, setEditPaymentOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
   const [blockDetailOpen, setBlockDetailOpen] = useState(false);
@@ -1493,6 +1496,7 @@ export default function CalendarView({
             onEdit={openEdit}
             onCancel={handleCancel}
             onDelete={handleDelete}
+            onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);
@@ -1511,6 +1515,23 @@ export default function CalendarView({
         clientName={selectedAppointment?.clients?.name}
         onClose={() => setMarkPaidOpen(false)}
         onPaid={handlePaidComplete}
+      />
+
+      {/* ==== EDIT PAYMENT MODAL ==== */}
+      <MarkPaidModal
+        open={editPaymentOpen}
+        clientName={selectedAppointment?.clients?.name}
+        existingPayment={(() => {
+          const list = selectedAppointment?.payments ?? [];
+          if (list.length === 0) return null;
+          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+        })()}
+        onClose={() => setEditPaymentOpen(false)}
+        onPaid={() => {
+          setEditPaymentOpen(false);
+          setSelectedAppointment(null);
+          reload();
+        }}
       />
 
       {/* ==== EDIT MODAL ==== */}

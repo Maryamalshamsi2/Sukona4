@@ -68,6 +68,39 @@ export async function recordPayment(
   return { success: true };
 }
 
+// Update an existing payment row. Used when an owner/admin needs to fix
+// a wrong method (e.g. clicked Cash instead of Card) or change/remove
+// the receipt photo after marking the appointment paid.
+//
+// The appointment's status is NOT touched here — it stays "paid". This
+// is purely a record-correction.
+export async function updatePayment(
+  paymentId: string,
+  amount: number,
+  method: PaymentMethod,
+  note: string | null,
+  receiptUrl: string | null,
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("payments")
+    .update({
+      amount,
+      method,
+      note,
+      receipt_url: receiptUrl,
+    })
+    .eq("id", paymentId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/payments");
+  revalidatePath("/reports");
+  revalidatePath("/calendar");
+  revalidatePath("/");
+  return { success: true };
+}
+
 // Upload a receipt image to the shared `receipts` storage bucket.
 // Returns a public URL, or { error } on failure.
 export async function uploadReceipt(

@@ -72,11 +72,14 @@ export interface AppointmentData {
   receipt_sent_at?: string | null;
   clients: { id: string; name: string; phone: string | null; address: string | null; map_link: string | null } | null;
   appointment_services: AppointmentServiceData[];
-  // Payment rows attached to this appointment. We mainly use the latest
-  // payment's receipt_url to surface the uploaded receipt image (paperclip
-  // preview) on the detail drawer + reports table.
+  // Payment rows attached to this appointment. Used to:
+  //   - surface the uploaded receipt image (paperclip preview)
+  //   - feed the Edit Payment modal with the existing values
   payments?: Array<{
-    id?: string;
+    id: string;
+    amount: number;
+    method: "cash" | "card" | "other";
+    note: string | null;
     receipt_url: string | null;
     created_at?: string;
   }>;
@@ -271,6 +274,7 @@ export function DetailView({
   onEdit,
   onCancel,
   onDelete,
+  onEditPayment,
   onShareSent,
   canEdit = true,
 }: {
@@ -283,6 +287,11 @@ export function DetailView({
    *  the appointment (purges it from records & reports). Optional — only
    *  passed by owner/admin pages. */
   onDelete?: () => void;
+  /** When provided AND the appointment has been paid, renders an
+   *  "Edit payment" link next to the status pill. The parent owns the
+   *  actual edit modal and reads appointment.payments[latest] from the
+   *  current selection. */
+  onEditPayment?: () => void;
   /** Called after the owner taps "Send via WhatsApp" so the parent can
    *  bump review_sent_at + receipt_sent_at and refresh. Optional — if
    *  absent, the section just opens wa.me without persisting send state. */
@@ -314,7 +323,7 @@ export function DetailView({
       {/* ---- Status (top) ---- */}
       <div>
         <h3 className="text-body font-bold text-text-primary mb-2">Status</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_FLOW.find((s) => s.value === appointment.status)?.color || "bg-gray-100 text-text-primary"}`}>
             {STATUS_FLOW.find((s) => s.value === appointment.status)?.label || appointment.status}
           </span>
@@ -328,6 +337,19 @@ export function DetailView({
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
               </svg>
+            </button>
+          )}
+          {/* Edit payment — only when the appointment is paid AND the
+              caller wired the callback (owner/admin pages do; staff
+              don't pass it). Lets the owner fix a wrong method or
+              swap the receipt photo without re-doing the whole flow. */}
+          {canEdit && onEditPayment && appointment.status === "paid" && (appointment.payments?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={onEditPayment}
+              className="text-caption font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+            >
+              Edit payment
             </button>
           )}
         </div>
@@ -1101,7 +1123,11 @@ export function AppointmentForm({
                   </div>
                 )}
                 <div className={`rounded-xl border border-border p-3 bg-surface-hover ${isInBundle && !isFirstInBundle ? "mt-1.5" : ""}`}>
-                  {idx > 0 && !isInBundle && (
+                  {/* Timing toggle (After previous / Same time). Available
+                      on every entry except the very first, including bundle
+                      entries — so two staff can run a bundle's services
+                      in parallel. */}
+                  {idx > 0 && (
                     <div className="flex items-center gap-3 mb-2 pb-2 border-b border-border">
                       <span className="text-caption text-text-secondary">Timing:</span>
                       <label className="flex items-center gap-2 cursor-pointer">

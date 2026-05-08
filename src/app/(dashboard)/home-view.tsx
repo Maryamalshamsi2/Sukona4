@@ -40,7 +40,7 @@ export interface ActivityItem {
   profiles: { full_name: string } | null;
 }
 
-type ActivityRange = "today" | "7days" | "30days";
+type ActivityRange = "today" | "30days";
 
 // Local-tz YYYY-MM-DD; see note in (dashboard)/page.tsx for why we don't use
 // toISOString() here.
@@ -55,10 +55,6 @@ function getRangeFromDate(range: ActivityRange): string {
   const now = new Date();
   if (range === "today") {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  } else if (range === "7days") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 7);
-    return d.toISOString();
   } else {
     const d = new Date(now);
     d.setDate(d.getDate() - 30);
@@ -68,7 +64,6 @@ function getRangeFromDate(range: ActivityRange): string {
 
 const RANGE_LABELS: Record<ActivityRange, string> = {
   today: "Today",
-  "7days": "Past 7 Days",
   "30days": "Past 30 Days",
 };
 
@@ -152,6 +147,7 @@ export default function HomeView({
   // Modals — same as calendar
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [editPaymentOpen, setEditPaymentOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentData | null>(null);
 
@@ -326,14 +322,14 @@ export default function HomeView({
 
         {/* ---- Recent Activity ---- */}
         <div className="rounded-2xl bg-white border border-[#EAEAEA] shadow-xs">
-          <div className="flex items-center justify-between p-6 sm:px-6">
-            <h2 className="text-title-section font-semibold text-text-primary">Recent Activity</h2>
-            <div className="flex rounded-lg bg-black/[0.04] p-0.5">
-              {(["today", "7days", "30days"] as ActivityRange[]).map((range) => (
+          <div className="flex items-center justify-between gap-2 p-6 sm:px-6">
+            <h2 className="shrink-0 whitespace-nowrap text-title-section font-semibold text-text-primary">Recent Activity</h2>
+            <div className="flex shrink-0 rounded-lg bg-black/[0.04] p-0.5">
+              {(["today", "30days"] as ActivityRange[]).map((range) => (
                 <button
                   key={range}
                   onClick={() => setActivityRange(range)}
-                  className={`rounded-md px-2.5 py-1 text-caption font-semibold transition-colors ${
+                  className={`whitespace-nowrap rounded-md px-2.5 py-1 text-caption font-semibold transition-colors ${
                     activityRange === range
                       ? "bg-white text-text-primary shadow-sm"
                       : "text-text-secondary hover:text-text-primary"
@@ -395,6 +391,7 @@ export default function HomeView({
             onEdit={openEdit}
             onCancel={handleCancel}
             onDelete={handleDelete}
+            onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);
@@ -413,6 +410,23 @@ export default function HomeView({
         clientName={selectedAppointment?.clients?.name}
         onClose={() => setMarkPaidOpen(false)}
         onPaid={handlePaidComplete}
+      />
+
+      {/* ==== EDIT PAYMENT MODAL ==== */}
+      <MarkPaidModal
+        open={editPaymentOpen}
+        clientName={selectedAppointment?.clients?.name}
+        existingPayment={(() => {
+          const list = selectedAppointment?.payments ?? [];
+          if (list.length === 0) return null;
+          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+        })()}
+        onClose={() => setEditPaymentOpen(false)}
+        onPaid={() => {
+          setEditPaymentOpen(false);
+          setSelectedAppointment(null);
+          reload();
+        }}
       />
 
       {/* ==== EDIT MODAL (same as calendar) ==== */}
