@@ -403,56 +403,19 @@ export default function ReportsView({
         </div>
       )}
 
-      {/* ===== OVERVIEW (always visible header) =====
-           Summary stats + revenue/expense breakdowns sit permanently
-           above the tabs. The tabs below are for drilling into the
-           underlying data — a clean dashboard pattern (cf. Stripe,
-           Linear, Apple Health). */}
-      <div className="space-y-4 sm:space-y-6">
-        {/* 2x2 stat grid */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          <StatCard label="Revenue" value={formatCurrency(totalRevenue)} color="text-green-700" />
-          <StatCard label="Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
-          <StatCard
-            label="Profit"
-            value={formatCurrency(profit)}
-            color={profit >= 0 ? "text-green-700" : "text-red-600"}
-          />
-          <StatCard label="Appointments" value={String(totalAppointments)} sub={`${completedOrPaid} completed`} />
-        </div>
-
-        {/* Two-column breakdowns */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-            <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Revenue</p>
-            <div className="mt-2 divide-y divide-border">
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-body-sm text-text-secondary">Cash</span>
-                <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cashTotal)}</span>
-              </div>
-              <div className="flex items-center justify-between py-2.5">
-                <span className="text-body-sm text-text-secondary">Card</span>
-                <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-            <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Expenses</p>
-            {expenseBreakdown.length === 0 ? (
-              <p className="mt-2 py-2.5 text-body-sm text-text-tertiary">None this period</p>
-            ) : (
-              <div className="mt-2 divide-y divide-border">
-                {expenseBreakdown.map(([type, amount]) => (
-                  <div key={type} className="flex items-center justify-between py-2.5">
-                    <span className="text-body-sm text-text-secondary">{type}</span>
-                    <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(amount)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+      {/* ===== Summary KPIs (always visible) =====
+           Top-of-page glance: Revenue, Expenses, Profit, Appointments.
+           The breakdowns by method / type live inside their respective
+           tabs below — no duplicate info on this page. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <StatCard label="Revenue" value={formatCurrency(totalRevenue)} color="text-green-700" />
+        <StatCard label="Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
+        <StatCard
+          label="Profit"
+          value={formatCurrency(profit)}
+          color={profit >= 0 ? "text-green-700" : "text-red-600"}
+        />
+        <StatCard label="Appointments" value={String(totalAppointments)} sub={`${completedOrPaid} completed`} />
       </div>
 
       {/* Detail tabs — 2x2 grid on mobile, 4-up on desktop. Replaces the
@@ -707,6 +670,23 @@ export default function ReportsView({
           {/* ===== EXPENSES TAB ===== */}
           {tab === "expenses" && (
             <div className="space-y-4">
+              {/* Breakdown by type — moved here from the page-level header.
+                  Lives in the Expenses tab where it's contextually relevant
+                  rather than always-on at the top of the page. */}
+              {expenseBreakdown.length > 0 && (
+                <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
+                  <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">By Type</p>
+                  <div className="mt-2 divide-y divide-border">
+                    {expenseBreakdown.map(([type, amount]) => (
+                      <div key={type} className="flex items-center justify-between py-2.5">
+                        <span className="text-body-sm text-text-secondary">{type}</span>
+                        <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-2xl bg-white ring-1 ring-border">
                 <div className="border-b border-border px-5 py-4 flex items-center justify-between">
                   <h3 className="text-body-sm font-semibold text-text-primary">
