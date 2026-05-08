@@ -93,7 +93,7 @@ export interface ReportReview {
 }
 
 type TabKey = "overview" | "appointments" | "payments" | "expenses" | "reviews";
-type DatePreset = "today" | "30days" | "custom";
+type DatePreset = "today" | "week" | "month" | "custom";
 
 // ---- Helpers ----
 
@@ -129,7 +129,12 @@ function getPresetRange(preset: DatePreset): { from: string; to: string } {
   switch (preset) {
     case "today":
       return { from: today, to: today };
-    case "30days": {
+    case "week": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 6);
+      return { from: toISODate(d), to: today };
+    }
+    case "month": {
       const d = new Date(now);
       d.setDate(d.getDate() - 29);
       return { from: toISODate(d), to: today };
@@ -159,7 +164,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PRESET_LABELS: Record<DatePreset, string> = {
   today: "Today",
-  "30days": "Past 30 Days",
+  week: "Week",
+  month: "Month",
   custom: "Custom",
 };
 
@@ -191,12 +197,27 @@ export default function ReportsView({
   initialReviews,
 }: ReportsViewProps) {
   const [tab, setTab] = useState<TabKey>("overview");
-  const [preset, setPreset] = useState<DatePreset>("30days");
+  const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   // URL of the receipt image being previewed in the lightbox. Tapping a
   // paperclip cell on an appointment row sets this; backdrop dismisses.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Period filter dropdown — funnel icon in the title row replaces the
+  // old inline pill row for the preset buttons.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filterOpen) return;
+    function handler(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
   const [loading, setLoading] = useState(false);
 
   const [appointments, setAppointments] = useState<ReportAppointment[]>(initialAppointments);
@@ -314,25 +335,53 @@ export default function ReportsView({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Header — title on the left, period filter funnel on the right.
+          Mirrors the expenses + calendar filter pattern. */}
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-title-page font-bold tracking-tight text-text-primary">Reports</h1>
 
-        {/* Date range selector */}
-        <div className="flex flex-wrap items-center gap-2">
-          {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPreset(p)}
-                className={`rounded-lg px-2.5 py-1.5 text-caption font-semibold transition-colors sm:px-3 sm:text-body-sm ${
-                  preset === p
-                    ? "bg-neutral-900 text-text-inverse"
-                    : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-                }`}
-              >
-                {PRESET_LABELS[p]}
-              </button>
-            ))}
+        <div className="relative shrink-0" ref={filterRef}>
+          <button
+            onClick={() => setFilterOpen((v) => !v)}
+            aria-label="Filter"
+            className={`rounded-lg p-2 ${
+              preset !== "month"
+                ? "bg-surface-active text-text-primary"
+                : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+            }`}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+            </svg>
+          </button>
+
+          {filterOpen && (
+            <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+              <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                Period
+              </p>
+              {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => { setPreset(p); setFilterOpen(false); }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                    preset === p ? "text-text-primary font-semibold" : "text-text-secondary"
+                  }`}
+                >
+                  <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                    preset === p ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                  }`}>
+                    {preset === p && (
+                      <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    )}
+                  </span>
+                  {PRESET_LABELS[p]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

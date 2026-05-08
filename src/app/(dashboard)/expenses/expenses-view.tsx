@@ -219,7 +219,7 @@ export default function ExpensesView({
               onClick={() => setFilterOpen((v) => !v)}
               aria-label="Filter"
               className={`rounded-lg p-2 ${
-                filterType
+                filterType || datePreset !== "month"
                   ? "bg-surface-active text-text-primary"
                   : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
               }`}
@@ -231,6 +231,37 @@ export default function ExpensesView({
 
             {filterOpen && (
               <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                {/* Period section */}
+                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Period
+                </p>
+                {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => { setDatePreset(p); setFilterOpen(false); }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                      datePreset === p ? "text-text-primary font-semibold" : "text-text-secondary"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      datePreset === p ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                    }`}>
+                      {datePreset === p && (
+                        <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </span>
+                    {PRESET_LABELS[p]}
+                  </button>
+                ))}
+
+                <div className="my-1 border-t border-border" />
+
+                {/* Type section */}
+                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Type
+                </p>
                 <button
                   onClick={() => { setFilterType(""); setFilterOpen(false); }}
                   className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
@@ -248,7 +279,6 @@ export default function ExpensesView({
                   </span>
                   All Types
                 </button>
-                <div className="my-1 border-t border-border" />
                 {EXPENSE_TYPES.map((t) => (
                   <button
                     key={t}
@@ -285,24 +315,10 @@ export default function ExpensesView({
         </div>
       </div>
 
-      {/* Date range presets */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setDatePreset(p)}
-            className={`rounded-lg px-2.5 py-1.5 text-caption font-semibold transition-colors sm:px-3 sm:text-body-sm ${
-              datePreset === p
-                ? "bg-neutral-900 text-text-inverse"
-                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-            }`}
-          >
-            {PRESET_LABELS[p]}
-          </button>
-        ))}
-      </div>
-
-      {/* Custom date inputs */}
+      {/* Custom date inputs — only when "Custom" is the selected preset
+          (chosen from the filter dropdown). The from/to inputs are too
+          wide for the dropdown itself, so they live here below the
+          title row. Other presets (Today/Week/Month) render no UI. */}
       {datePreset === "custom" && (
         <div className="mb-4 flex items-center gap-3">
           <input
