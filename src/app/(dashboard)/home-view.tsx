@@ -64,7 +64,7 @@ function getRangeFromDate(range: ActivityRange): string {
 
 const RANGE_LABELS: Record<ActivityRange, string> = {
   today: "Today",
-  "30days": "Past 30 Days",
+  "30days": "30 Days",
 };
 
 function timeAgo(dateStr: string) {
