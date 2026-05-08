@@ -98,19 +98,6 @@ function actionIcon(action: string) {
   }
 }
 
-function actionLabel(action: string) {
-  switch (action) {
-    case "created": return "Created";
-    case "status_updated": return "Status Updated";
-    case "edited": return "Edited";
-    case "cancelled": return "Cancelled";
-    case "time_changed": return "Time Changed";
-    case "block_created": return "Block Created";
-    case "block_deleted": return "Block Deleted";
-    default: return action;
-  }
-}
-
 interface HomeViewProps {
   initialAppointments: AppointmentData[];
   initialActivities: ActivityItem[];
@@ -362,12 +349,11 @@ export default function HomeView({
                     <p className="text-body-sm leading-snug text-text-primary">
                       {act.description}
                     </p>
-                    <p className="mt-0.5 text-caption text-text-tertiary">
-                      {actionLabel(act.action)}
-                      {act.profiles?.full_name && (
-                        <> · {act.profiles.full_name}</>
-                      )}
-                    </p>
+                    {act.profiles?.full_name && (
+                      <p className="mt-0.5 text-caption text-text-tertiary">
+                        {act.profiles.full_name}
+                      </p>
+                    )}
                   </div>
 
                   {/* Time ago */}

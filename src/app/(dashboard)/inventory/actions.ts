@@ -95,12 +95,12 @@ export async function updateInventoryItem(
   if (error) return { error: error.message };
 
   if (before && before.quantity !== quantity) {
-    // Quantity changed → notify. e.g. "Gel polish: 12 → 10".
+    // Quantity changed → notify. e.g. "Stock · Gel polish 12 → 10".
     await logNotification(
       supabase,
       userId,
       "inventory_adjusted",
-      `${before.name}: ${before.quantity} → ${quantity}`,
+      `Stock · ${before.name} ${before.quantity} → ${quantity}`,
     );
     // Threshold crossing → also fire low-stock notification.
     if (before.quantity > before.low_stock_threshold && quantity <= lowStockThreshold) {
@@ -149,7 +149,7 @@ export async function updateInventoryQuantity(id: string, quantity: number) {
       supabase,
       userId,
       "inventory_adjusted",
-      `${before.name}: ${before.quantity} → ${quantity}`,
+      `Stock · ${before.name} ${before.quantity} → ${quantity}`,
     );
     if (before.quantity > before.low_stock_threshold && quantity <= before.low_stock_threshold) {
       await logNotification(

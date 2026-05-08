@@ -246,8 +246,12 @@ export async function createAppointment(
 
   // Fetch client name for activity description
   const { data: client } = await supabase.from("clients").select("name").eq("id", clientId).single();
-  await logActivity(supabase, appointment.id, "created",
-    `New appointment for ${client?.name || "Unknown"} on ${date} at ${time}`);
+  await logActivity(
+    supabase,
+    appointment.id,
+    "created",
+    `New appointment · ${client?.name || "Unknown"}`,
+  );
 
   // Fire-and-forget WhatsApp confirmation. Awaited so the send_log row
   // is written before we return — but failures don't fail the action.
@@ -344,8 +348,12 @@ export async function updateAppointment(
   }
 
   const { data: client } = await supabase.from("clients").select("name").eq("id", clientId).single();
-  await logActivity(supabase, id, "edited",
-    `Appointment for ${client?.name || "Unknown"} was edited`);
+  await logActivity(
+    supabase,
+    id,
+    "edited",
+    `Updated · ${client?.name || "Unknown"}'s appointment`,
+  );
 
   if (materialChange) {
     void dispatchAppointmentUpdated(id);
@@ -367,9 +375,14 @@ export async function updateAppointmentStatus(id: string, status: string) {
   const { data: client } = current?.client_id
     ? await supabase.from("clients").select("name").eq("id", current.client_id).single()
     : { data: null };
-  await logActivity(supabase, id, "status_updated",
-    `${client?.name || "Unknown"}'s appointment status changed to ${status.replace(/_/g, " ")}`,
-    current?.status, status);
+  await logActivity(
+    supabase,
+    id,
+    "status_updated",
+    `Status · ${client?.name || "Unknown"} → ${status.replace(/_/g, " ")}`,
+    current?.status,
+    status,
+  );
 
   // Status-driven WhatsApp notifications. Only fire on transition (not
   // when the status is re-set to the same value).
@@ -400,8 +413,12 @@ export async function cancelAppointment(id: string) {
   const { data: client } = current?.client_id
     ? await supabase.from("clients").select("name").eq("id", current.client_id).single()
     : { data: null };
-  await logActivity(supabase, id, "cancelled",
-    `${client?.name || "Unknown"}'s appointment was cancelled`);
+  await logActivity(
+    supabase,
+    id,
+    "cancelled",
+    `Cancelled · ${client?.name || "Unknown"}'s appointment`,
+  );
 
   // Only notify on the cancellation *transition* — re-cancelling an
   // already-cancelled appointment shouldn't double-send.
@@ -446,7 +463,7 @@ export async function deleteAppointment(id: string) {
     supabase,
     null,
     "deleted",
-    `${client?.name || "Unknown"}'s appointment was deleted`,
+    `Deleted · ${client?.name || "Unknown"}'s appointment`,
   );
 
   revalidatePath("/calendar");
@@ -468,9 +485,14 @@ export async function updateAppointmentTime(id: string, newTime: string) {
   const { data: client } = current?.client_id
     ? await supabase.from("clients").select("name").eq("id", current.client_id).single()
     : { data: null };
-  await logActivity(supabase, id, "time_changed",
-    `${client?.name || "Unknown"}'s appointment time changed to ${newTime}`,
-    current?.time, newTime);
+  await logActivity(
+    supabase,
+    id,
+    "time_changed",
+    `Rescheduled · ${client?.name || "Unknown"} → ${newTime}`,
+    current?.time,
+    newTime,
+  );
 
   // Drag-to-reschedule is a material change — notify the customer.
   if (current?.time !== newTime) {

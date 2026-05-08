@@ -321,19 +321,19 @@ export async function updateTeamMember(id: string, formData: FormData) {
       if (emailChanged) {
         logEntries.push({
           action: "credential_changed",
-          description: `${performerName} updated email for ${targetName}`,
+          description: `Updated · email for ${targetName}`,
         });
       }
       if (phoneChanged) {
         logEntries.push({
           action: "credential_changed",
-          description: `${performerName} updated phone for ${targetName}`,
+          description: `Updated · phone for ${targetName}`,
         });
       }
       if (newPassword) {
         logEntries.push({
           action: "credential_changed",
-          description: `${performerName} reset password for ${targetName}`,
+          description: `Updated · password for ${targetName}`,
         });
       }
       if (logEntries.length > 0) {
@@ -357,12 +357,11 @@ export async function updateTeamMember(id: string, formData: FormData) {
       });
       if (authErr) return { error: authErr.message };
 
-      const performerName = editor.full_name || "Owner";
       const targetName = existing.full_name || "team member";
       await supabase.from("activity_log").insert({
         appointment_id: null,
         action: "credential_changed",
-        description: `${performerName} reset password for ${targetName}`,
+        description: `Updated · password for ${targetName}`,
         performed_by: editor.id,
       });
     }
