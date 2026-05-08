@@ -404,13 +404,15 @@ export default function ReportsView({
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-surface-active p-1">
+      {/* Tabs — content-sized buttons that scroll horizontally on
+          mobile (5 tabs don't fit at small widths). On sm+ each tab
+          gets flex-1 so the strip fills the row as a segmented control. */}
+      <div className="flex gap-1 overflow-x-auto rounded-xl bg-surface-active p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 rounded-lg px-3 py-2 text-caption font-semibold transition-colors sm:text-body-sm ${
+            className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-caption font-semibold transition-colors sm:flex-1 sm:text-body-sm ${
               tab === t.key
                 ? "bg-white text-text-primary shadow-sm"
                 : "text-text-secondary hover:text-text-primary"
