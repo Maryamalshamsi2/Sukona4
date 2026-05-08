@@ -153,13 +153,17 @@ function NotificationRow({
 function actionDotColor(action: string): string {
   switch (action) {
     case "created":
+    case "petty_cash_added":
       return "bg-green-500";
     case "cancelled":
+    case "expense_added":
+    case "inventory_low_stock":
       return "bg-red-500";
     case "status_updated":
       return "bg-blue-500";
     case "time_changed":
     case "edited":
+    case "inventory_adjusted":
       return "bg-amber-500";
     default:
       return "bg-neutral-400";

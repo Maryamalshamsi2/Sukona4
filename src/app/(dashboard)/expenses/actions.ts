@@ -16,6 +16,24 @@ async function getCurrentUserRole() {
   return { supabase, role: data?.role || "staff", userId: user.id };
 }
 
+// Helper to log a notification row to activity_log. salon_id auto-fills
+// via the column default (migration 014). performed_by = the actor; the
+// bell filters out self-actions for these notification types so the
+// actor doesn't get notified about their own action.
+async function logNotification(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string | null,
+  action: string,
+  description: string,
+) {
+  await supabase.from("activity_log").insert({
+    appointment_id: null,
+    action,
+    description,
+    performed_by: userId,
+  });
+}
+
 export async function getExpenses() {
   const { supabase, role } = await getCurrentUserRole();
 
@@ -76,6 +94,14 @@ export async function createExpense(
       created_by: userId,
     });
   }
+
+  // Notification: short, scannable. e.g. "Expense · AED 30 (Supplies)".
+  await logNotification(
+    supabase,
+    userId,
+    "expense_added",
+    `Expense · AED ${amount}${expenseType ? ` (${expenseType})` : ""}`,
+  );
 
   revalidatePath("/expenses");
   return { success: true };
@@ -197,6 +223,15 @@ export async function addPettyCashDeposit(amount: number, description: string) {
   });
 
   if (error) return { error: error.message };
+
+  // Notification: e.g. "Petty cash · +AED 200".
+  await logNotification(
+    supabase,
+    userId,
+    "petty_cash_added",
+    `Petty cash · +AED ${amount}`,
+  );
+
   revalidatePath("/expenses");
   return { success: true };
 }

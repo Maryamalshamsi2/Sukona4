@@ -30,8 +30,20 @@ export async function getNotifications(limit = 20): Promise<{
   } = await supabase.auth.getUser();
   if (!user) return { items: [], unreadCount: 0 };
 
+  // Action types where the actor shouldn't see their own action in their
+  // bell (per UX spec: "only fire when someone other than the recipient
+  // adjusts"). Other action types — appointment_created, status_updated,
+  // etc. — are still useful as confirmations for the actor.
+  const SELF_FILTERED_ACTIONS = [
+    "expense_added",
+    "petty_cash_added",
+    "inventory_adjusted",
+    "inventory_low_stock",
+  ];
+
   // Fetch the recent activity rows + the user's last-read timestamp in
-  // parallel.
+  // parallel. We over-fetch (limit*2) so the post-filter still has room
+  // for `limit` items in the worst case where many were the user's own.
   const [activityRes, profileRes] = await Promise.all([
     supabase
       .from("activity_log")
@@ -40,7 +52,7 @@ export async function getNotifications(limit = 20): Promise<{
          profiles:performed_by ( full_name )`
       )
       .order("created_at", { ascending: false })
-      .limit(limit),
+      .limit(limit * 2),
     supabase
       .from("profiles")
       .select("notifications_last_read_at")
@@ -65,19 +77,25 @@ export async function getNotifications(limit = 20): Promise<{
     profiles: { full_name: string | null } | { full_name: string | null }[] | null;
   };
 
-  const items: NotificationItem[] = (activityRes.data as Row[]).map((r) => {
-    // PostgREST may return the joined profile as either an object or a
-    // single-element array depending on relationship cardinality.
-    const performer = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
-    return {
-      id: r.id,
-      appointment_id: r.appointment_id,
-      action: r.action,
-      description: r.description,
-      created_at: r.created_at,
-      performed_by_name: performer?.full_name ?? null,
-    };
-  });
+  const items: NotificationItem[] = (activityRes.data as Row[])
+    // Skip self-actions for the filtered types (no "you added an expense" toasts).
+    .filter((r) =>
+      !(SELF_FILTERED_ACTIONS.includes(r.action) && r.performed_by === user.id),
+    )
+    .slice(0, limit)
+    .map((r) => {
+      // PostgREST may return the joined profile as either an object or a
+      // single-element array depending on relationship cardinality.
+      const performer = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+      return {
+        id: r.id,
+        appointment_id: r.appointment_id,
+        action: r.action,
+        description: r.description,
+        created_at: r.created_at,
+        performed_by_name: performer?.full_name ?? null,
+      };
+    });
 
   // Unread count is bounded by the page size — for v1 that's fine.
   // If we hit the limit we show "20+" client-side.
