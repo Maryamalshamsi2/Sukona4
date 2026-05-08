@@ -328,7 +328,10 @@ export default function ReportsView({
   const TABS: { key: TabKey; label: string }[] = [
     { key: "appointments", label: "Appointments" },
     { key: "payments", label: "Payments" },
-    { key: "expenses", label: "Expenses" },
+    // Renamed from "Expenses" since the dashboard already has a top-level
+    // Expenses page; this tab also shows Revenue/Profit alongside the
+    // expenses list, so "Finance" is more accurate.
+    { key: "expenses", label: "Finance" },
     { key: "reviews", label: "Reviews" },
   ];
 
@@ -403,25 +406,10 @@ export default function ReportsView({
         </div>
       )}
 
-      {/* ===== Summary KPIs (always visible) =====
-           Top-of-page glance: Revenue, Expenses, Profit, Appointments.
-           The breakdowns by method / type live inside their respective
-           tabs below — no duplicate info on this page. */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <StatCard label="Revenue" value={formatCurrency(totalRevenue)} color="text-green-700" />
-        <StatCard label="Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
-        <StatCard
-          label="Profit"
-          value={formatCurrency(profit)}
-          color={profit >= 0 ? "text-green-700" : "text-red-600"}
-        />
-        <StatCard label="Appointments" value={String(totalAppointments)} sub={`${completedOrPaid} completed`} />
-      </div>
-
-      {/* Detail tabs — 2x2 grid on mobile, 4-up on desktop. Replaces the
-          previous 5-tab segmented control whose labels overflowed the
-          phone width. The Overview is no longer a tab — it lives above
-          and is always visible. */}
+      {/* Detail tabs — 2x2 grid on mobile, 4-up on desktop. Each tab is
+          self-contained: it owns its own counts/totals/summary. The
+          page header above is intentionally bare (just title + filter)
+          so the user lands somewhere quiet and drills in. */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {TABS.map((t) => (
           <button
@@ -551,13 +539,6 @@ export default function ReportsView({
           {/* ===== PAYMENTS TAB ===== */}
           {tab === "payments" && (
             <div className="space-y-4">
-              {/* Payment summary cards */}
-              <div className="grid grid-cols-3 gap-3">
-                <StatCard label="Total" value={formatCurrency(totalRevenue)} />
-                <StatCard label="Cash" value={formatCurrency(cashTotal)} sub={`${cashPayments.length} payments`} />
-                <StatCard label="Card" value={formatCurrency(cardTotal)} sub={`${cardPayments.length} payments`} />
-              </div>
-
               <div className="rounded-2xl bg-white ring-1 ring-border">
                 <div className="border-b border-border px-5 py-4 flex items-center justify-between">
                   <h3 className="text-body-sm font-semibold text-text-primary">
@@ -661,31 +642,51 @@ export default function ReportsView({
                         );
                       })}
                     </div>
+
+                    {/* Footer totals — quiet two-line breakdown, replaces the
+                        big stat cards that used to live at the top. */}
+                    <div className="border-t border-border px-5 py-3 text-body-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-text-secondary">Cash</span>
+                        <span className="font-semibold text-text-primary">{formatCurrency(cashTotal)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        <span className="text-text-secondary">Card</span>
+                        <span className="font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
             </div>
           )}
 
-          {/* ===== EXPENSES TAB ===== */}
+          {/* ===== EXPENSES (Finance) TAB =====
+               Top: Revenue / Expenses / Profit — the same KPIs that
+               used to live on the page header, presented as a quiet
+               three-line list. Below that: the expenses list with a
+               total footer. */}
           {tab === "expenses" && (
             <div className="space-y-4">
-              {/* Breakdown by type — moved here from the page-level header.
-                  Lives in the Expenses tab where it's contextually relevant
-                  rather than always-on at the top of the page. */}
-              {expenseBreakdown.length > 0 && (
-                <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-                  <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">By Type</p>
-                  <div className="mt-2 divide-y divide-border">
-                    {expenseBreakdown.map(([type, amount]) => (
-                      <div key={type} className="flex items-center justify-between py-2.5">
-                        <span className="text-body-sm text-text-secondary">{type}</span>
-                        <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(amount)}</span>
-                      </div>
-                    ))}
+              <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
+                <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Summary</p>
+                <div className="mt-2 divide-y divide-border">
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm text-text-secondary">Revenue</span>
+                    <span className="text-body-sm font-semibold text-green-700">{formatCurrency(totalRevenue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm text-text-secondary">Expenses</span>
+                    <span className="text-body-sm font-semibold text-red-600">{formatCurrency(totalExpenses)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm font-semibold text-text-primary">Profit</span>
+                    <span className={`text-body-sm font-bold ${profit >= 0 ? "text-green-700" : "text-red-600"}`}>
+                      {formatCurrency(profit)}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
 
               <div className="rounded-2xl bg-white ring-1 ring-border">
                 <div className="border-b border-border px-5 py-4 flex items-center justify-between">
@@ -754,30 +755,6 @@ export default function ReportsView({
                 )}
               </div>
 
-              {/* Expense by category breakdown */}
-              {expenseBreakdown.length > 0 && (
-                <div className="rounded-2xl bg-white ring-1 ring-border">
-                  <div className="border-b border-border px-5 py-4">
-                    <h3 className="text-body-sm font-semibold text-text-primary">By Category</h3>
-                  </div>
-                  <div className="p-6 space-y-3">
-                    {expenseBreakdown.map(([type, amount]) => {
-                      const pct = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
-                      return (
-                        <div key={type}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-body-sm text-text-primary">{type}</span>
-                            <span className="text-body-sm font-normal text-text-primary">{formatCurrency(amount)} <span className="text-caption text-text-tertiary">({pct.toFixed(0)}%)</span></span>
-                          </div>
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                            <div className="h-full rounded-full bg-neutral-900 transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
