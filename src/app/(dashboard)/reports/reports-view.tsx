@@ -92,7 +92,7 @@ export interface ReportReview {
   } | null;
 }
 
-type TabKey = "overview" | "appointments" | "payments" | "expenses" | "reviews";
+type TabKey = "appointments" | "payments" | "expenses" | "reviews";
 type DatePreset = "today" | "week" | "month" | "custom";
 
 // ---- Helpers ----
@@ -196,7 +196,7 @@ export default function ReportsView({
   initialExpenses,
   initialReviews,
 }: ReportsViewProps) {
-  const [tab, setTab] = useState<TabKey>("overview");
+  const [tab, setTab] = useState<TabKey>("appointments");
   const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -326,7 +326,6 @@ export default function ReportsView({
   // ---- Tab content ----
 
   const TABS: { key: TabKey; label: string }[] = [
-    { key: "overview", label: "Overview" },
     { key: "appointments", label: "Appointments" },
     { key: "payments", label: "Payments" },
     { key: "expenses", label: "Expenses" },
@@ -404,18 +403,71 @@ export default function ReportsView({
         </div>
       )}
 
-      {/* Tabs — content-sized buttons that scroll horizontally on
-          mobile (5 tabs don't fit at small widths). On sm+ each tab
-          gets flex-1 so the strip fills the row as a segmented control. */}
-      <div className="flex gap-1 overflow-x-auto rounded-xl bg-surface-active p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* ===== OVERVIEW (always visible header) =====
+           Summary stats + revenue/expense breakdowns sit permanently
+           above the tabs. The tabs below are for drilling into the
+           underlying data — a clean dashboard pattern (cf. Stripe,
+           Linear, Apple Health). */}
+      <div className="space-y-4 sm:space-y-6">
+        {/* 2x2 stat grid */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <StatCard label="Revenue" value={formatCurrency(totalRevenue)} color="text-green-700" />
+          <StatCard label="Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
+          <StatCard
+            label="Profit"
+            value={formatCurrency(profit)}
+            color={profit >= 0 ? "text-green-700" : "text-red-600"}
+          />
+          <StatCard label="Appointments" value={String(totalAppointments)} sub={`${completedOrPaid} completed`} />
+        </div>
+
+        {/* Two-column breakdowns */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
+            <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Revenue</p>
+            <div className="mt-2 divide-y divide-border">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-body-sm text-text-secondary">Cash</span>
+                <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cashTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-body-sm text-text-secondary">Card</span>
+                <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
+            <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Expenses</p>
+            {expenseBreakdown.length === 0 ? (
+              <p className="mt-2 py-2.5 text-body-sm text-text-tertiary">None this period</p>
+            ) : (
+              <div className="mt-2 divide-y divide-border">
+                {expenseBreakdown.map(([type, amount]) => (
+                  <div key={type} className="flex items-center justify-between py-2.5">
+                    <span className="text-body-sm text-text-secondary">{type}</span>
+                    <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Detail tabs — 2x2 grid on mobile, 4-up on desktop. Replaces the
+          previous 5-tab segmented control whose labels overflowed the
+          phone width. The Overview is no longer a tab — it lives above
+          and is always visible. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-caption font-semibold transition-colors sm:flex-1 sm:text-body-sm ${
+            className={`rounded-xl px-3 py-3 text-body-sm font-semibold transition-colors ${
               tab === t.key
-                ? "bg-white text-text-primary shadow-sm"
-                : "text-text-secondary hover:text-text-primary"
+                ? "bg-neutral-900 text-text-inverse"
+                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
             }`}
           >
             {t.label}
@@ -427,59 +479,6 @@ export default function ReportsView({
         <p className="py-16 text-center text-body-sm text-text-tertiary">Loading reports...</p>
       ) : (
         <>
-          {/* ===== OVERVIEW TAB ===== */}
-          {tab === "overview" && (
-            <div className="space-y-6">
-              {/* 2x2 stat grid */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <StatCard label="Revenue" value={formatCurrency(totalRevenue)} color="text-green-700" />
-                <StatCard label="Expenses" value={formatCurrency(totalExpenses)} color="text-red-600" />
-                <StatCard
-                  label="Profit"
-                  value={formatCurrency(profit)}
-                  color={profit >= 0 ? "text-green-700" : "text-red-600"}
-                />
-                <StatCard label="Appointments" value={String(totalAppointments)} sub={`${completedOrPaid} completed`} />
-              </div>
-
-              {/* Trimmed two-column breakdowns */}
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {/* Revenue breakdown */}
-                <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-                  <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Revenue</p>
-                  <div className="mt-2 divide-y divide-border">
-                    <div className="flex items-center justify-between py-2.5">
-                      <span className="text-body-sm text-text-secondary">Cash</span>
-                      <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cashTotal)}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2.5">
-                      <span className="text-body-sm text-text-secondary">Card</span>
-                      <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expense breakdown */}
-                <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-                  <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Expenses</p>
-                  {expenseBreakdown.length === 0 ? (
-                    <p className="mt-2 py-2.5 text-body-sm text-text-tertiary">None this period</p>
-                  ) : (
-                    <div className="mt-2 divide-y divide-border">
-                      {expenseBreakdown.map(([type, amount]) => (
-                        <div key={type} className="flex items-center justify-between py-2.5">
-                          <span className="text-body-sm text-text-secondary">{type}</span>
-                          <span className="text-body-sm font-semibold text-text-primary">{formatCurrency(amount)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          )}
-
           {/* ===== APPOINTMENTS TAB ===== */}
           {tab === "appointments" && (
             <div className="rounded-2xl bg-white ring-1 ring-border">

@@ -1130,11 +1130,15 @@ export default function CalendarView({
                   key={member.id}
                   className="min-w-[100px] sm:min-w-[180px] flex-1 border-r border-border last:border-r-0"
                 >
-                  {/* Staff header — for the staff's own column, the bottom divider
-                      is upgraded from 1px grey to a 3px orange marker, matching
-                      the home page's "this is yours" accent pattern. */}
+                  {/* Staff header — fixed height that matches the time-column
+                      header so the body grids start at the same Y on every
+                      column (otherwise the now-line and now-dot end up at
+                      different vertical positions on mobile, where the staff
+                      header would otherwise be content-sized).
+                      For the staff's own column, the bottom divider is
+                      upgraded from 1px grey to a 3px orange marker. */}
                   <div
-                    className={`sticky top-0 z-10 flex items-center justify-center gap-2 bg-white px-2 py-2 sm:h-12 ${
+                    className={`sticky top-0 z-10 flex h-[52px] items-center justify-center gap-2 bg-white px-2 sm:h-12 ${
                       isOwnColumn ? "border-b-[3px] border-b-primary-500" : "border-b border-border"
                     }`}
                   >
