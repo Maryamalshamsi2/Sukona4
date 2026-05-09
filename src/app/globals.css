@@ -285,3 +285,26 @@ article li,
     }
   }
 }
+
+/* ============================================================
+   iOS auto-zoom prevention on form controls.
+
+   Mobile Safari zooms the viewport whenever a focused input has
+   font-size < 16 CSS pixels — disorienting and breaks the layout
+   until you manually zoom back out. The fix is well-known: keep
+   form controls at >= 16px on mobile.
+
+   Several inputs in this app use Tailwind's text-body-sm (14px)
+   or text-caption (12px) for visual density. Rather than auditing
+   every input className, this rule sets a 16px floor on all form
+   controls below sm: — desktop is unaffected. Static text isn't
+   touched, only inputs/selects/textareas where focus would trigger
+   the zoom.
+   ============================================================ */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
