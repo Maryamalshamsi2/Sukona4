@@ -19,6 +19,10 @@ export interface AppointmentService {
   staff_id: string | null;
   is_parallel: boolean;
   sort_order: number;
+  // Bundle tracking (migration 025). See calendar-shared.AppointmentServiceData.
+  bundle_id?: string | null;
+  bundle_instance_id?: string | null;
+  bundle_total_price?: number | null;
   services: { id: string; name: string; price: number; duration_minutes: number } | null;
 }
 
@@ -327,7 +331,22 @@ export default function ReportsView({
   // narrower shape).
   function getApptRevenue(appt: ReportAppointment) {
     if (appt.total_override != null) return Number(appt.total_override);
-    const subtotal = appt.appointment_services.reduce((s, as2) => s + (as2.services?.price || 0), 0);
+    // Bundle-aware subtotal: dedup by bundle_instance_id so two copies of
+    // the same bundle each contribute their own bundle price (and a row
+    // that's part of a bundle doesn't double up its individual service
+    // price). Mirrors getApptSubtotal in calendar-shared.
+    let subtotal = 0;
+    const seenInstances = new Set<string>();
+    for (const as of appt.appointment_services) {
+      if (as.bundle_instance_id) {
+        if (!seenInstances.has(as.bundle_instance_id)) {
+          seenInstances.add(as.bundle_instance_id);
+          subtotal += Number(as.bundle_total_price ?? 0);
+        }
+        continue;
+      }
+      subtotal += as.services?.price || 0;
+    }
     const transport = Number(appt.transportation_charge ?? 0);
     const discountValue = Number(appt.discount_value ?? 0);
     let discount = 0;

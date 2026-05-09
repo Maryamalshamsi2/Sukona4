@@ -52,6 +52,16 @@ export interface AppointmentServiceData {
   is_parallel: boolean;
   sort_order: number;
   services: { id: string; name: string; price: number; duration_minutes: number } | null;
+  // Bundle tracking (migration 025). Populated when the row was added as
+  // part of a bundle pick. bundle_instance_id is fresh per "add bundle"
+  // action so two copies of the same bundle on one appointment are
+  // distinguishable. bundle_total_price snapshots the effective bundle
+  // price at save time; one row per instance carries the full amount and
+  // getApptSubtotal dedups by instance.
+  bundle_id?: string | null;
+  bundle_instance_id?: string | null;
+  bundle_total_price?: number | null;
+  bundle_name?: string | null;
 }
 
 export interface AppointmentData {
@@ -122,8 +132,16 @@ export interface ServiceEntry {
   service_id: string;
   staff_id: string;
   is_parallel: boolean;
+  /** Catalog ID of the bundle this entry came from. */
   bundle_id?: string;
+  /** Per-instance UUID. Stable across the form's lifetime so two copies
+   *  of the same bundle don't collide. Generated fresh on each pick. */
+  bundle_instance_id?: string;
   bundle_name?: string;
+  /** Snapshot of the bundle's effective price at the time it was picked.
+   *  Persisted on save so the appointment retains its price even if the
+   *  catalog bundle is later edited. */
+  bundle_total_price?: number;
 }
 
 // ---- Constants ----
@@ -221,7 +239,23 @@ export function getApptEndTime(appt: AppointmentData) {
 // Final total: total_override ?? max(0, subtotal + transport - discount).
 
 export function getApptSubtotal(appt: AppointmentData): number {
-  return appt.appointment_services.reduce((s, as2) => s + (as2.services?.price || 0), 0);
+  // Bundle-aware sum. Rows with a bundle_instance_id contribute the
+  // bundle's total price once per instance (via bundle_total_price);
+  // subsequent rows of the same instance contribute 0. Rows without an
+  // instance ID are plain services and contribute their service price.
+  let total = 0;
+  const seenInstances = new Set<string>();
+  for (const as of appt.appointment_services) {
+    if (as.bundle_instance_id) {
+      if (!seenInstances.has(as.bundle_instance_id)) {
+        seenInstances.add(as.bundle_instance_id);
+        total += Number(as.bundle_total_price ?? 0);
+      }
+      continue;
+    }
+    total += as.services?.price || 0;
+  }
+  return total;
 }
 
 export function getApptTransport(appt: AppointmentData): number {
@@ -392,22 +426,52 @@ export function DetailView({
           <div className="space-y-2.5">
             {timings.map((t, i) => {
               const staffMember = staff.find((s) => s.id === t.svc.staff_id);
+              // Bundle grouping (migration 025). When a row carries a
+              // bundle_instance_id and the previous row does not share it,
+              // we're at the start of a bundle group — render a header
+              // with the bundle name + its total price and suppress
+              // per-service prices for rows in the group (the bundle
+              // price replaces them).
+              const inBundle = !!t.svc.bundle_instance_id;
+              const prevInstance = i > 0 ? timings[i - 1].svc.bundle_instance_id : null;
+              const isFirstInBundle = inBundle && prevInstance !== t.svc.bundle_instance_id;
               return (
-                <div key={t.svc.id || i} className="rounded-lg bg-surface-hover px-3 py-2.5 text-body-sm">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-text-primary">{t.svc.services?.name || "Unknown"}</p>
-                    <span className="font-semibold text-text-primary">AED {t.svc.services?.price || 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-1.5">
-                    <p className="text-text-secondary">
-                      {formatDuration(t.endMin - t.startMin)}
-                      {t.svc.is_parallel && <span className="ml-1">(parallel)</span>}
-                    </p>
-                    {staffMember && (
-                      <span className="rounded-full bg-surface-active px-2 py-0.5 text-caption font-semibold text-text-primary">
-                        {staffMember.full_name}
-                      </span>
-                    )}
+                <div key={t.svc.id || i}>
+                  {isFirstInBundle && (
+                    <div className="flex items-center justify-between mb-1.5 px-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-body-sm font-semibold text-text-primary">
+                          {t.svc.bundle_name || "Bundle"}
+                        </span>
+                        <span className="rounded-full bg-surface-active px-2 py-0.5 text-caption font-medium text-text-secondary">
+                          Bundle
+                        </span>
+                      </div>
+                      {t.svc.bundle_total_price != null && (
+                        <span className="text-body-sm font-semibold text-text-primary">
+                          AED {Math.round(Number(t.svc.bundle_total_price))}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="rounded-lg bg-surface-hover px-3 py-2.5 text-body-sm">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-text-primary">{t.svc.services?.name || "Unknown"}</p>
+                      {!inBundle && (
+                        <span className="font-semibold text-text-primary">AED {t.svc.services?.price || 0}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <p className="text-text-secondary">
+                        {formatDuration(t.endMin - t.startMin)}
+                        {t.svc.is_parallel && <span className="ml-1">(parallel)</span>}
+                      </p>
+                      {staffMember && (
+                        <span className="rounded-full bg-surface-active px-2 py-0.5 text-caption font-semibold text-text-primary">
+                          {staffMember.full_name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -865,12 +929,31 @@ export function AppointmentForm({
       const bundle = bundles?.find((b) => b.id === bundleId);
       if (!bundle) return;
       const sorted = [...bundle.service_bundle_items].sort((a, b) => a.sort_order - b.sort_order);
+      // Fresh instance ID + price snapshot per pick. Two copies of the
+      // same bundle get different instance IDs so they don't collide in
+      // the dedup-by-instance subtotal calc.
+      const instanceId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${bundle.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const originalPrice = bundle.service_bundle_items.reduce(
+        (sum, item) => sum + (item.services?.price || 0),
+        0,
+      );
+      const bundleTotal =
+        bundle.discount_type === "fixed" && bundle.fixed_price != null
+          ? bundle.fixed_price
+          : bundle.discount_percentage != null
+            ? Math.round(originalPrice * (1 - bundle.discount_percentage / 100))
+            : originalPrice;
       const bundleEntries: ServiceEntry[] = sorted.map((item) => ({
         service_id: item.service_id,
         staff_id: "",
         is_parallel: false,
         bundle_id: bundle.id,
+        bundle_instance_id: instanceId,
         bundle_name: bundle.name,
+        bundle_total_price: bundleTotal,
       }));
       // Replace the current entry with the bundle's services
       const before = serviceEntries.slice(0, idx);
@@ -886,7 +969,13 @@ export function AppointmentForm({
     updated[idx] = { ...updated[idx], [field]: value };
     // If changing service_id, clear bundle association
     if (field === "service_id") {
-      updated[idx] = { ...updated[idx], bundle_id: undefined, bundle_name: undefined };
+      updated[idx] = {
+        ...updated[idx],
+        bundle_id: undefined,
+        bundle_instance_id: undefined,
+        bundle_name: undefined,
+        bundle_total_price: undefined,
+      };
     }
     setServiceEntries(updated);
   }
@@ -911,29 +1000,40 @@ export function AppointmentForm({
 
   const totalDuration = calcTotalDuration();
 
-  // Calculate total price with bundle discounts
+  // Calculate total price with bundle discounts. Dedup by
+  // bundle_instance_id (not bundle_id) so two copies of the same bundle
+  // each contribute their own bundle price.
   const totalPrice = (() => {
     let total = 0;
-    const processedBundles = new Set<string>();
+    const processedInstances = new Set<string>();
     for (const entry of serviceEntries) {
-      if (entry.bundle_id && !processedBundles.has(entry.bundle_id)) {
-        processedBundles.add(entry.bundle_id);
-        const bundle = bundles?.find((b) => b.id === entry.bundle_id);
-        if (bundle) {
-          const originalPrice = bundle.service_bundle_items.reduce(
-            (sum, item) => sum + (item.services?.price || 0), 0
-          );
-          const bundlePrice = bundle.discount_type === "fixed" && bundle.fixed_price != null
-            ? bundle.fixed_price
-            : bundle.discount_percentage != null
-              ? originalPrice * (1 - bundle.discount_percentage / 100)
-              : originalPrice;
-          total += bundlePrice;
+      if (entry.bundle_instance_id) {
+        if (!processedInstances.has(entry.bundle_instance_id)) {
+          processedInstances.add(entry.bundle_instance_id);
+          // Prefer the snapshot stamped at pick time; fall back to looking
+          // up the catalog price (covers legacy entries that were
+          // re-hydrated from DB without bundle_total_price).
+          if (entry.bundle_total_price != null) {
+            total += entry.bundle_total_price;
+          } else {
+            const bundle = bundles?.find((b) => b.id === entry.bundle_id);
+            if (bundle) {
+              const originalPrice = bundle.service_bundle_items.reduce(
+                (sum, item) => sum + (item.services?.price || 0), 0
+              );
+              const bundlePrice = bundle.discount_type === "fixed" && bundle.fixed_price != null
+                ? bundle.fixed_price
+                : bundle.discount_percentage != null
+                  ? originalPrice * (1 - bundle.discount_percentage / 100)
+                  : originalPrice;
+              total += bundlePrice;
+            }
+          }
         }
-      } else if (!entry.bundle_id) {
-        const svc = services.find((s) => s.id === entry.service_id);
-        total += svc?.price || 0;
+        continue;
       }
+      const svc = services.find((s) => s.id === entry.service_id);
+      total += svc?.price || 0;
     }
     return Math.round(total);
   })();
@@ -1105,22 +1205,29 @@ export function AppointmentForm({
         <div className="space-y-3">
           {serviceEntries.map((entry, idx) => {
             const selectedService = services.find((s) => s.id === entry.service_id);
-            // Show bundle header for the first entry in a bundle group
-            const isFirstInBundle = entry.bundle_id && (idx === 0 || serviceEntries[idx - 1].bundle_id !== entry.bundle_id);
-            const isInBundle = !!entry.bundle_id;
-            // Compute bundle price for header
+            // Show bundle header for the first entry in a bundle group.
+            // Compare on instance ID (not bundle ID) so two consecutive
+            // copies of the same bundle each get their own header.
+            const isFirstInBundle = !!entry.bundle_instance_id && (idx === 0 || serviceEntries[idx - 1].bundle_instance_id !== entry.bundle_instance_id);
+            const isInBundle = !!entry.bundle_instance_id;
+            // Bundle price for the header — prefer the snapshot stamped
+            // when the bundle was picked, fall back to the catalog price.
             let bundlePriceDisplay: number | null = null;
-            if (isFirstInBundle && entry.bundle_id) {
-              const bundle = bundles?.find((b) => b.id === entry.bundle_id);
-              if (bundle) {
-                const originalPrice = bundle.service_bundle_items.reduce(
-                  (sum, item) => sum + (item.services?.price || 0), 0
-                );
-                bundlePriceDisplay = bundle.discount_type === "fixed" && bundle.fixed_price != null
-                  ? bundle.fixed_price
-                  : bundle.discount_percentage != null
-                    ? Math.round(originalPrice * (1 - bundle.discount_percentage / 100))
-                    : null;
+            if (isFirstInBundle) {
+              if (entry.bundle_total_price != null) {
+                bundlePriceDisplay = Math.round(entry.bundle_total_price);
+              } else if (entry.bundle_id) {
+                const bundle = bundles?.find((b) => b.id === entry.bundle_id);
+                if (bundle) {
+                  const originalPrice = bundle.service_bundle_items.reduce(
+                    (sum, item) => sum + (item.services?.price || 0), 0
+                  );
+                  bundlePriceDisplay = bundle.discount_type === "fixed" && bundle.fixed_price != null
+                    ? bundle.fixed_price
+                    : bundle.discount_percentage != null
+                      ? Math.round(originalPrice * (1 - bundle.discount_percentage / 100))
+                      : null;
+                }
               }
             }
 
@@ -1220,9 +1327,10 @@ export function AppointmentForm({
 
                     {serviceEntries.length > 1 && (
                       <button type="button" onClick={() => {
-                        if (isInBundle && entry.bundle_id) {
-                          // Remove all entries from this bundle
-                          setServiceEntries(serviceEntries.filter((e) => e.bundle_id !== entry.bundle_id));
+                        if (isInBundle && entry.bundle_instance_id) {
+                          // Remove every entry that belongs to THIS bundle
+                          // instance (not all instances of the same bundle).
+                          setServiceEntries(serviceEntries.filter((e) => e.bundle_instance_id !== entry.bundle_instance_id));
                         } else {
                           removeServiceEntry(idx);
                         }

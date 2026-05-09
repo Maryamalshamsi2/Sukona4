@@ -155,6 +155,10 @@ export async function getTodayAppointments(date: string) {
         staff_id,
         is_parallel,
         sort_order,
+        bundle_id,
+        bundle_instance_id,
+        bundle_total_price,
+        bundle_name,
         services:service_id ( id, name, price, duration_minutes )
       ),
       payments ( id, amount, method, note, receipt_url, created_at )

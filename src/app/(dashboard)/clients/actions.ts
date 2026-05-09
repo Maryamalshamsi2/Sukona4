@@ -75,6 +75,10 @@ export async function getClientAppointments(clientId: string) {
         staff_id,
         is_parallel,
         sort_order,
+        bundle_id,
+        bundle_instance_id,
+        bundle_total_price,
+        bundle_name,
         services:service_id ( id, name, price, duration_minutes )
       ),
       reviews ( id, rating, comment, submitted_at )

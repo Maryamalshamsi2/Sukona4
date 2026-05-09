@@ -499,9 +499,11 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                   )
                 ).join(", ");
 
-                const totalPrice = appt.appointment_services.reduce(
-                  (sum, as2) => sum + (as2.services?.price || 0), 0
-                );
+                // Use the bundle-aware helper so two copies of the same
+                // bundle each contribute their own price, and any
+                // appointment-level adjustments (transport / discount /
+                // override) are reflected.
+                const totalPrice = getApptTotal(appt);
 
                 return (
                   <button
@@ -641,6 +643,12 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                   service_id: as2.service_id,
                   staff_id: as2.staff_id || "",
                   is_parallel: as2.is_parallel,
+                  // Carry the bundle association forward so editing
+                  // preserves bundle pricing instead of dropping it.
+                  bundle_id: as2.bundle_id ?? undefined,
+                  bundle_instance_id: as2.bundle_instance_id ?? undefined,
+                  bundle_name: as2.bundle_name ?? undefined,
+                  bundle_total_price: as2.bundle_total_price ?? undefined,
                 })),
             }}
           />

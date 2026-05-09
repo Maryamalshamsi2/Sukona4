@@ -46,6 +46,10 @@ export async function getAppointmentsForDate(date: string) {
         staff_id,
         is_parallel,
         sort_order,
+        bundle_id,
+        bundle_instance_id,
+        bundle_total_price,
+        bundle_name,
         services:service_id ( id, name, price, duration_minutes )
       ),
       reviews ( id, rating, comment, submitted_at ),
@@ -174,6 +178,13 @@ export interface ServiceEntry {
   staff_id: string;
   is_parallel: boolean;
   sort_order?: number;
+  // Bundle fields (migration 025). Optional — undefined for plain
+  // services or for legacy entries hydrated from rows that predate the
+  // migration.
+  bundle_id?: string;
+  bundle_instance_id?: string;
+  bundle_name?: string;
+  bundle_total_price?: number;
 }
 
 export interface AppointmentAdjustments {
@@ -219,13 +230,21 @@ export async function createAppointment(
 
   if (error) return { error: error.message };
 
-  // Insert appointment_services
+  // Insert appointment_services. Bundle fields (migration 025) get
+  // stamped on rows that came from a bundle pick. The bundle's full
+  // effective price is stored on every row of the same instance — the
+  // bundle-aware subtotal calc dedups by bundle_instance_id so the
+  // amount only counts once.
   const rows = serviceEntries.map((e, i) => ({
     appointment_id: appointment.id,
     service_id: e.service_id,
     staff_id: e.staff_id,
     is_parallel: i === 0 ? false : e.is_parallel,
     sort_order: i,
+    bundle_id: e.bundle_id ?? null,
+    bundle_instance_id: e.bundle_instance_id ?? null,
+    bundle_total_price: e.bundle_total_price ?? null,
+    bundle_name: e.bundle_name ?? null,
   }));
 
   const { error: svcError } = await supabase
@@ -329,6 +348,12 @@ export async function updateAppointment(
     staff_id: e.staff_id,
     is_parallel: i === 0 ? false : e.is_parallel,
     sort_order: i,
+    // Bundle fields (migration 025) — see createAppointment for how the
+    // bundle_total_price snapshot interacts with the subtotal calc.
+    bundle_id: e.bundle_id ?? null,
+    bundle_instance_id: e.bundle_instance_id ?? null,
+    bundle_total_price: e.bundle_total_price ?? null,
+    bundle_name: e.bundle_name ?? null,
   }));
   const { error: insSvcErr } = await supabase.from("appointment_services").insert(rows);
   if (insSvcErr) return { error: `Insert services: ${insSvcErr.message}` };

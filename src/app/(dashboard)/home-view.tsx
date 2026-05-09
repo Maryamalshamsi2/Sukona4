@@ -458,6 +458,12 @@ export default function HomeView({
                   service_id: as2.service_id,
                   staff_id: as2.staff_id || "",
                   is_parallel: as2.is_parallel,
+                  // Carry the bundle association forward so editing
+                  // preserves bundle pricing instead of dropping it.
+                  bundle_id: as2.bundle_id ?? undefined,
+                  bundle_instance_id: as2.bundle_instance_id ?? undefined,
+                  bundle_name: as2.bundle_name ?? undefined,
+                  bundle_total_price: as2.bundle_total_price ?? undefined,
                 })),
             }}
           />
