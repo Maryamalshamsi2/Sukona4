@@ -606,7 +606,7 @@ export function DetailView({
               onClick={onNoShow}
               className="text-text-secondary hover:text-text-primary"
             >
-              ← Mark as No-show
+              ← No-show
             </button>
           ) : (
             <span />
@@ -616,24 +616,27 @@ export function DetailView({
               onClick={() => onStatusUpdate("paid")}
               className="text-text-secondary hover:text-text-primary"
             >
-              Skip to Mark Paid →
+              Mark Paid →
             </button>
           ) : (
             <span />
           )}
         </div>
       )}
-      <div className="flex items-center gap-3 border-t border-border pt-4">
+      <div className="flex items-center gap-2 border-t border-border pt-4 sm:gap-3">
         {nextStatus && (
           <button onClick={() => onStatusUpdate(nextStatus.value)}
-            className={`flex-1 rounded-xl px-4 py-2.5 text-body-sm font-semibold transition-colors ${nextStatus.color} hover:opacity-80`}>
+            className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-body-sm font-semibold transition-colors ${nextStatus.color} hover:opacity-80`}>
             {nextStatus.label}
           </button>
         )}
         {canEdit && isActive && (
+          // Auto-sized (no flex-1) so the primary status button gets the
+          // extra horizontal room — was making "On the Way" cramped on
+          // mobile when both buttons split the width 50/50.
           <button onClick={onCancel}
-            className="flex-1 whitespace-nowrap rounded-xl border border-red-200 px-3 py-2.5 text-body-sm font-semibold text-error-700 hover:bg-red-50 transition-colors">
-            Cancel Appointment
+            className="shrink-0 whitespace-nowrap rounded-xl border border-red-200 px-3 py-2.5 text-body-sm font-semibold text-error-700 hover:bg-red-50 transition-colors">
+            Cancel
           </button>
         )}
         {canEdit && (
