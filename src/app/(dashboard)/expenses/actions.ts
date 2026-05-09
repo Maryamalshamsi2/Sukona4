@@ -90,7 +90,10 @@ export async function createExpense(
 
   if (error) return { error: error.message };
 
-  // If paid from petty cash, create a withdrawal log entry
+  // If paid from petty cash, create a withdrawal log entry. The
+  // is_private flag (migration 029) is carried forward so the read
+  // path can redact the description for staff while keeping the
+  // amount + balance accurate across roles.
   if (paidFromPettyCash && data) {
     await supabase.from("petty_cash_log").insert({
       amount,
@@ -98,6 +101,7 @@ export async function createExpense(
       description: `Expense: ${description}`,
       expense_id: data.id,
       created_by: userId,
+      is_private: isPrivate,
     });
   }
 
@@ -167,14 +171,16 @@ export async function updateExpense(
       description: `Expense: ${description}`,
       expense_id: id,
       created_by: userId,
+      is_private: isPrivate,
     });
   } else if (wasPettyCash && !paidFromPettyCash) {
     // Removed petty cash — delete the withdrawal log
     await supabase.from("petty_cash_log").delete().eq("expense_id", id);
   } else if (wasPettyCash && paidFromPettyCash) {
-    // Still petty cash — update amount/description
+    // Still petty cash — update amount/description + privacy flag
+    // (the expense's privacy can flip on edit too).
     await supabase.from("petty_cash_log")
-      .update({ amount, description: `Expense: ${description}` })
+      .update({ amount, description: `Expense: ${description}`, is_private: isPrivate })
       .eq("expense_id", id);
   }
 
@@ -212,13 +218,28 @@ export async function getPettyCashBalance() {
 }
 
 export async function getPettyCashLog() {
-  const supabase = await createClient();
+  const { supabase, role } = await getCurrentUserRole();
   const { data, error } = await supabase
     .from("petty_cash_log")
     .select("*, profiles:created_by ( full_name )")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
+
+  // Migration 029: staff get a generic description for private rows.
+  // Owner + admin keep the real text. Amount, type, timestamp, and
+  // running balance are unaffected — they need to reconcile across
+  // roles. The is_private flag itself is stripped from the response
+  // so it doesn't show up in client devtools.
+  if (role === "staff") {
+    type Row = { is_private?: boolean; description: string } & Record<string, unknown>;
+    return (data as Row[]).map((row) => {
+      const { is_private, ...rest } = row;
+      return is_private
+        ? { ...rest, description: "Private expense" }
+        : rest;
+    });
+  }
   return data;
 }
 
