@@ -207,8 +207,9 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       setError(result.error);
       return;
     }
-    setDetailModalOpen(false);
-    setSelectedAppointment(null);
+    // Keep the drawer open so the user can keep advancing without re-tapping.
+    // Patch the local copy so DetailView re-renders with the new next-status.
+    setSelectedAppointment({ ...selectedAppointment, status });
     refreshClientAppointments();
   }
 

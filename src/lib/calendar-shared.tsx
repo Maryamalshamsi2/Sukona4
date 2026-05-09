@@ -473,6 +473,21 @@ export function DetailView({
       )}
 
       {/* ---- Actions ---- */}
+      {/* Skip-to-paid shortcut. The linear status flow is
+          scheduled → on_the_way → arrived → paid; tapping the next-status
+          button only advances one step. For salons that just want to record
+          payment without ticking through every intermediate state, this
+          jumps straight to the Mark Paid modal. Hidden when the next step
+          is already "paid" (so we don't show two buttons that do the same
+          thing) or when the appointment is no longer active. */}
+      {canEdit && isActive && nextStatus && nextStatus.value !== "paid" && (
+        <button
+          onClick={() => onStatusUpdate("paid")}
+          className="-mb-1 block w-full text-right text-caption font-semibold text-text-secondary hover:text-text-primary"
+        >
+          Skip to Mark Paid →
+        </button>
+      )}
       <div className="flex items-center gap-3 border-t border-border pt-4">
         {nextStatus && (
           <button onClick={() => onStatusUpdate(nextStatus.value)}

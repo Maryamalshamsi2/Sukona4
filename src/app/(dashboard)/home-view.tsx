@@ -195,8 +195,11 @@ export default function HomeView({
     }
     const result = await updateAppointmentStatus(selectedAppointment.id, status);
     if (result.error) { setError(result.error); return; }
-    setDetailModalOpen(false);
-    setSelectedAppointment(null);
+    // Keep the drawer open so the user can keep advancing in one go
+    // (scheduled → on_the_way → arrived → paid) without re-tapping the
+    // appointment row each time. Patch the local copy so DetailView
+    // re-renders with the new "next status" label.
+    setSelectedAppointment({ ...selectedAppointment, status });
     reload();
   }
 

@@ -802,8 +802,9 @@ export default function CalendarView({
     }
     const result = await updateAppointmentStatus(selectedAppointment.id, status);
     if (result.error) { setError(result.error); return; }
-    setDetailModalOpen(false);
-    setSelectedAppointment(null);
+    // Keep the drawer open so the user can keep advancing without re-tapping
+    // the appointment block. Patch the local copy so DetailView re-renders.
+    setSelectedAppointment({ ...selectedAppointment, status });
     reload();
   }
 
