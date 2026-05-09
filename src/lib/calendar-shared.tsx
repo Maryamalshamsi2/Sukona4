@@ -404,7 +404,16 @@ export function DetailView({
         <h3 className="text-body font-bold text-text-primary mb-2">Client</h3>
         <div className="space-y-1 text-body-sm">
           <p className="font-semibold text-text-primary">{appointment.clients?.name || "Unknown"}</p>
-          {appointment.clients?.phone && <p className="text-text-secondary">{appointment.clients.phone}</p>}
+          {appointment.clients?.phone && (
+            <p>
+              <a
+                href={`tel:${appointment.clients.phone}`}
+                className="text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+              >
+                {appointment.clients.phone}
+              </a>
+            </p>
+          )}
           {appointment.clients?.address && <p className="text-text-secondary">{appointment.clients.address}</p>}
           {appointment.clients?.map_link && (
             <a href={appointment.clients.map_link} target="_blank" rel="noopener noreferrer"

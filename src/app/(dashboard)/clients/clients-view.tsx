@@ -59,6 +59,10 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   const [editing, setEditing] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phoneValue, setPhoneValue] = useState("");
+  // Free-text filter applied to name / phone / address. Case-insensitive,
+  // matches against normalized phone (digits only) so "0501234567" finds
+  // "+971 50 123 4567" and vice-versa.
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ---- Client appointments list modal ----
   const [listModalOpen, setListModalOpen] = useState(false);
@@ -277,6 +281,23 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     loadClients();
   }
 
+  // Filter clients by name / phone / address. Phone match strips non-digits
+  // on both sides so a query like "501234567" finds "+971 50 123 4567".
+  const trimmedQuery = searchQuery.trim();
+  const queryLower = trimmedQuery.toLowerCase();
+  const queryDigits = trimmedQuery.replace(/\D/g, "");
+  const filteredClients = !trimmedQuery
+    ? clients
+    : clients.filter((c) => {
+        if (c.name?.toLowerCase().includes(queryLower)) return true;
+        if (c.address?.toLowerCase().includes(queryLower)) return true;
+        if (queryDigits && c.phone) {
+          const phoneDigits = c.phone.replace(/\D/g, "");
+          if (phoneDigits.includes(queryDigits)) return true;
+        }
+        return false;
+      });
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
@@ -296,6 +317,42 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
         )}
       </div>
 
+      {/* Search box. Hidden when there are no clients yet — the empty
+          state below covers that case and a search field would be
+          confusing on an empty list. */}
+      {clients.length > 0 && (
+        <div className="relative mt-4">
+          <svg
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" />
+          </svg>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, phone, or location"
+            className="w-full rounded-xl border-[1.5px] border-neutral-200 bg-white pl-10 pr-4 py-2.5 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-text-tertiary hover:bg-surface-hover hover:text-text-primary"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
       {error && (
         <p className="mt-4 text-body-sm text-error-700">{error}</p>
       )}
@@ -308,8 +365,15 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
         </div>
       ) : (
         <div className="mt-6 overflow-hidden rounded-2xl ring-1 ring-border bg-white">
+          {/* No-results state inside the card so the search box stays visible. */}
+          {filteredClients.length === 0 && (
+            <div className="px-6 py-10 text-center text-body-sm text-text-secondary">
+              No clients match {`"${trimmedQuery}"`}.
+            </div>
+          )}
+
           {/* Desktop: table */}
-          <div className="hidden sm:block">
+          <div className={`hidden ${filteredClients.length > 0 ? "sm:block" : ""}`}>
             <table className="w-full text-left text-body-sm">
               <thead className="border-b border-border bg-surface-hover">
                 <tr>
@@ -321,7 +385,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {clients.map((client) => (
+                {filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-surface-hover">
                     <td className="px-5 py-4">
                       <button
@@ -331,7 +395,19 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                         {client.name}
                       </button>
                     </td>
-                    <td className="px-5 py-4 text-text-secondary">{client.phone || "—"}</td>
+                    <td className="px-5 py-4 text-text-secondary">
+                      {client.phone ? (
+                        <a
+                          href={`tel:${client.phone}`}
+                          className="hover:text-text-primary hover:underline underline-offset-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {client.phone}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="px-5 py-4 text-text-secondary">
                       <div>
                         {client.address || "—"}
@@ -364,7 +440,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
 
           {/* Mobile: cards */}
           <div className="divide-y divide-black/[0.04] sm:hidden">
-            {clients.map((client) => (
+            {filteredClients.map((client) => (
               <div key={client.id} className="p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -374,7 +450,13 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                     >
                       {client.name}
                     </button>
-                    {client.phone && <p className="mt-1 text-body-sm text-text-secondary">{client.phone}</p>}
+                    {client.phone && (
+                      <p className="mt-1 text-body-sm text-text-secondary">
+                        <a href={`tel:${client.phone}`} className="hover:text-text-primary">
+                          {client.phone}
+                        </a>
+                      </p>
+                    )}
                     {client.address && <p className="mt-1 text-body-sm text-text-secondary truncate">{client.address}</p>}
                     {client.map_link && (
                       <a href={client.map_link} target="_blank" rel="noopener noreferrer"
