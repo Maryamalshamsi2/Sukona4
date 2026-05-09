@@ -161,7 +161,7 @@ export async function getTodayAppointments(date: string) {
         bundle_name,
         services:service_id ( id, name, price, duration_minutes )
       ),
-      payments ( id, amount, method, note, receipt_url, created_at )
+      payments ( id, amount, method, note, receipt_url, receipt_urls, created_at )
     `)
     .eq("date", date)
     .neq("status", "cancelled")

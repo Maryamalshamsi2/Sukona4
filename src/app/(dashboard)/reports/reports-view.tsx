@@ -57,8 +57,11 @@ export interface ReportPayment {
   method: string;
   /** Free-text note (used when method = "other"). */
   note: string | null;
-  /** Uploaded receipt image URL (paperclip preview on the row). */
+  /** Legacy single URL — populated by writes for backwards compat. */
   receipt_url: string | null;
+  /** Migration-026 array of attachment URLs. Reads should prefer this
+   *  and fall back to wrapping receipt_url for legacy rows. */
+  receipt_urls?: string[] | null;
   created_at: string;
   appointments: {
     id: string;
@@ -210,9 +213,23 @@ export default function ReportsView({
   const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  // URL of the receipt image being previewed in the lightbox. Tapping a
-  // paperclip cell on an appointment row sets this; backdrop dismisses.
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Receipt-image lightbox state. Multi-attachment payments (migration
+  // 026) page through with chevrons; single-image stays the same.
+  const [previewUrls, setPreviewUrls] = useState<string[] | null>(null);
+  const [previewIdx, setPreviewIdx] = useState(0);
+
+  // Resolve a payment row to its attachment list — prefer the array,
+  // fall back to wrapping the legacy single column.
+  function attachmentsFor(pay: { receipt_url: string | null; receipt_urls?: string[] | null }): string[] {
+    if (pay.receipt_urls && pay.receipt_urls.length > 0) return pay.receipt_urls;
+    return pay.receipt_url ? [pay.receipt_url] : [];
+  }
+  function openReceiptPreview(pay: { receipt_url: string | null; receipt_urls?: string[] | null }) {
+    const urls = attachmentsFor(pay);
+    if (urls.length === 0) return;
+    setPreviewUrls(urls);
+    setPreviewIdx(0);
+  }
 
   // Edit-payment modal — opens when a payment row is clicked.
   const [editingPayment, setEditingPayment] = useState<ExistingPayment | null>(null);
@@ -225,6 +242,7 @@ export default function ReportsView({
       method: pay.method as PaymentMethod,
       note: pay.note,
       receipt_url: pay.receipt_url,
+      receipt_urls: pay.receipt_urls,
     });
     setEditingPaymentClient(pay.appointments?.clients?.name);
   }
@@ -628,17 +646,24 @@ export default function ReportsView({
                                     }`}>
                                       {pay.method === "cash" ? "Cash" : "Card"}
                                     </span>
-                                    {pay.receipt_url && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setPreviewUrl(pay.receipt_url); }}
-                                        aria-label="View receipt"
-                                        className="flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-active hover:text-text-primary"
-                                      >
-                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                                        </svg>
-                                      </button>
-                                    )}
+                                    {(() => {
+                                      const urls = attachmentsFor(pay);
+                                      if (urls.length === 0) return null;
+                                      return (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); openReceiptPreview(pay); }}
+                                          aria-label={`View ${urls.length} receipt${urls.length > 1 ? "s" : ""}`}
+                                          className="flex h-7 items-center justify-center gap-0.5 rounded-lg px-1.5 text-text-tertiary transition-colors hover:bg-surface-active hover:text-text-primary"
+                                        >
+                                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                                          </svg>
+                                          {urls.length > 1 && (
+                                            <span className="text-caption font-semibold tabular-nums">{urls.length}</span>
+                                          )}
+                                        </button>
+                                      );
+                                    })()}
                                   </div>
                                 </td>
                                 <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-text-primary">{formatCurrency(pay.amount)}</td>
@@ -685,17 +710,24 @@ export default function ReportsView({
                                   {pay.method === "cash" ? "Cash" : "Card"}
                                 </span>
                               </div>
-                              {pay.receipt_url && (
+                              {(() => {
+                                const urls = attachmentsFor(pay);
+                                if (urls.length === 0) return null;
+                                return (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setPreviewUrl(pay.receipt_url); }}
-                                  aria-label="View receipt"
-                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-surface-active hover:text-text-primary"
+                                  onClick={(e) => { e.stopPropagation(); openReceiptPreview(pay); }}
+                                  aria-label={`View ${urls.length} receipt${urls.length > 1 ? "s" : ""}`}
+                                  className="flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-lg px-1.5 text-text-tertiary hover:bg-surface-active hover:text-text-primary"
                                 >
                                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
                                   </svg>
+                                  {urls.length > 1 && (
+                                    <span className="text-caption font-semibold tabular-nums">{urls.length}</span>
+                                  )}
                                 </button>
-                              )}
+                                );
+                              })()}
                             </div>
                           </div>
                         );
@@ -900,23 +932,52 @@ export default function ReportsView({
 
       {/* Receipt-image lightbox — opened by tapping a paperclip cell on
           an appointments-tab row. Backdrop or close button dismisses. */}
-      {previewUrl && (
+      {previewUrls && previewUrls.length > 0 && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setPreviewUrl(null)}
+          onClick={() => setPreviewUrls(null)}
         >
           <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setPreviewUrl(null)}
+              onClick={() => setPreviewUrls(null)}
               aria-label="Close"
-              className="absolute -top-3 -right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-text-primary shadow-lg hover:bg-neutral-100"
+              className="absolute -top-3 -right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-text-primary shadow-lg hover:bg-neutral-100"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewUrl} alt="Receipt" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
+            <img
+              src={previewUrls[Math.min(previewIdx, previewUrls.length - 1)]}
+              alt={`Receipt ${previewIdx + 1}`}
+              className="max-h-[90vh] max-w-[90vw] rounded-lg"
+            />
+            {previewUrls.length > 1 && (
+              <>
+                <button
+                  onClick={() => setPreviewIdx((i) => (i - 1 + previewUrls.length) % previewUrls.length)}
+                  aria-label="Previous receipt"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-text-primary shadow-lg hover:bg-white"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setPreviewIdx((i) => (i + 1) % previewUrls.length)}
+                  aria-label="Next receipt"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-text-primary shadow-lg hover:bg-white"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                </button>
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-caption font-semibold text-white">
+                  {previewIdx + 1} / {previewUrls.length}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

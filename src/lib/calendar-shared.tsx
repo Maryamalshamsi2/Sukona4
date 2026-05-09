@@ -90,6 +90,11 @@ export interface AppointmentData {
     amount: number;
     method: "cash" | "card" | "other";
     note: string | null;
+    /** Migration-026 array of attachment URLs. New writes go here. */
+    receipt_urls?: string[] | null;
+    /** Legacy single URL — populated by writes for backwards compat
+     *  with code paths that haven't been migrated. Reads should
+     *  prefer receipt_urls and fall back to wrapping this value. */
     receipt_url: string | null;
     created_at?: string;
   }>;
@@ -326,6 +331,7 @@ export function DetailView({
   onNoShow,
   onDelete,
   onEditPayment,
+  onAdjustDuration,
   onShareSent,
   canEdit = true,
 }: {
@@ -337,6 +343,10 @@ export function DetailView({
   /** Sibling of onCancel: marks the appointment as a no-show.
    *  Optional — caller pages decide whether to expose it. */
   onNoShow?: () => void;
+  /** Saves a manual duration override on the appointment. Used when
+   *  staff finished earlier or later than the planned service durations
+   *  would imply. Optional — owner/admin pages wire it. */
+  onAdjustDuration?: (minutes: number) => Promise<void>;
   /** When provided, renders a trash-bin icon button that hard-deletes
    *  the appointment (purges it from records & reports). Optional — only
    *  passed by owner/admin pages. */
@@ -363,14 +373,19 @@ export function DetailView({
     : null;
   const isActive = ["scheduled", "on_the_way", "arrived"].includes(appointment.status);
 
-  // Latest uploaded receipt image (if any payment row carries one). When
-  // present, we surface it as a small paperclip button next to the status
-  // pill that opens a lightbox preview.
-  const uploadedReceiptUrl =
-    [...(appointment.payments ?? [])]
+  // Receipt attachments for the latest payment, surfaced as a paperclip
+  // next to the status pill. Prefer migration-026 receipt_urls; fall
+  // back to wrapping the legacy single receipt_url for older rows.
+  const uploadedReceiptUrls = (() => {
+    const latest = [...(appointment.payments ?? [])]
       .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
-      .find((p) => p.receipt_url)?.receipt_url ?? null;
+      .find((p) => (p.receipt_urls && p.receipt_urls.length > 0) || p.receipt_url);
+    if (!latest) return [] as string[];
+    if (latest.receipt_urls && latest.receipt_urls.length > 0) return latest.receipt_urls;
+    return latest.receipt_url ? [latest.receipt_url] : [];
+  })();
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+  const [receiptPreviewIdx, setReceiptPreviewIdx] = useState(0);
 
   return (
     <div className="space-y-6">
@@ -381,16 +396,19 @@ export function DetailView({
           <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_LABELS[appointment.status]?.color || "bg-gray-100 text-text-primary"}`}>
             {STATUS_LABELS[appointment.status]?.label || appointment.status}
           </span>
-          {uploadedReceiptUrl && (
+          {uploadedReceiptUrls.length > 0 && (
             <button
               type="button"
-              onClick={() => setReceiptPreviewOpen(true)}
-              aria-label="View uploaded receipt"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
+              onClick={() => { setReceiptPreviewIdx(0); setReceiptPreviewOpen(true); }}
+              aria-label={`View ${uploadedReceiptUrls.length} uploaded receipt${uploadedReceiptUrls.length > 1 ? "s" : ""}`}
+              className="flex h-8 items-center justify-center gap-1 rounded-lg px-1.5 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
               </svg>
+              {uploadedReceiptUrls.length > 1 && (
+                <span className="text-caption font-semibold tabular-nums">{uploadedReceiptUrls.length}</span>
+              )}
             </button>
           )}
           {/* Edit payment — only when the appointment is paid AND the
@@ -415,7 +433,12 @@ export function DetailView({
         <div className="space-y-1 text-body-sm text-text-secondary">
           <p>{appointment.date}</p>
           <p>{formatTime12(appointment.time)} – {formatTime12(endTime)}</p>
-          <p>{formatDuration(totalDuration)} total</p>
+          <DurationLine
+            totalDuration={totalDuration}
+            isOverridden={appointment.duration_override != null}
+            canAdjust={canEdit && !!onAdjustDuration}
+            onAdjust={onAdjustDuration}
+          />
         </div>
       </div>
 
@@ -634,7 +657,7 @@ export function DetailView({
 
       {/* Receipt-image lightbox — opened by tapping the paperclip near
           the status pill above. Backdrop or close button dismisses. */}
-      {receiptPreviewOpen && uploadedReceiptUrl && (
+      {receiptPreviewOpen && uploadedReceiptUrls.length > 0 && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setReceiptPreviewOpen(false)}
@@ -643,14 +666,43 @@ export function DetailView({
             <button
               onClick={() => setReceiptPreviewOpen(false)}
               aria-label="Close"
-              className="absolute -top-3 -right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-text-primary shadow-lg hover:bg-neutral-100"
+              className="absolute -top-3 -right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-text-primary shadow-lg hover:bg-neutral-100"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={uploadedReceiptUrl} alt="Receipt" className="max-h-[90vh] max-w-[90vw] rounded-lg" />
+            <img
+              src={uploadedReceiptUrls[Math.min(receiptPreviewIdx, uploadedReceiptUrls.length - 1)]}
+              alt={`Receipt ${receiptPreviewIdx + 1}`}
+              className="max-h-[90vh] max-w-[90vw] rounded-lg"
+            />
+            {uploadedReceiptUrls.length > 1 && (
+              <>
+                <button
+                  onClick={() => setReceiptPreviewIdx((i) => (i - 1 + uploadedReceiptUrls.length) % uploadedReceiptUrls.length)}
+                  aria-label="Previous receipt"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-text-primary shadow-lg hover:bg-white"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setReceiptPreviewIdx((i) => (i + 1) % uploadedReceiptUrls.length)}
+                  aria-label="Next receipt"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-text-primary shadow-lg hover:bg-white"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                </button>
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-caption font-semibold text-white">
+                  {receiptPreviewIdx + 1} / {uploadedReceiptUrls.length}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -663,6 +715,133 @@ function mostRecent(a: string | null | undefined, b: string | null | undefined):
   if (!a) return b ?? null;
   if (!b) return a;
   return new Date(a) > new Date(b) ? a : b;
+}
+
+// ---- DurationLine (inside DetailView) ----
+//
+// Renders the appointment's total-duration line with an optional inline
+// editor. When canAdjust is true, the duration text gets a small pencil
+// affordance — tapping reveals hours + minutes inputs prefilled with
+// the current value. Save calls the parent's onAdjust hook.
+//
+// Used to record what actually happened (e.g. staff finished early)
+// rather than what was planned. The override is stored on the
+// appointment and respected by getApptTotalDuration so the calendar
+// block + end-time render reflect the new value automatically.
+function DurationLine({
+  totalDuration,
+  isOverridden,
+  canAdjust,
+  onAdjust,
+}: {
+  totalDuration: number;
+  isOverridden: boolean;
+  canAdjust: boolean;
+  onAdjust?: (minutes: number) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [hours, setHours] = useState(() => Math.floor(totalDuration / 60));
+  const [minutes, setMinutes] = useState(() => totalDuration % 60);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit() {
+    setHours(Math.floor(totalDuration / 60));
+    setMinutes(totalDuration % 60);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save() {
+    if (!onAdjust) return;
+    const total = hours * 60 + minutes;
+    if (!Number.isFinite(total) || total <= 0) {
+      setError("Duration must be at least 1 minute.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onAdjust(total);
+      setEditing(false);
+    } catch {
+      setError("Failed to save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <p className="flex items-center gap-1.5">
+        <span>
+          {formatDuration(totalDuration)} total
+          {isOverridden && (
+            <span className="ml-1.5 rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
+              adjusted
+            </span>
+          )}
+        </span>
+        {canAdjust && (
+          <button
+            type="button"
+            onClick={startEdit}
+            aria-label="Adjust duration"
+            className="rounded-md p-0.5 text-text-tertiary hover:bg-surface-hover hover:text-text-primary"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+            </svg>
+          </button>
+        )}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1 rounded-xl ring-1 ring-border bg-surface-hover p-3">
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min="0"
+          value={hours}
+          onChange={(e) => setHours(Math.max(0, parseInt(e.target.value) || 0))}
+          className="w-16 rounded-lg border-[1.5px] border-neutral-200 bg-white px-2 py-1.5 text-body-sm tabular-nums focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          aria-label="Hours"
+        />
+        <span className="text-caption text-text-secondary">h</span>
+        <input
+          type="number"
+          min="0"
+          max="59"
+          value={minutes}
+          onChange={(e) => setMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+          className="w-16 rounded-lg border-[1.5px] border-neutral-200 bg-white px-2 py-1.5 text-body-sm tabular-nums focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          aria-label="Minutes"
+        />
+        <span className="text-caption text-text-secondary">min</span>
+        <div className="ml-auto flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            disabled={saving}
+            className="rounded-lg px-2.5 py-1.5 text-caption font-semibold text-text-secondary hover:bg-surface-active disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="rounded-lg bg-neutral-900 px-3 py-1.5 text-caption font-semibold text-text-inverse hover:bg-neutral-800 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+      {error && <p className="mt-2 text-caption text-error-700">{error}</p>}
+    </div>
+  );
 }
 
 // ---- ShareSection (inside DetailView) ----

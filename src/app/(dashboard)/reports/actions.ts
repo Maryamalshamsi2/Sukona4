@@ -43,7 +43,7 @@ export async function getReportAppointments(from: string, to: string) {
         bundle_name,
         services:service_id ( id, name, price, duration_minutes )
       ),
-      payments ( id, receipt_url, created_at )
+      payments ( id, receipt_url, receipt_urls, created_at )
     `)
     .gte("date", from)
     .lte("date", to)
@@ -66,6 +66,7 @@ export async function getReportPayments(from: string, to: string) {
       method,
       note,
       receipt_url,
+      receipt_urls,
       created_at,
       appointments:appointment_id (
         id,

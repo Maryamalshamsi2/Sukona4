@@ -27,7 +27,10 @@ export async function recordPayment(
   amount: number,
   method: PaymentMethod,
   note: string | null,
-  receiptUrl: string | null
+  /** Zero or more uploaded receipt URLs. The first one (if any) is also
+   *  written to the legacy `receipt_url` column for backwards compat
+   *  with code paths that haven't been migrated to read the array yet. */
+  receiptUrls: string[]
 ) {
   const supabase = await createClient();
   const { error } = await supabase.from("payments").insert({
@@ -35,7 +38,8 @@ export async function recordPayment(
     amount,
     method,
     note,
-    receipt_url: receiptUrl,
+    receipt_urls: receiptUrls,
+    receipt_url: receiptUrls[0] ?? null,
   });
   if (error) return { error: error.message };
 
@@ -79,7 +83,7 @@ export async function updatePayment(
   amount: number,
   method: PaymentMethod,
   note: string | null,
-  receiptUrl: string | null,
+  receiptUrls: string[],
 ) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -88,7 +92,10 @@ export async function updatePayment(
       amount,
       method,
       note,
-      receipt_url: receiptUrl,
+      receipt_urls: receiptUrls,
+      // Keep the legacy single-column in sync with the first array entry
+      // so code paths reading `receipt_url` see a consistent value.
+      receipt_url: receiptUrls[0] ?? null,
     })
     .eq("id", paymentId);
 
@@ -108,7 +115,7 @@ export async function uploadReceipt(
 ): Promise<{ url?: string; error?: string }> {
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { error: "No file provided" };
-  if (file.size > 10 * 1024 * 1024) return { error: "File must be under 10 MB" };
+  if (file.size > 5 * 1024 * 1024) return { error: "File must be under 5 MB" };
   if (!file.type.startsWith("image/")) return { error: "Only image files are allowed" };
 
   const supabase = await createClient();

@@ -15,6 +15,7 @@ import {
   updateAppointmentStatus,
   cancelAppointment,
   markNoShow,
+  updateAppointmentDuration,
   deleteAppointment,
   getBundlesForBooking,
   getStaffSchedulesForDate,
@@ -252,6 +253,14 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     }
     setDetailModalOpen(false);
     setSelectedAppointment(null);
+    refreshClientAppointments();
+  }
+
+  async function handleAppointmentAdjustDuration(minutes: number) {
+    if (!selectedAppointment) return;
+    const result = await updateAppointmentDuration(selectedAppointment.id, minutes);
+    if (result.error) { setError(result.error); throw new Error(result.error); }
+    setSelectedAppointment({ ...selectedAppointment, duration_override: minutes });
     refreshClientAppointments();
   }
 
@@ -662,6 +671,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             onEdit={openAppointmentEdit}
             onCancel={handleAppointmentCancel}
             onNoShow={!isStaff ? handleAppointmentNoShow : undefined}
+            onAdjustDuration={!isStaff ? handleAppointmentAdjustDuration : undefined}
             onDelete={handleAppointmentDelete}
             onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             canEdit={currentUser?.role !== "staff"}
