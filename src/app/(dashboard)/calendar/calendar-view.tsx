@@ -844,16 +844,6 @@ export default function CalendarView({
     reload();
   }
 
-  async function handleAdjustDuration(minutes: number) {
-    if (!selectedAppointment) return;
-    const result = await updateAppointmentDuration(selectedAppointment.id, minutes);
-    if (result.error) { setError(result.error); throw new Error(result.error); }
-    // Patch local state so the drawer's duration line + the calendar
-    // block resize reflect the new value without requiring a re-open.
-    setSelectedAppointment({ ...selectedAppointment, duration_override: minutes });
-    reload();
-  }
-
   async function handleDelete() {
     if (!selectedAppointment) return;
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
@@ -1523,7 +1513,6 @@ export default function CalendarView({
             onEdit={openEdit}
             onCancel={handleCancel}
             onNoShow={!isStaff ? handleNoShow : undefined}
-            onAdjustDuration={!isStaff ? handleAdjustDuration : undefined}
             onDelete={handleDelete}
             onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             onShareSent={async () => {
@@ -1610,6 +1599,7 @@ export default function CalendarView({
               discount_type: selectedAppointment.discount_type ?? null,
               discount_value: selectedAppointment.discount_value ?? null,
               total_override: selectedAppointment.total_override ?? null,
+              duration_override: selectedAppointment.duration_override ?? null,
             }}
           />
         )}

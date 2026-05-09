@@ -192,6 +192,9 @@ export interface AppointmentAdjustments {
   discount_type: "percentage" | "fixed";
   discount_value: number;
   total_override: number | null;
+  /** Manual duration override (minutes). Set when the user types a
+   *  custom end time in the form's totals line. null clears it. */
+  duration_override: number | null;
 }
 
 export async function createAppointment(
@@ -224,6 +227,9 @@ export async function createAppointment(
       discount_type: adjustments?.discount_type ?? "fixed",
       discount_value: adjustments?.discount_value ?? 0,
       total_override: adjustments?.total_override ?? null,
+      // Manual end-time set in the form's totals line. null → falls
+      // back to summing service durations at render time.
+      duration_override: adjustments?.duration_override ?? null,
     })
     .select()
     .single();
@@ -332,6 +338,7 @@ export async function updateAppointment(
         discount_type: adjustments.discount_type,
         discount_value: adjustments.discount_value,
         total_override: adjustments.total_override,
+        duration_override: adjustments.duration_override,
       }),
     })
     .eq("id", id);

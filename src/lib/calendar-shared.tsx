@@ -131,6 +131,10 @@ export interface AppointmentAdjustments {
   discount_type: "percentage" | "fixed";
   discount_value: number;
   total_override: number | null;
+  /** Manual duration override in minutes. Set when the user types a
+   *  custom end time in the form's totals line. null clears any prior
+   *  override and falls back to "sum of services". */
+  duration_override: number | null;
 }
 
 export interface ServiceEntry {
@@ -331,7 +335,6 @@ export function DetailView({
   onNoShow,
   onDelete,
   onEditPayment,
-  onAdjustDuration,
   onShareSent,
   canEdit = true,
 }: {
@@ -343,10 +346,6 @@ export function DetailView({
   /** Sibling of onCancel: marks the appointment as a no-show.
    *  Optional — caller pages decide whether to expose it. */
   onNoShow?: () => void;
-  /** Saves a manual duration override on the appointment. Used when
-   *  staff finished earlier or later than the planned service durations
-   *  would imply. Optional — owner/admin pages wire it. */
-  onAdjustDuration?: (minutes: number) => Promise<void>;
   /** When provided, renders a trash-bin icon button that hard-deletes
    *  the appointment (purges it from records & reports). Optional — only
    *  passed by owner/admin pages. */
@@ -433,12 +432,14 @@ export function DetailView({
         <div className="space-y-1 text-body-sm text-text-secondary">
           <p>{appointment.date}</p>
           <p>{formatTime12(appointment.time)} – {formatTime12(endTime)}</p>
-          <DurationLine
-            totalDuration={totalDuration}
-            isOverridden={appointment.duration_override != null}
-            canAdjust={canEdit && !!onAdjustDuration}
-            onAdjust={onAdjustDuration}
-          />
+          <p className="flex items-center gap-1.5">
+            <span>{formatDuration(totalDuration)} total</span>
+            {appointment.duration_override != null && (
+              <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
+                adjusted
+              </span>
+            )}
+          </p>
         </div>
       </div>
 
@@ -717,132 +718,6 @@ function mostRecent(a: string | null | undefined, b: string | null | undefined):
   return new Date(a) > new Date(b) ? a : b;
 }
 
-// ---- DurationLine (inside DetailView) ----
-//
-// Renders the appointment's total-duration line with an optional inline
-// editor. When canAdjust is true, the duration text gets a small pencil
-// affordance — tapping reveals hours + minutes inputs prefilled with
-// the current value. Save calls the parent's onAdjust hook.
-//
-// Used to record what actually happened (e.g. staff finished early)
-// rather than what was planned. The override is stored on the
-// appointment and respected by getApptTotalDuration so the calendar
-// block + end-time render reflect the new value automatically.
-function DurationLine({
-  totalDuration,
-  isOverridden,
-  canAdjust,
-  onAdjust,
-}: {
-  totalDuration: number;
-  isOverridden: boolean;
-  canAdjust: boolean;
-  onAdjust?: (minutes: number) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [hours, setHours] = useState(() => Math.floor(totalDuration / 60));
-  const [minutes, setMinutes] = useState(() => totalDuration % 60);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function startEdit() {
-    setHours(Math.floor(totalDuration / 60));
-    setMinutes(totalDuration % 60);
-    setError(null);
-    setEditing(true);
-  }
-
-  async function save() {
-    if (!onAdjust) return;
-    const total = hours * 60 + minutes;
-    if (!Number.isFinite(total) || total <= 0) {
-      setError("Duration must be at least 1 minute.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await onAdjust(total);
-      setEditing(false);
-    } catch {
-      setError("Failed to save. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!editing) {
-    return (
-      <p className="flex items-center gap-1.5">
-        <span>
-          {formatDuration(totalDuration)} total
-          {isOverridden && (
-            <span className="ml-1.5 rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
-              adjusted
-            </span>
-          )}
-        </span>
-        {canAdjust && (
-          <button
-            type="button"
-            onClick={startEdit}
-            aria-label="Adjust duration"
-            className="rounded-md p-0.5 text-text-tertiary hover:bg-surface-hover hover:text-text-primary"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-            </svg>
-          </button>
-        )}
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-1 rounded-xl ring-1 ring-border bg-surface-hover p-3">
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          min="0"
-          value={hours}
-          onChange={(e) => setHours(Math.max(0, parseInt(e.target.value) || 0))}
-          className="w-16 rounded-lg border-[1.5px] border-neutral-200 bg-white px-2 py-1.5 text-body-sm tabular-nums focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-          aria-label="Hours"
-        />
-        <span className="text-caption text-text-secondary">h</span>
-        <input
-          type="number"
-          min="0"
-          max="59"
-          value={minutes}
-          onChange={(e) => setMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-          className="w-16 rounded-lg border-[1.5px] border-neutral-200 bg-white px-2 py-1.5 text-body-sm tabular-nums focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-          aria-label="Minutes"
-        />
-        <span className="text-caption text-text-secondary">min</span>
-        <div className="ml-auto flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            disabled={saving}
-            className="rounded-lg px-2.5 py-1.5 text-caption font-semibold text-text-secondary hover:bg-surface-active disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="rounded-lg bg-neutral-900 px-3 py-1.5 text-caption font-semibold text-text-inverse hover:bg-neutral-800 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-      {error && <p className="mt-2 text-caption text-error-700">{error}</p>}
-    </div>
-  );
-}
 
 // ---- ShareSection (inside DetailView) ----
 
@@ -1065,6 +940,10 @@ export function AppointmentForm({
     discount_type?: "percentage" | "fixed" | null;
     discount_value?: number | null;
     total_override?: number | null;
+    /** Saved manual duration override (minutes). When present, the
+     *  totals line shows this as the end time instead of summing
+     *  service durations. */
+    duration_override?: number | null;
   };
   prefillTime?: string | null;
   prefillStaffId?: string | null;
@@ -1111,6 +990,15 @@ export function AppointmentForm({
   const [totalOverride, setTotalOverride] = useState<string>(
     defaultValues?.total_override != null ? String(defaultValues.total_override) : "",
   );
+  // Manual duration override (minutes). Driven by the editable end-time
+  // in the totals line at the bottom of Services. null = follow the sum
+  // of services as before. Persists through service changes — your set
+  // value wins until you tap "↺ Reset".
+  const [durationOverride, setDurationOverride] = useState<number | null>(
+    defaultValues?.duration_override ?? null,
+  );
+  // Inline edit state for the end-time field.
+  const [editingEndTime, setEditingEndTime] = useState(false);
   // Open by default when editing an appointment that already has any
   // non-default adjustment, otherwise collapsed.
   const hasInitialAdjustment =
@@ -1280,7 +1168,11 @@ export function AppointmentForm({
   })();
 
   const startMin = timeToMinutes(time);
-  const endTimeStr = minutesToTime(startMin + totalDuration);
+  // Effective duration: the override wins over the calculated sum so
+  // adding/removing services after a manual end-time edit doesn't undo
+  // the user's intent. Reset link in the totals line clears the override.
+  const effectiveDuration = durationOverride ?? totalDuration;
+  const endTimeStr = minutesToTime(startMin + effectiveDuration);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1350,6 +1242,7 @@ export function AppointmentForm({
     // Bundle the adjustment fields into a single object so the server
     // action signature stays compact. Empty strings → 0 / null.
     const adjustments: AppointmentAdjustments = {
+      duration_override: durationOverride,
       transportation_charge: parseFloat(transportCharge) || 0,
       discount_type: discountType,
       discount_value: parseFloat(discountValue) || 0,
@@ -1598,11 +1491,51 @@ export function AppointmentForm({
 
         {totalDuration > 0 && (
           <div className="mt-2 rounded-xl bg-surface-hover px-3 py-2 text-body-sm">
-            <div className="flex items-center justify-between text-text-primary">
-              <span className="font-semibold">
-                {formatTime12Short(time)} - {formatTime12Short(endTimeStr)} ({formatDuration(totalDuration)})
-              </span>
-              <span className="font-semibold">AED {totalPrice}</span>
+            <div className="flex items-center justify-between gap-2 text-text-primary">
+              <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-1 font-semibold">
+                <span>{formatTime12Short(time)} -</span>
+                {editingEndTime ? (
+                  <input
+                    type="time"
+                    autoFocus
+                    defaultValue={endTimeStr}
+                    onBlur={(e) => {
+                      // Commit on blur. Validate: end must be after start.
+                      const newEndMin = timeToMinutes(e.target.value);
+                      if (Number.isFinite(newEndMin) && newEndMin > startMin) {
+                        setDurationOverride(newEndMin - startMin);
+                      }
+                      setEditingEndTime(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setEditingEndTime(false);
+                    }}
+                    className="rounded-md border-[1.5px] border-neutral-300 bg-white px-1.5 py-0.5 text-body-sm focus:border-neutral-500 focus:outline-none"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingEndTime(true)}
+                    className="rounded-md px-1 underline-offset-2 hover:bg-white hover:underline"
+                    aria-label="Edit end time"
+                  >
+                    {formatTime12Short(endTimeStr)}
+                  </button>
+                )}
+                <span className="text-text-secondary font-normal">({formatDuration(effectiveDuration)})</span>
+                {durationOverride != null && (
+                  <button
+                    type="button"
+                    onClick={() => setDurationOverride(null)}
+                    className="text-caption font-semibold text-text-secondary hover:text-text-primary"
+                    title="Reset to sum of services"
+                  >
+                    ↺ Reset
+                  </button>
+                )}
+              </div>
+              <span className="shrink-0 font-semibold">AED {totalPrice}</span>
             </div>
           </div>
         )}
