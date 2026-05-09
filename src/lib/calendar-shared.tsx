@@ -898,7 +898,20 @@ export function AppointmentForm({
   const [newClientMapLink, setNewClientMapLink] = useState("");
   const [newClientNotes, setNewClientNotes] = useState("");
   const [date, setDate] = useState(defaultValues?.date || dateStr);
-  const [time, setTime] = useState(defaultValues?.time || prefillTime || "09:00");
+  // Default time: edit mode keeps the saved time; new appointments use
+  // the prefill (set by drag-on-grid) when provided; otherwise default
+  // to "now rounded up to the next 15-min slot" so walk-ins land near
+  // the current minute instead of always reading 09:00.
+  const [time, setTime] = useState(() => {
+    if (defaultValues?.time) return defaultValues.time;
+    if (prefillTime) return prefillTime;
+    const now = new Date();
+    const rounded = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15;
+    const wrapped = rounded % (24 * 60);
+    const hh = String(Math.floor(wrapped / 60)).padStart(2, "0");
+    const mm = String(wrapped % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+  });
   const [notes, setNotes] = useState(defaultValues?.notes || "");
   const [serviceEntries, setServiceEntries] = useState<ServiceEntry[]>(
     defaultValues?.serviceEntries?.length
@@ -934,7 +947,9 @@ export function AppointmentForm({
   const allClients = [...clients, ...savedClients];
 
   async function handleSaveClient() {
-    if (!newClientName.trim() || !newClientPhone.trim() || !newClientAddress.trim()) return;
+    // Address is optional in this quick-add path — walk-in / in-store
+    // clients don't need a delivery address. Name + phone still required.
+    if (!newClientName.trim() || !newClientPhone.trim()) return;
     setSavingClient(true);
     const newClient = await onNewClient(newClientName, newClientPhone, newClientAddress, newClientMapLink, newClientNotes);
     setSavingClient(false);
@@ -1200,13 +1215,15 @@ export function AppointmentForm({
               </div>
             </div>
             <div>
-              <label className="block text-body-sm font-semibold text-text-primary">Location *</label>
+              <label className="block text-body-sm font-semibold text-text-primary">
+                Location <span className="font-normal text-text-tertiary">(optional)</span>
+              </label>
               <div className="mt-1 space-y-2 rounded-xl ring-1 ring-border p-2.5 bg-white">
                 <div>
-                  <label className="block text-caption text-text-secondary mb-0.5">Address *</label>
+                  <label className="block text-caption text-text-secondary mb-0.5">Address</label>
                   <input type="text" value={newClientAddress}
-                    onChange={(e) => setNewClientAddress(e.target.value)} required
-                    placeholder="e.g. Al Reem Island, Tower 3, Floor 12, Apt 1204"
+                    onChange={(e) => setNewClientAddress(e.target.value)}
+                    placeholder="Skip for walk-in / in-store"
                     className="block w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-100" />
                 </div>
                 <div>
@@ -1225,7 +1242,7 @@ export function AppointmentForm({
                 className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
             </div>
             <button type="button" onClick={handleSaveClient}
-              disabled={savingClient || !newClientName.trim() || !newClientPhone.trim() || !newClientAddress.trim()}
+              disabled={savingClient || !newClientName.trim() || !newClientPhone.trim()}
               className="w-full rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 disabled:opacity-50 transition-all">
               {savingClient ? "Saving..." : "Save Client"}
             </button>
