@@ -373,11 +373,13 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Clients</h1>
         </div>
+        {/* Desktop add button. Mobile gets a thumb-zone FAB at the
+            bottom of the screen instead — see below. */}
         {!isStaff && (
           <button
             onClick={openAdd}
             aria-label="Add client"
-            className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+            className="hidden shrink-0 sm:flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -808,6 +810,24 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
           />
         )}
       </Modal>
+
+      {/* ==== MOBILE FAB ==== */}
+      {/* Thumb-zone primary action. Sits well above the bottom tab bar
+          (~58px) plus the iPhone home-indicator safe area, so it reads
+          as a clearly separate floating element. Owners + admins only —
+          staff can't add clients. */}
+      {!isStaff && (
+        <button
+          type="button"
+          onClick={openAdd}
+          aria-label="Add client"
+          className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden flex h-14 w-14 items-center justify-center rounded-full bg-neutral-900 text-text-inverse shadow-lg active:scale-[0.97] transition-transform"
+        >
+          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

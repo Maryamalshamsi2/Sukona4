@@ -280,7 +280,9 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Team</h1>
         </div>
-        <div className="relative shrink-0" ref={addDropdownRef}>
+        {/* Desktop add button + dropdown. Mobile gets a thumb-zone FAB
+            at the bottom of the screen with the same options — see below. */}
+        <div className="relative shrink-0 hidden sm:block" ref={addDropdownRef}>
           <button
             onClick={() => setAddDropdownOpen((o) => !o)}
             aria-label="Add"
@@ -793,6 +795,46 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
           </div>
         </form>
       </Modal>
+
+      {/* ==== MOBILE FAB ==== */}
+      {/* Same two actions as the desktop dropdown, expanded above the
+          FAB. The "+" rotates 45° when open to read as a close button. */}
+      <div className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
+        {addDropdownOpen && (
+          <>
+            <div className="fixed inset-0" onClick={() => setAddDropdownOpen(false)} />
+            <div className="absolute bottom-16 right-0 flex flex-col items-stretch gap-2">
+              <button
+                type="button"
+                onClick={() => { setAddDropdownOpen(false); openAddMember(); }}
+                className="flex items-center gap-2 rounded-full bg-neutral-900 pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-inverse shadow-lg whitespace-nowrap"
+              >
+                Member
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAddDropdownOpen(false); openAddGroup(); }}
+                className="flex items-center gap-2 rounded-full bg-white pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-primary shadow-lg ring-1 ring-black/5 whitespace-nowrap"
+              >
+                Group
+              </button>
+            </div>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setAddDropdownOpen((v) => !v)}
+          aria-label="Add"
+          aria-expanded={addDropdownOpen}
+          className={`flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform active:scale-[0.97] ${
+            addDropdownOpen ? "bg-neutral-700 rotate-45" : "bg-neutral-900"
+          }`}
+        >
+          <svg className="h-7 w-7 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

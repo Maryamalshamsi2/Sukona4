@@ -616,8 +616,10 @@ export default function CatalogView({
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Catalog</h1>
         </div>
+        {/* Desktop add button + dropdown. Mobile gets a thumb-zone FAB
+            at the bottom of the screen with the same options — see below. */}
         {!isStaff && (
-        <div className="relative shrink-0" ref={addDropdownRef}>
+        <div className="relative shrink-0 hidden sm:block" ref={addDropdownRef}>
           <button
             onClick={() => setAddDropdownOpen(!addDropdownOpen)}
             aria-label="Add"
@@ -1036,6 +1038,56 @@ export default function CatalogView({
           onCancel={() => { setBundleModalOpen(false); setEditingBundle(null); }}
         />
       </Modal>
+
+      {/* ==== MOBILE FAB ==== */}
+      {/* Same three actions as the desktop dropdown (Service / Bundle /
+          Category), expanded above the FAB. The "+" rotates 45° when
+          open to make a "×" — pure CSS, no extra icon. */}
+      {!isStaff && (
+        <div className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
+          {addDropdownOpen && (
+            <>
+              <div className="fixed inset-0" onClick={() => setAddDropdownOpen(false)} />
+              <div className="absolute bottom-16 right-0 flex flex-col items-stretch gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setAddDropdownOpen(false); openAddService(); }}
+                  className="flex items-center gap-2 rounded-full bg-neutral-900 pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-inverse shadow-lg whitespace-nowrap"
+                >
+                  Service
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAddDropdownOpen(false); openAddBundle(); }}
+                  className="flex items-center gap-2 rounded-full bg-white pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-primary shadow-lg ring-1 ring-black/5 whitespace-nowrap"
+                >
+                  Bundle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAddDropdownOpen(false); openAddCategory(); }}
+                  className="flex items-center gap-2 rounded-full bg-white pl-4 pr-5 py-2.5 text-body-sm font-semibold text-text-primary shadow-lg ring-1 ring-black/5 whitespace-nowrap"
+                >
+                  Category
+                </button>
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setAddDropdownOpen((v) => !v)}
+            aria-label="Add"
+            aria-expanded={addDropdownOpen}
+            className={`flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform active:scale-[0.97] ${
+              addDropdownOpen ? "bg-neutral-700 rotate-45" : "bg-neutral-900"
+            }`}
+          >
+            <svg className="h-7 w-7 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
