@@ -41,21 +41,23 @@ export async function getNotifications(limit = 20): Promise<{
     "inventory_low_stock",
   ];
 
-  // Fetch the recent activity rows + the user's last-read timestamp in
-  // parallel. We over-fetch (limit*2) so the post-filter still has room
-  // for `limit` items in the worst case where many were the user's own.
+  // Fetch the recent activity rows + the user's profile in parallel.
+  // We over-fetch (limit*2) so the post-filter still has room for
+  // `limit` items in the worst case where many were the user's own
+  // or are private (and we're staff).
   const [activityRes, profileRes] = await Promise.all([
     supabase
       .from("activity_log")
       .select(
         `id, appointment_id, action, description, created_at, performed_by,
+         is_private,
          profiles:performed_by ( full_name )`
       )
       .order("created_at", { ascending: false })
       .limit(limit * 2),
     supabase
       .from("profiles")
-      .select("notifications_last_read_at")
+      .select("notifications_last_read_at, role")
       .eq("id", user.id)
       .single(),
   ]);
@@ -66,6 +68,7 @@ export async function getNotifications(limit = 20): Promise<{
 
   const lastRead =
     profileRes.data?.notifications_last_read_at ?? "1970-01-01T00:00:00Z";
+  const isStaff = profileRes.data?.role === "staff";
 
   type Row = {
     id: string;
@@ -74,6 +77,7 @@ export async function getNotifications(limit = 20): Promise<{
     description: string;
     created_at: string;
     performed_by: string | null;
+    is_private: boolean | null;
     profiles: { full_name: string | null } | { full_name: string | null }[] | null;
   };
 
@@ -82,6 +86,9 @@ export async function getNotifications(limit = 20): Promise<{
     .filter((r) =>
       !(SELF_FILTERED_ACTIONS.includes(r.action) && r.performed_by === user.id),
     )
+    // Migration 028: hide private rows (e.g. private-expense notifications)
+    // from staff. Owner + admin still see them.
+    .filter((r) => !(isStaff && r.is_private))
     .slice(0, limit)
     .map((r) => {
       // PostgREST may return the joined profile as either an object or a
@@ -174,6 +181,22 @@ export async function getTodayAppointments(date: string) {
 export async function getRecentActivities(fromDate?: string) {
   const supabase = await createClient();
 
+  // Hide private rows (migration 028) from staff. Owner + admin still
+  // see them. We do this DB-side so staff also can't observe private
+  // entries by reading raw network responses.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let isStaff = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    isStaff = profile?.role === "staff";
+  }
+
   let query = supabase
     .from("activity_log")
     .select(`
@@ -190,6 +213,9 @@ export async function getRecentActivities(fromDate?: string) {
 
   if (fromDate) {
     query = query.gte("created_at", fromDate);
+  }
+  if (isStaff) {
+    query = query.eq("is_private", false);
   }
 
   query = query.limit(100);

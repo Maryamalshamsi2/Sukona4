@@ -20,17 +20,23 @@ async function getCurrentUserRole() {
 // via the column default (migration 014). performed_by = the actor; the
 // bell filters out self-actions for these notification types so the
 // actor doesn't get notified about their own action.
+//
+// `isPrivate` (migration 028) marks rows that should be hidden from
+// staff at read time — used for private-expense notifications so the
+// description (which leaks the amount + type) doesn't reach staff.
 async function logNotification(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string | null,
   action: string,
   description: string,
+  isPrivate: boolean = false,
 ) {
   await supabase.from("activity_log").insert({
     appointment_id: null,
     action,
     description,
     performed_by: userId,
+    is_private: isPrivate,
   });
 }
 
@@ -96,11 +102,15 @@ export async function createExpense(
   }
 
   // Notification: short, scannable. e.g. "Expense · AED 30 (Supplies)".
+  // Private expenses get the is_private flag — the bell + activity
+  // feed will hide them from staff (the description would otherwise
+  // leak the amount + type).
   await logNotification(
     supabase,
     userId,
     "expense_added",
     `Expense · AED ${amount}${expenseType ? ` (${expenseType})` : ""}`,
+    isPrivate,
   );
 
   revalidatePath("/expenses");

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Modal from "@/components/modal";
 import { useSearchQuery } from "@/lib/search-context";
 import { createBrowserClient } from "@supabase/ssr";
+import { useCurrentUser } from "@/lib/user-context";
 import {
   getExpenses,
   createExpense,
@@ -27,6 +28,9 @@ export interface Expense {
   is_private: boolean;
   paid_from_petty_cash: boolean;
   created_at: string;
+  /** Migration 028: who logged this expense. Used to gate edit/delete
+   *  for staff so they can only modify their own entries. */
+  created_by: string | null;
 }
 
 export interface PettyCashEntry {
@@ -165,10 +169,18 @@ export default function ExpensesView({
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [pettyCashLogOpen, setPettyCashLogOpen] = useState(false);
 
-  // Role
+  // Role + identity (used to gate edit/delete on a per-row basis: staff
+  // can only modify expenses they themselves created).
   const [userRole, setUserRole] = useState<string | null>(initialUserRole);
+  const currentUser = useCurrentUser();
 
   const isOwner = userRole === "owner";
+  const isOwnerOrAdmin = userRole === "owner" || userRole === "admin";
+
+  function canEditExpense(e: Expense): boolean {
+    if (isOwnerOrAdmin) return true;
+    return !!currentUser && e.created_by === currentUser.id;
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -379,23 +391,35 @@ export default function ExpensesView({
         </div>
       ) : (
         <div className="rounded-2xl ring-1 ring-border bg-white divide-y divide-border">
-          {filtered.map((expense) => (
+          {filtered.map((expense) => {
+            const editable = canEditExpense(expense);
+            return (
             // Row is a div+role=button (instead of <button>) so the receipt
             // icon inside can be its own real <button> — nested <button>
             // is invalid HTML.
+            //
+            // Staff who didn't create this expense get a non-interactive
+            // div: no click handler, no hover, no focus ring. They can
+            // still see the row + tap the receipt icon to view it.
             <div
               key={expense.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => { setSelected(expense); setEditModalOpen(true); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setSelected(expense);
-                  setEditModalOpen(true);
-                }
-              }}
-              className="flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-surface-hover sm:gap-4 sm:px-6"
+              {...(editable
+                ? {
+                    role: "button" as const,
+                    tabIndex: 0,
+                    onClick: () => { setSelected(expense); setEditModalOpen(true); },
+                    onKeyDown: (e: React.KeyboardEvent) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelected(expense);
+                        setEditModalOpen(true);
+                      }
+                    },
+                  }
+                : {})}
+              className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-colors sm:gap-4 sm:px-6 ${
+                editable ? "cursor-pointer hover:bg-surface-hover" : "cursor-default"
+              }`}
             >
               {/* Description */}
               <div className="min-w-0 flex-1">
@@ -436,7 +460,8 @@ export default function ExpensesView({
                 {formatCurrency(Number(expense.amount))}
               </span>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
