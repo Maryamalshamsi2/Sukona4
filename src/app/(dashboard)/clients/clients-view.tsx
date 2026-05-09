@@ -200,72 +200,98 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     setEditModalOpen(true);
   }
 
-  async function handleStatusUpdate(status: string) {
+  // ---- Optimistic action helpers ----
+  // See home-view for the rationale. Same pattern: patch local state
+  // immediately, fire server action without blocking, roll back on error.
+  function patchClientAppt(id: string, patch: Partial<AppointmentData>) {
+    setClientAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+    setSelectedAppointment((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+  }
+
+  function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
     setError(null);
     if (status === "paid") {
       setMarkPaidOpen(true);
       return;
     }
-    const result = await updateAppointmentStatus(selectedAppointment.id, status);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    // Keep the drawer open so the user can keep advancing without re-tapping.
-    // Patch the local copy so DetailView re-renders with the new next-status.
-    setSelectedAppointment({ ...selectedAppointment, status });
-    refreshClientAppointments();
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchClientAppt(apptId, { status });
+    void updateAppointmentStatus(apptId, status).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchClientAppt(apptId, { status: prevStatus });
+      }
+    });
   }
 
-  async function handlePaidComplete() {
+  function handlePaidComplete() {
     if (!selectedAppointment) return;
-    const result = await updateAppointmentStatus(selectedAppointment.id, "paid");
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchClientAppt(apptId, { status: "paid" });
     setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    refreshClientAppointments();
+    void updateAppointmentStatus(apptId, "paid").then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchClientAppt(apptId, { status: prevStatus });
+      } else {
+        // Targeted refetch to pull in the freshly-minted receipt fields.
+        refreshClientAppointments();
+      }
+    });
   }
 
-  async function handleAppointmentCancel() {
+  function handleAppointmentCancel() {
     if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
-    const result = await cancelAppointment(selectedAppointment.id);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchClientAppt(apptId, { status: "cancelled" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    refreshClientAppointments();
+    void cancelAppointment(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchClientAppt(apptId, { status: prevStatus });
+      }
+    });
   }
 
-  async function handleAppointmentNoShow() {
+  function handleAppointmentNoShow() {
     if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
-    const result = await markNoShow(selectedAppointment.id);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchClientAppt(apptId, { status: "no_show" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    refreshClientAppointments();
+    void markNoShow(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchClientAppt(apptId, { status: prevStatus });
+      }
+    });
   }
 
-  async function handleAppointmentDelete() {
+  function handleAppointmentDelete() {
     if (!selectedAppointment) return;
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
-    const result = await deleteAppointment(selectedAppointment.id);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
+    const apptId = selectedAppointment.id;
+    const removed = selectedAppointment;
+    setClientAppointments((prev) => prev.filter((a) => a.id !== apptId));
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    refreshClientAppointments();
+    void deleteAppointment(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        setClientAppointments((prev) => {
+          if (prev.some((a) => a.id === apptId)) return prev;
+          return [...prev, removed];
+        });
+      }
+    });
   }
 
   async function handleSubmit(formData: FormData) {

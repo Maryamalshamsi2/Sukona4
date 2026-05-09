@@ -186,7 +186,33 @@ export default function HomeView({
     setEditModalOpen(true);
   }
 
-  async function handleStatusUpdate(status: string) {
+  // ---- Optimistic action helpers ----
+  //
+  // Every status / cancel / no-show / delete handler used to: await the
+  // server action, then call reload() to refetch appointments + clients
+  // + activities. That made each tap feel laggy (~500-1000ms) even when
+  // the server was fine.
+  //
+  // The new pattern:
+  //   1. Patch local state immediately (UI updates instantly)
+  //   2. Fire the server action without awaiting (background)
+  //   3. On error, roll back the patch and surface the error
+  //   4. Refresh activities in the background so the new log entry shows
+  //      up — but don't block the UI on it.
+  //
+  // The drawer/modal state changes (close on cancel/no-show/delete, keep
+  // open on status advance) happen in the same tick as the optimistic
+  // patch. Server failures revert; the user only loses the action they
+  // just performed, not the modal context.
+  function patchAppointment(id: string, patch: Partial<AppointmentData>) {
+    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+    setSelectedAppointment((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+  }
+  function refreshActivitiesInBackground() {
+    loadActivities(activityRange).catch(() => { /* non-critical */ });
+  }
+
+  function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
     setError(null);
     // Intercept the transition to "paid" — collect method + receipt first.
@@ -194,52 +220,100 @@ export default function HomeView({
       setMarkPaidOpen(true);
       return;
     }
-    const result = await updateAppointmentStatus(selectedAppointment.id, status);
-    if (result.error) { setError(result.error); return; }
-    // Keep the drawer open so the user can keep advancing in one go
-    // (scheduled → on_the_way → arrived → paid) without re-tapping the
-    // appointment row each time. Patch the local copy so DetailView
-    // re-renders with the new "next status" label.
-    setSelectedAppointment({ ...selectedAppointment, status });
-    reload();
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status });
+    void updateAppointmentStatus(apptId, status).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      } else {
+        refreshActivitiesInBackground();
+      }
+    });
   }
 
-  async function handlePaidComplete() {
+  function handlePaidComplete() {
     if (!selectedAppointment) return;
-    const result = await updateAppointmentStatus(selectedAppointment.id, "paid");
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    // The MarkPaid modal just inserted a payment row + minted tokens.
+    // All that's left is flipping status to paid — do it optimistically
+    // and close everything.
+    patchAppointment(apptId, { status: "paid" });
     setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void updateAppointmentStatus(apptId, "paid").then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      } else {
+        // Refetch this one appointment so the freshly-minted
+        // receipt_token + payments rows make it into the list.
+        getTodayAppointments(today)
+          .then((fresh) => setAppointments(fresh as unknown as AppointmentData[]))
+          .catch(() => { /* non-critical */ });
+        refreshActivitiesInBackground();
+      }
+    });
   }
 
-  async function handleCancel() {
+  function handleCancel() {
     if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
-    const result = await cancelAppointment(selectedAppointment.id);
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status: "cancelled" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void cancelAppointment(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      } else {
+        refreshActivitiesInBackground();
+      }
+    });
   }
 
-  async function handleNoShow() {
+  function handleNoShow() {
     if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
-    const result = await markNoShow(selectedAppointment.id);
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status: "no_show" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void markNoShow(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      } else {
+        refreshActivitiesInBackground();
+      }
+    });
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!selectedAppointment) return;
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
-    const result = await deleteAppointment(selectedAppointment.id);
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    // Snapshot for rollback if the server rejects the delete.
+    const removed = selectedAppointment;
+    setAppointments((prev) => prev.filter((a) => a.id !== apptId));
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void deleteAppointment(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        // Re-add at its original time-sorted position.
+        setAppointments((prev) => {
+          if (prev.some((a) => a.id === apptId)) return prev;
+          return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
+        });
+      } else {
+        refreshActivitiesInBackground();
+      }
+    });
   }
 
   const statusLabel = (status: string) =>

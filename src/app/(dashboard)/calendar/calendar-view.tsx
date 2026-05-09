@@ -799,7 +799,15 @@ export default function CalendarView({
     setEditModalOpen(true);
   }
 
-  async function handleStatusUpdate(status: string) {
+  // ---- Optimistic action helpers ----
+  // See home-view for the rationale. Same pattern: patch local state
+  // immediately, fire server action without blocking, roll back on error.
+  function patchAppointment(id: string, patch: Partial<AppointmentData>) {
+    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+    setSelectedAppointment((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+  }
+
+  function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
     setError(null);
     // Intercept the transition to "paid" — collect method + receipt first.
@@ -807,51 +815,88 @@ export default function CalendarView({
       setMarkPaidOpen(true);
       return;
     }
-    const result = await updateAppointmentStatus(selectedAppointment.id, status);
-    if (result.error) { setError(result.error); return; }
-    // Keep the drawer open so the user can keep advancing without re-tapping
-    // the appointment block. Patch the local copy so DetailView re-renders.
-    setSelectedAppointment({ ...selectedAppointment, status });
-    reload();
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status });
+    void updateAppointmentStatus(apptId, status).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      }
+    });
   }
 
   // Called after the Mark-Paid modal successfully records a payment.
-  async function handlePaidComplete() {
+  function handlePaidComplete() {
     if (!selectedAppointment) return;
-    const result = await updateAppointmentStatus(selectedAppointment.id, "paid");
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status: "paid" });
     setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void updateAppointmentStatus(apptId, "paid").then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      } else {
+        // Single targeted refetch so the freshly-minted receipt_token +
+        // payments rows make it into the appointments list.
+        getAppointmentsForDate(dateStr)
+          .then((fresh) => setAppointments(fresh as unknown as AppointmentData[]))
+          .catch(() => { /* non-critical */ });
+      }
+    });
   }
 
-  async function handleCancel() {
+  function handleCancel() {
     if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
-    const result = await cancelAppointment(selectedAppointment.id);
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status: "cancelled" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void cancelAppointment(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      }
+    });
   }
 
-  async function handleNoShow() {
+  function handleNoShow() {
     if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
-    const result = await markNoShow(selectedAppointment.id);
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    const prevStatus = selectedAppointment.status;
+    patchAppointment(apptId, { status: "no_show" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void markNoShow(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        patchAppointment(apptId, { status: prevStatus });
+      }
+    });
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!selectedAppointment) return;
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
-    const result = await deleteAppointment(selectedAppointment.id);
-    if (result.error) { setError(result.error); return; }
+    const apptId = selectedAppointment.id;
+    // Snapshot for rollback if the server rejects.
+    const removed = selectedAppointment;
+    setAppointments((prev) => prev.filter((a) => a.id !== apptId));
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    reload();
+    void deleteAppointment(apptId).then((result) => {
+      if (result?.error) {
+        setError(result.error);
+        setAppointments((prev) => {
+          if (prev.some((a) => a.id === apptId)) return prev;
+          return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
+        });
+      }
+    });
   }
 
   // Get appointments for a specific staff member (those that have at least one service assigned to them)
