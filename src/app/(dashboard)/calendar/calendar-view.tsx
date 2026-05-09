@@ -496,6 +496,33 @@ export default function CalendarView({
     }
   }, [dateStr]);
 
+  // Targeted reloads. Most in-page mutations only invalidate one slice
+  // of the data — refetching everything (clients especially, which is
+  // 200+ rows) was the biggest remaining source of perceived lag after
+  // optimistic updates landed. Use the narrowest one that covers the
+  // mutation; reload() (everything) is still here for the rare cases
+  // (e.g. block edits) but most callers should pick a smaller variant.
+  const reloadAppointments = useCallback(async () => {
+    try {
+      const appts = await getAppointmentsForDate(dateStr);
+      setAppointments(appts as unknown as AppointmentData[]);
+    } catch { /* ignore */ }
+  }, [dateStr]);
+
+  const reloadBlocks = useCallback(async () => {
+    try {
+      const blockData = await getCalendarBlocks(dateStr);
+      setBlocks(blockData as CalendarBlockData[]);
+    } catch { /* ignore */ }
+  }, [dateStr]);
+
+  const reloadClients = useCallback(async () => {
+    try {
+      const clientData = await getClients();
+      setClients(clientData);
+    } catch { /* ignore */ }
+  }, []);
+
   const reload = useCallback(async () => {
     try {
       const [appts, blockData, clientData] = await Promise.all([
@@ -643,7 +670,9 @@ export default function CalendarView({
       await updateAppointmentDuration(resizeApptId, snappedDuration);
       setResizeApptId(null);
       resizePending.current = false;
-      reload();
+      // Only the appointment row changed — skip refetching blocks +
+      // clients which are unchanged.
+      reloadAppointments();
       return;
     }
 
@@ -657,7 +686,7 @@ export default function CalendarView({
       setDragApptId(null);
       dragPending.current = null;
       dragStartY.current = null;
-      reload();
+      reloadAppointments();
       return;
     }
 
@@ -748,7 +777,8 @@ export default function CalendarView({
       await updateCalendarBlockTimes(resizeBlockId, block.start_time, newEnd);
       setResizeBlockId(null);
       resizeBlockPending.current = false;
-      reload();
+      // Only blocks changed — skip appointments + clients refetch.
+      reloadBlocks();
       return;
     }
     // Drag end
@@ -763,7 +793,7 @@ export default function CalendarView({
       setDragBlockId(null);
       dragBlockPending.current = null;
       dragBlockStartY.current = null;
-      reload();
+      reloadBlocks();
       return;
     }
     // Click
@@ -1545,11 +1575,15 @@ export default function CalendarView({
             setAddModalOpen(false);
             setPrefillTime(null);
             setPrefillStaffId(null);
-            reload();
+            // Only appointments changed — skip refetching clients/blocks.
+            reloadAppointments();
           }}
           onNewClient={async (name, phone, address, mapLink, notes) => {
             const result = await addClientQuick(name, phone, address, mapLink, notes);
             if (result.error) { setError(result.error); return null; }
+            // Patch the new client into local state so the next form
+            // open sees them — saves a round-trip vs reloadClients().
+            setClients((prev) => [...prev, result.client!]);
             return result.client!;
           }}
           onCancel={() => { setAddModalOpen(false); setPrefillTime(null); setPrefillStaffId(null); }}
@@ -1572,7 +1606,7 @@ export default function CalendarView({
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);
-              reload();
+              reloadAppointments();
             }}
             canEdit={!isStaff}
           />
@@ -1602,7 +1636,7 @@ export default function CalendarView({
         onPaid={() => {
           setEditPaymentOpen(false);
           setSelectedAppointment(null);
-          reload();
+          reloadAppointments();
         }}
       />
 
@@ -1622,11 +1656,12 @@ export default function CalendarView({
               if (result.error) { setError(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
-              reload();
+              reloadAppointments();
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);
               if (result.error) { setError(result.error); return null; }
+              setClients((prev) => [...prev, result.client!]);
               return result.client!;
             }}
             onCancel={() => { setEditModalOpen(false); setSelectedAppointment(null); }}
@@ -1678,7 +1713,7 @@ export default function CalendarView({
             setPrefillTime(null);
             setPrefillEndTime(null);
             setPrefillStaffId(null);
-            reload();
+            reloadBlocks();
           }}
           onCancel={() => { setBlockModalOpen(false); setPrefillTime(null); setPrefillEndTime(null); setPrefillStaffId(null); }}
         />
@@ -1721,7 +1756,7 @@ export default function CalendarView({
                     await deleteCalendarBlock(selectedBlock.id);
                     setBlockDetailOpen(false);
                     setSelectedBlock(null);
-                    reload();
+                    reloadBlocks();
                   }}
                   className="flex-1 rounded-lg border border-error-200 px-4 py-2 text-body-sm font-semibold text-error-700 hover:bg-red-50"
                 >Delete</button>
@@ -1749,7 +1784,7 @@ export default function CalendarView({
               if (result.error) { setError(result.error); return; }
               setBlockEditOpen(false);
               setSelectedBlock(null);
-              reload();
+              reloadBlocks();
             }}
             onCancel={() => { setBlockEditOpen(false); setSelectedBlock(null); }}
           />

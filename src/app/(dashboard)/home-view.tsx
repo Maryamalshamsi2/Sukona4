@@ -149,19 +149,15 @@ export default function HomeView({
     } catch { /* ignore */ }
   }, []);
 
-  const reload = useCallback(async () => {
+  // Targeted reload: just appointments. Activities + clients are not
+  // affected by edit/share/payment-edit flows, so refetching them on
+  // every save was wasted work.
+  const reloadAppointments = useCallback(async () => {
     try {
-      const fromDate = getRangeFromDate(activityRange);
-      const [appts, acts, clientData] = await Promise.all([
-        getTodayAppointments(today),
-        getRecentActivities(fromDate),
-        getClients(),
-      ]);
+      const appts = await getTodayAppointments(today);
       setAppointments(appts as unknown as AppointmentData[]);
-      setActivities(acts as unknown as ActivityItem[]);
-      setClients(clientData);
     } catch { /* ignore */ }
-  }, [today, activityRange]);
+  }, [today]);
 
   // Reload activities when the filter range changes (skip first mount — we already have initial data)
   useEffect(() => {
@@ -469,7 +465,7 @@ export default function HomeView({
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);
-              reload();
+              reloadAppointments();
             }}
             canEdit={currentUser?.role !== "staff"}
           />
@@ -499,7 +495,7 @@ export default function HomeView({
         onPaid={() => {
           setEditPaymentOpen(false);
           setSelectedAppointment(null);
-          reload();
+          reloadAppointments();
         }}
       />
 
@@ -519,11 +515,14 @@ export default function HomeView({
               if (result.error) { setError(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
-              reload();
+              reloadAppointments();
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);
               if (result.error) { setError(result.error); return null; }
+              // Patch the new client into local state so subsequent
+              // form opens see them — saves the round-trip.
+              setClients((prev) => [...prev, result.client!]);
               return result.client!;
             }}
             onCancel={() => { setEditModalOpen(false); setSelectedAppointment(null); }}
