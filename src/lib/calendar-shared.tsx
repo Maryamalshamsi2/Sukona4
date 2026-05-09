@@ -146,12 +146,28 @@ export interface ServiceEntry {
 
 // ---- Constants ----
 
+// The linear forward path: each step advances to the next via the
+// "next status" button in the detail drawer. Terminal states (cancelled
+// / no_show) live in STATUS_LABELS only — they're entered via dedicated
+// buttons, not by progression, so they don't appear here.
 export const STATUS_FLOW = [
   { value: "scheduled", label: "Scheduled", color: "bg-[#FFF8F0] text-[#CC7700]" },
   { value: "on_the_way", label: "On the Way", color: "bg-[#F0FAF2] text-[#1B8736]" },
   { value: "arrived", label: "Arrived", color: "bg-[#F0F7FF] text-[#0062CC]" },
   { value: "paid", label: "Paid", color: "bg-[#F5F5F7] text-[#48484A]" },
 ];
+
+// All known statuses including terminals. Lookup table for the status
+// pill and other label/color renders. Includes everything in
+// STATUS_FLOW plus the off-path terminals.
+export const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  scheduled:  { label: "Scheduled",  color: "bg-[#FFF8F0] text-[#CC7700]" },
+  on_the_way: { label: "On the Way", color: "bg-[#F0FAF2] text-[#1B8736]" },
+  arrived:    { label: "Arrived",    color: "bg-[#F0F7FF] text-[#0062CC]" },
+  paid:       { label: "Paid",       color: "bg-[#F5F5F7] text-[#48484A]" },
+  cancelled:  { label: "Cancelled",  color: "bg-[#FEE7E7] text-[#B91C1C]" },
+  no_show:    { label: "No-show",    color: "bg-[#F3E8FF] text-[#6B21A8]" },
+};
 
 // ---- Helpers ----
 
@@ -307,6 +323,7 @@ export function DetailView({
   onStatusUpdate,
   onEdit,
   onCancel,
+  onNoShow,
   onDelete,
   onEditPayment,
   onShareSent,
@@ -317,6 +334,9 @@ export function DetailView({
   onStatusUpdate: (status: string) => void;
   onEdit: () => void;
   onCancel: () => void;
+  /** Sibling of onCancel: marks the appointment as a no-show.
+   *  Optional — caller pages decide whether to expose it. */
+  onNoShow?: () => void;
   /** When provided, renders a trash-bin icon button that hard-deletes
    *  the appointment (purges it from records & reports). Optional — only
    *  passed by owner/admin pages. */
@@ -358,8 +378,8 @@ export function DetailView({
       <div>
         <h3 className="text-body font-bold text-text-primary mb-2">Status</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_FLOW.find((s) => s.value === appointment.status)?.color || "bg-gray-100 text-text-primary"}`}>
-            {STATUS_FLOW.find((s) => s.value === appointment.status)?.label || appointment.status}
+          <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_LABELS[appointment.status]?.color || "bg-gray-100 text-text-primary"}`}>
+            {STATUS_LABELS[appointment.status]?.label || appointment.status}
           </span>
           {uploadedReceiptUrl && (
             <button
@@ -546,20 +566,38 @@ export function DetailView({
       )}
 
       {/* ---- Actions ---- */}
-      {/* Skip-to-paid shortcut. The linear status flow is
-          scheduled → on_the_way → arrived → paid; tapping the next-status
-          button only advances one step. For salons that just want to record
-          payment without ticking through every intermediate state, this
-          jumps straight to the Mark Paid modal. Hidden when the next step
-          is already "paid" (so we don't show two buttons that do the same
-          thing) or when the appointment is no longer active. */}
-      {canEdit && isActive && nextStatus && nextStatus.value !== "paid" && (
-        <button
-          onClick={() => onStatusUpdate("paid")}
-          className="-mb-1 block w-full text-right text-caption font-semibold text-text-secondary hover:text-text-primary"
-        >
-          Skip to Mark Paid →
-        </button>
+      {/* Secondary shortcut row above the main action buttons.
+          - "Mark as No-show" (left) — terminal state; client didn't
+            turn up. Distinct from cancel: the slot was held + staff
+            time was reserved, so reports treat it differently. Only
+            shown while the appointment is still active.
+          - "Skip to Mark Paid" (right) — bypasses the linear status
+            progression (scheduled → on_the_way → arrived → paid)
+            and jumps straight to the Mark Paid modal. Hidden when
+            the next step is already "paid". */}
+      {canEdit && isActive && (onNoShow || (nextStatus && nextStatus.value !== "paid")) && (
+        <div className="-mb-1 flex items-center justify-between gap-2 text-caption font-semibold">
+          {onNoShow ? (
+            <button
+              onClick={onNoShow}
+              className="text-text-secondary hover:text-text-primary"
+            >
+              ← Mark as No-show
+            </button>
+          ) : (
+            <span />
+          )}
+          {nextStatus && nextStatus.value !== "paid" ? (
+            <button
+              onClick={() => onStatusUpdate("paid")}
+              className="text-text-secondary hover:text-text-primary"
+            >
+              Skip to Mark Paid →
+            </button>
+          ) : (
+            <span />
+          )}
+        </div>
       )}
       <div className="flex items-center gap-3 border-t border-border pt-4">
         {nextStatus && (

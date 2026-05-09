@@ -9,7 +9,7 @@ import {
   ClientItem,
   ServiceItem,
   BundleForBooking,
-  STATUS_FLOW,
+  STATUS_LABELS,
   formatTime12Short,
   getApptTotalDuration,
   getApptTotal,
@@ -25,6 +25,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  markNoShow,
   deleteAppointment,
   markShareSent,
 } from "./calendar/actions";
@@ -222,6 +223,15 @@ export default function HomeView({
     reload();
   }
 
+  async function handleNoShow() {
+    if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
+    const result = await markNoShow(selectedAppointment.id);
+    if (result.error) { setError(result.error); return; }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    reload();
+  }
+
   async function handleDelete() {
     if (!selectedAppointment) return;
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
@@ -233,9 +243,9 @@ export default function HomeView({
   }
 
   const statusLabel = (status: string) =>
-    STATUS_FLOW.find((s) => s.value === status)?.label || status;
+    STATUS_LABELS[status]?.label || status;
   const statusColor = (status: string) =>
-    STATUS_FLOW.find((s) => s.value === status)?.color || "bg-neutral-100 text-text-primary";
+    STATUS_LABELS[status]?.color || "bg-neutral-100 text-text-primary";
 
   const isStaff = currentUser?.role === "staff";
 
@@ -379,6 +389,7 @@ export default function HomeView({
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            onNoShow={!isStaff ? handleNoShow : undefined}
             onDelete={handleDelete}
             onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             onShareSent={async () => {

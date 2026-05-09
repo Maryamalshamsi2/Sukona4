@@ -36,6 +36,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  markNoShow,
   deleteAppointment,
   updateAppointmentTime,
   updateAppointmentDuration,
@@ -77,6 +78,7 @@ const APPT_STATUS_COLORS: Record<string, string> = {
   completed: "bg-[#F5F5F7] border-[#D1D1D6] text-[#48484A]",
   paid: "bg-[#F5F5F7]/60 border-[#D1D1D6]/50 text-[#48484A]/50",
   cancelled: "bg-red-50/60 border-red-200/50 text-red-400",
+  no_show: "bg-purple-50/70 border-purple-200/60 text-purple-500",
 };
 // Calendar block color: light grey
 const CAL_BLOCK_COLOR = "bg-neutral-100 border-neutral-200 text-text-primary";
@@ -828,6 +830,15 @@ export default function CalendarView({
     reload();
   }
 
+  async function handleNoShow() {
+    if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
+    const result = await markNoShow(selectedAppointment.id);
+    if (result.error) { setError(result.error); return; }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    reload();
+  }
+
   async function handleDelete() {
     if (!selectedAppointment) return;
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
@@ -1496,6 +1507,7 @@ export default function CalendarView({
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
             onCancel={handleCancel}
+            onNoShow={!isStaff ? handleNoShow : undefined}
             onDelete={handleDelete}
             onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             onShareSent={async () => {

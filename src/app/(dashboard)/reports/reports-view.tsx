@@ -159,6 +159,7 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
   paid: "Paid",
   cancelled: "Cancelled",
+  no_show: "No-show",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -168,6 +169,7 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "bg-emerald-50 text-emerald-700",
   paid: "bg-green-50 text-green-700",
   cancelled: "bg-red-50 text-red-600",
+  no_show: "bg-purple-50 text-purple-700",
 };
 
 const PRESET_LABELS: Record<DatePreset, string> = {
@@ -357,8 +359,11 @@ export default function ReportsView({
     }
     return Math.max(0, subtotal + transport - discount);
   }
+  // Expected revenue excludes both cancelled and no-show appointments —
+  // the client didn't pay (and won't, in a no-show, unless the salon has
+  // a separate no-show fee policy outside of the appointment record).
   const expectedRevenue = appointments
-    .filter((a) => a.status !== "cancelled")
+    .filter((a) => a.status !== "cancelled" && a.status !== "no_show")
     .reduce((s, a) => s + getApptRevenue(a), 0);
 
   // ---- Tab content ----

@@ -455,6 +455,39 @@ export async function cancelAppointment(id: string) {
   return { success: true };
 }
 
+// ---- MARK AS NO-SHOW ----
+//
+// Distinct from cancel: a no-show is a client who didn't turn up. The
+// slot was held, staff time was reserved — the salon may charge a fee or
+// just track it for client reliability. Reports treat no-shows
+// separately from cancellations for that reason.
+export async function markNoShow(id: string) {
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("appointments")
+    .select("client_id, status")
+    .eq("id", id)
+    .single();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ status: "no_show" })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  const { data: client } = current?.client_id
+    ? await supabase.from("clients").select("name").eq("id", current.client_id).single()
+    : { data: null };
+  await logActivity(
+    supabase,
+    id,
+    "no_show",
+    `No-show · ${client?.name || "Unknown"}`,
+  );
+
+  revalidatePath("/calendar");
+  return { success: true };
+}
+
 // ---- DELETE ----
 //
 // Hard-deletes an appointment and everything tied to it. FK cascades take

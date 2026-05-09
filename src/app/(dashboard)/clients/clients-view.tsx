@@ -14,6 +14,7 @@ import {
   updateAppointment,
   updateAppointmentStatus,
   cancelAppointment,
+  markNoShow,
   deleteAppointment,
   getBundlesForBooking,
   getStaffSchedulesForDate,
@@ -24,7 +25,7 @@ import {
   ClientItem,
   ServiceItem,
   BundleForBooking,
-  STATUS_FLOW,
+  STATUS_LABELS,
   formatTime12Short,
   getApptTotalDuration,
   getApptEndTime,
@@ -233,6 +234,18 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   async function handleAppointmentCancel() {
     if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
     const result = await cancelAppointment(selectedAppointment.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDetailModalOpen(false);
+    setSelectedAppointment(null);
+    refreshClientAppointments();
+  }
+
+  async function handleAppointmentNoShow() {
+    if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
+    const result = await markNoShow(selectedAppointment.id);
     if (result.error) {
       setError(result.error);
       return;
@@ -559,12 +572,13 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
               {clientAppointments.map((appt) => {
                 const endTime = getApptEndTime(appt);
                 const duration = getApptTotalDuration(appt);
-                const statusMeta = STATUS_FLOW.find((s) => s.value === appt.status);
-                const isCancelled = appt.status === "cancelled";
-                const statusLabel = isCancelled ? "Cancelled" : statusMeta?.label || appt.status;
-                const statusColor = isCancelled
-                  ? "bg-red-50 text-error-700"
-                  : statusMeta?.color || "bg-neutral-100 text-text-primary";
+                const statusMeta = STATUS_LABELS[appt.status];
+                const statusLabel = statusMeta?.label || appt.status;
+                const statusColor = statusMeta?.color || "bg-neutral-100 text-text-primary";
+                // Dim past appointments that didn't result in revenue
+                // (cancelled or no-show) so the eye lands on completed
+                // / paid rows first.
+                const isInactive = appt.status === "cancelled" || appt.status === "no_show";
 
                 const serviceNames = appt.appointment_services
                   .slice()
@@ -592,7 +606,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                     key={appt.id}
                     onClick={() => openAppointmentDetail(appt)}
                     className={`flex w-full items-start gap-3 px-3 py-3.5 text-left transition-colors hover:bg-surface-hover ${
-                      isCancelled ? "opacity-60" : ""
+                      isInactive ? "opacity-60" : ""
                     }`}
                   >
                     {/* Left: date + time */}
@@ -647,6 +661,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             onStatusUpdate={handleStatusUpdate}
             onEdit={openAppointmentEdit}
             onCancel={handleAppointmentCancel}
+            onNoShow={!isStaff ? handleAppointmentNoShow : undefined}
             onDelete={handleAppointmentDelete}
             onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             canEdit={currentUser?.role !== "staff"}
