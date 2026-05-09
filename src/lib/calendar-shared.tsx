@@ -1498,15 +1498,18 @@ export function AppointmentForm({
                   <input
                     type="time"
                     autoFocus
-                    defaultValue={endTimeStr}
-                    onBlur={(e) => {
-                      // Commit on blur. Validate: end must be after start.
+                    // Controlled — commit on every change so durationOverride
+                    // is always in sync. Previously this was uncontrolled
+                    // with onBlur-only commit, which raced with the form's
+                    // Save button on touch devices and saved the old value.
+                    value={endTimeStr}
+                    onChange={(e) => {
                       const newEndMin = timeToMinutes(e.target.value);
                       if (Number.isFinite(newEndMin) && newEndMin > startMin) {
                         setDurationOverride(newEndMin - startMin);
                       }
-                      setEditingEndTime(false);
                     }}
+                    onBlur={() => setEditingEndTime(false)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       if (e.key === "Escape") setEditingEndTime(false);
