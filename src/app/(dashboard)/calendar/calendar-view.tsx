@@ -125,8 +125,13 @@ function DatePicker({ selected, onSelect }: { selected: Date; onSelect: (d: Date
 
   const monthName = viewDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
+  // Popover position: centered under the trigger on mobile (the trigger
+  // sits in the middle of the top bar; left-aligning would overflow the
+  // right edge), left-aligned on sm+ where the trigger is on the left
+  // side and there is room to the right. max-w clamps in case the
+  // viewport is narrower than the popover width.
   return (
-    <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-xl bg-white p-3 shadow-lg ring-1 ring-black/5" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="absolute top-full mt-1 z-50 w-72 max-w-[calc(100vw-1.5rem)] left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 rounded-xl bg-white p-3 shadow-lg ring-1 ring-black/5" onMouseDown={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-2">
         <button onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
