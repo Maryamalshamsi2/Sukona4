@@ -1303,6 +1303,15 @@ export default function CalendarView({
                       } else {
                         return null; // Has services but none assigned to this staff
                       }
+                      // duration_override (set by drag-resize on the grid OR by
+                      // editing the end time in the form) wins over the sum of
+                      // service rows. Without this the block would keep its
+                      // service-sum size even after the user shortens it.
+                      if (appt.duration_override != null) {
+                        const apptStartMin = timeToMinutes(appt.time);
+                        earliestStart = apptStartMin;
+                        latestEnd = apptStartMin + appt.duration_override;
+                      }
 
                       const { top, height } = getBlockStyleFromMinutes(earliestStart, latestEnd);
 
