@@ -191,7 +191,7 @@ function ProfileSection({ profile, onUpdate, isStaff }: { profile: Profile; onUp
           <p className="mt-1 text-caption text-text-tertiary">Email cannot be changed.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="block text-body-sm font-semibold text-text-primary mb-1">Phone</label>
             <input

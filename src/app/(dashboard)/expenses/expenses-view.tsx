@@ -320,19 +320,19 @@ export default function ExpensesView({
           wide for the dropdown itself, so they live here below the
           title row. Other presets (Today/Week/Month) render no UI. */}
       {datePreset === "custom" && (
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
           <input
             type="date"
             value={customFrom}
             onChange={(e) => setCustomFrom(e.target.value)}
-            className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="min-w-0 flex-1 rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:flex-none sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
           <span className="text-body-sm text-text-tertiary">to</span>
           <input
             type="date"
             value={customTo}
             onChange={(e) => setCustomTo(e.target.value)}
-            className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="min-w-0 flex-1 rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:flex-none sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
         </div>
       )}
