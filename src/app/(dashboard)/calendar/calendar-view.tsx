@@ -28,9 +28,6 @@ import {
 } from "@/lib/calendar-shared";
 import {
   getAppointmentsForDate,
-  getStaffMembers,
-  getClients,
-  getServices,
   getCalendarBlocks,
   addClientQuick,
   createAppointment,
@@ -46,7 +43,6 @@ import {
   updateCalendarBlock,
   updateCalendarBlockTimes,
   deleteCalendarBlock,
-  getBundlesForBooking,
   getStaffSchedulesForDate,
   markShareSent,
 } from "./actions";
@@ -451,22 +447,25 @@ export default function CalendarView({
   }
 
   const loadData = useCallback(async () => {
+    // Date change: only date-scoped data is stale (appointments, blocks,
+    // staff schedules). Staff / clients / services / bundles are session-
+    // wide and don't change between dates — refetching them every time
+    // the user tapped next-day was the bulk of the perceived lag.
+    //
+    // Clear appointments + blocks immediately so the grid shows the new
+    // empty state during the fetch instead of yesterday's appointments
+    // sitting under today's date label.
+    setLoading(true);
+    setAppointments([]);
+    setBlocks([]);
     try {
-      const [appts, staffData, clientData, serviceData, blockData, bundleData, schedData] = await Promise.all([
+      const [appts, blockData, schedData] = await Promise.all([
         getAppointmentsForDate(dateStr),
-        getStaffMembers(),
-        getClients(),
-        getServices(),
         getCalendarBlocks(dateStr),
-        getBundlesForBooking(),
         getStaffSchedulesForDate(dateStr),
       ]);
       setAppointments(appts as unknown as AppointmentData[]);
-      setStaff(staffData);
-      setClients(clientData);
-      setServices(serviceData as ServiceItem[]);
       setBlocks(blockData as CalendarBlockData[]);
-      setBundles(bundleData as unknown as BundleForBooking[]);
 
       // Build schedule map
       const map = new Map<string, { isOff: boolean; startMin: number; endMin: number }>();
@@ -518,27 +517,9 @@ export default function CalendarView({
     } catch { /* ignore */ }
   }, [dateStr]);
 
-  const reloadClients = useCallback(async () => {
-    try {
-      const clientData = await getClients();
-      setClients(clientData);
-    } catch { /* ignore */ }
-  }, []);
-
-  const reload = useCallback(async () => {
-    try {
-      const [appts, blockData, clientData] = await Promise.all([
-        getAppointmentsForDate(dateStr),
-        getCalendarBlocks(dateStr),
-        getClients(),
-      ]);
-      setAppointments(appts as unknown as AppointmentData[]);
-      setBlocks(blockData as CalendarBlockData[]);
-      setClients(clientData);
-    } catch {
-      /* ignore */
-    }
-  }, [dateStr]);
+  // (Previously had a full reload() and a reloadClients() helper, but
+  // every caller has been migrated to either reloadAppointments,
+  // reloadBlocks, or to patching local state directly. Removed.)
 
   // Skip the very first run because the server already seeded today's data.
   // Subsequent date changes still trigger a fetch.
@@ -988,13 +969,26 @@ export default function CalendarView({
     return blocks.filter((b) => b.staff_id === staffId);
   }
 
-  if (loading) return <p className="mt-8 text-center text-text-secondary">Loading...</p>;
+  // Note: previously this blanked the entire page with "Loading..."
+  // whenever the date changed. That destroyed the surrounding context
+  // (top bar, navigation arrows). Now `loading` only drives a small
+  // top-bar indicator below; the cleared appointments + blocks act as
+  // the implicit loading state for the grid itself.
 
   const isToday = formatDate(new Date()) === dateStr;
 
   return (
     <div className="absolute inset-0 flex flex-col px-4 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6 lg:px-8 lg:pt-4 lg:pb-8">
-     <div className="flex flex-col flex-1 overflow-hidden rounded-2xl bg-white border border-[#EAEAEA] shadow-xs">
+     <div className="relative flex flex-col flex-1 overflow-hidden rounded-2xl bg-white border border-[#EAEAEA] shadow-xs">
+      {/* Date-change loading indicator: a thin animated bar at the
+          very top of the calendar card. Tiny, doesn't shift layout,
+          tells the user fresh data is on the way without yanking the
+          context the way the old full-page "Loading..." did. */}
+      {loading && (
+        <div className="absolute left-0 right-0 top-0 z-30 h-0.5 overflow-hidden">
+          <div className="h-full w-1/3 animate-[loadingbar_1s_linear_infinite] bg-neutral-900/60" />
+        </div>
+      )}
       {/* ---- Top bar ---- */}
       {/* Mobile top bar */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5 sm:hidden">

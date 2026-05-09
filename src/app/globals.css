@@ -308,3 +308,10 @@ article li,
     font-size: 16px;
   }
 }
+
+/* Calendar date-change loading indicator: a sliver that travels left
+   to right across the top of the calendar card while data refreshes. */
+@keyframes loadingbar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
