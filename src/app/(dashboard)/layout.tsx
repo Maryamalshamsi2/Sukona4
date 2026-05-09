@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/app/(dashboard)/actions";
 import { UserContext, type CurrentUser } from "@/lib/user-context";
 import { SearchProvider, HeaderSearchInput } from "@/lib/search-context";
+import { UndoToastProvider } from "@/components/undo-toast";
 
 export default function DashboardLayout({
   children,
@@ -67,6 +68,7 @@ export default function DashboardLayout({
   return (
     <SearchProvider>
     <UserContext.Provider value={currentUser}>
+    <UndoToastProvider>
       <div className="flex h-[100dvh] flex-col overflow-hidden">
         {/* Top bar */}
         <header className="relative flex h-16 shrink-0 items-center bg-[#F5F5F7]/80 px-3 sm:h-20 sm:px-4">
@@ -154,6 +156,7 @@ export default function DashboardLayout({
         {/* Mobile bottom navigation. Hidden on lg+. */}
         <BottomTabBar />
       </div>
+    </UndoToastProvider>
     </UserContext.Provider>
     </SearchProvider>
   );

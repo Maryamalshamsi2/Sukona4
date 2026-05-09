@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Modal from "@/components/modal";
 import MarkPaidModal from "@/components/mark-paid-modal";
+import { useUndo } from "@/components/undo-toast";
 import { useCurrentUser } from "@/lib/user-context";
 import {
   StaffMember,
@@ -201,6 +202,7 @@ export default function CalendarView({
 }: CalendarViewProps) {
   const currentUser = useCurrentUser();
   const isStaff = currentUser?.role === "staff";
+  const undo = useUndo();
 
   // Seed selectedDate from the server's initialDateStr so server + client agree.
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -880,9 +882,10 @@ export default function CalendarView({
   }
 
   function handleCancel() {
-    if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
+    if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
     const prevStatus = selectedAppointment.status;
+    const clientName = selectedAppointment.clients?.name || "appointment";
     patchAppointment(apptId, { status: "cancelled" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
@@ -890,14 +893,20 @@ export default function CalendarView({
       if (result?.error) {
         setError(result.error);
         patchAppointment(apptId, { status: prevStatus });
+        return;
       }
+      undo.show(`Cancelled · ${clientName}`, () => {
+        patchAppointment(apptId, { status: prevStatus });
+        void updateAppointmentStatus(apptId, prevStatus);
+      });
     });
   }
 
   function handleNoShow() {
-    if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
+    if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
     const prevStatus = selectedAppointment.status;
+    const clientName = selectedAppointment.clients?.name || "appointment";
     patchAppointment(apptId, { status: "no_show" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
@@ -905,28 +914,51 @@ export default function CalendarView({
       if (result?.error) {
         setError(result.error);
         patchAppointment(apptId, { status: prevStatus });
+        return;
       }
+      undo.show(`Marked no-show · ${clientName}`, () => {
+        patchAppointment(apptId, { status: prevStatus });
+        void updateAppointmentStatus(apptId, prevStatus);
+      });
     });
   }
 
   function handleDelete() {
     if (!selectedAppointment) return;
-    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
     const apptId = selectedAppointment.id;
-    // Snapshot for rollback if the server rejects.
     const removed = selectedAppointment;
+    const clientName = selectedAppointment.clients?.name || "appointment";
+    // Defer the hard delete by 6s so the user can undo. The toast
+    // shows immediately, the appointment is removed from the list
+    // optimistically; if the timer fires the server delete runs.
     setAppointments((prev) => prev.filter((a) => a.id !== apptId));
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    void deleteAppointment(apptId).then((result) => {
-      if (result?.error) {
-        setError(result.error);
+    let undone = false;
+    const timer = setTimeout(() => {
+      if (undone) return;
+      void deleteAppointment(apptId).then((result) => {
+        if (result?.error) {
+          setError(result.error);
+          setAppointments((prev) => {
+            if (prev.some((a) => a.id === apptId)) return prev;
+            return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
+          });
+        }
+      });
+    }, 6000);
+    undo.show(
+      `Deleted · ${clientName}`,
+      () => {
+        undone = true;
+        clearTimeout(timer);
         setAppointments((prev) => {
           if (prev.some((a) => a.id === apptId)) return prev;
           return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
         });
-      }
-    });
+      },
+      6000,
+    );
   }
 
   // Get appointments for a specific staff member (those that have at least one service assigned to them)

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Modal from "@/components/modal";
 import MarkPaidModal from "@/components/mark-paid-modal";
 import PhoneInput from "@/components/phone-input";
+import { useUndo } from "@/components/undo-toast";
 import { useCurrentUser } from "@/lib/user-context";
 import { getClients, addClient, updateClient, deleteClient, getClientAppointments } from "./actions";
 import {
@@ -55,6 +56,7 @@ export interface ClientsViewProps {
 export default function ClientsView({ initialClients }: ClientsViewProps) {
   const currentUser = useCurrentUser();
   const isStaff = currentUser?.role === "staff";
+  const undo = useUndo();
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
@@ -246,9 +248,10 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   }
 
   function handleAppointmentCancel() {
-    if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
+    if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
     const prevStatus = selectedAppointment.status;
+    const clientName = selectedAppointment.clients?.name || "appointment";
     patchClientAppt(apptId, { status: "cancelled" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
@@ -256,14 +259,20 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       if (result?.error) {
         setError(result.error);
         patchClientAppt(apptId, { status: prevStatus });
+        return;
       }
+      undo.show(`Cancelled · ${clientName}`, () => {
+        patchClientAppt(apptId, { status: prevStatus });
+        void updateAppointmentStatus(apptId, prevStatus);
+      });
     });
   }
 
   function handleAppointmentNoShow() {
-    if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
+    if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
     const prevStatus = selectedAppointment.status;
+    const clientName = selectedAppointment.clients?.name || "appointment";
     patchClientAppt(apptId, { status: "no_show" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
@@ -271,27 +280,48 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       if (result?.error) {
         setError(result.error);
         patchClientAppt(apptId, { status: prevStatus });
+        return;
       }
+      undo.show(`Marked no-show · ${clientName}`, () => {
+        patchClientAppt(apptId, { status: prevStatus });
+        void updateAppointmentStatus(apptId, prevStatus);
+      });
     });
   }
 
   function handleAppointmentDelete() {
     if (!selectedAppointment) return;
-    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
     const apptId = selectedAppointment.id;
     const removed = selectedAppointment;
+    const clientName = selectedAppointment.clients?.name || "appointment";
     setClientAppointments((prev) => prev.filter((a) => a.id !== apptId));
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    void deleteAppointment(apptId).then((result) => {
-      if (result?.error) {
-        setError(result.error);
+    let undone = false;
+    const timer = setTimeout(() => {
+      if (undone) return;
+      void deleteAppointment(apptId).then((result) => {
+        if (result?.error) {
+          setError(result.error);
+          setClientAppointments((prev) => {
+            if (prev.some((a) => a.id === apptId)) return prev;
+            return [...prev, removed];
+          });
+        }
+      });
+    }, 6000);
+    undo.show(
+      `Deleted · ${clientName}`,
+      () => {
+        undone = true;
+        clearTimeout(timer);
         setClientAppointments((prev) => {
           if (prev.some((a) => a.id === apptId)) return prev;
           return [...prev, removed];
         });
-      }
-    });
+      },
+      6000,
+    );
   }
 
   async function handleSubmit(formData: FormData) {

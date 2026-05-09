@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Modal from "@/components/modal";
 import MarkPaidModal from "@/components/mark-paid-modal";
+import { useUndo } from "@/components/undo-toast";
 import {
   AppointmentData,
   StaffMember,
@@ -139,6 +140,7 @@ export default function HomeView({
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentData | null>(null);
 
+  const undo = useUndo();
   const today = formatDate(new Date());
 
   const loadActivities = useCallback(async (range: ActivityRange) => {
@@ -256,9 +258,11 @@ export default function HomeView({
   }
 
   function handleCancel() {
-    if (!selectedAppointment || !confirm("Cancel this appointment?")) return;
+    if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
     const prevStatus = selectedAppointment.status;
+    const clientName = selectedAppointment.clients?.name || "appointment";
+    // No confirm() — the undo toast replaces the gating dialog.
     patchAppointment(apptId, { status: "cancelled" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
@@ -266,16 +270,26 @@ export default function HomeView({
       if (result?.error) {
         setError(result.error);
         patchAppointment(apptId, { status: prevStatus });
-      } else {
-        refreshActivitiesInBackground();
+        return;
       }
+      refreshActivitiesInBackground();
+      undo.show(`Cancelled · ${clientName}`, () => {
+        // Roll the status back. updateAppointmentStatus is the same
+        // server action we'd normally use for status changes, so the
+        // activity log gets a Status entry too.
+        patchAppointment(apptId, { status: prevStatus });
+        void updateAppointmentStatus(apptId, prevStatus).then(() => {
+          refreshActivitiesInBackground();
+        });
+      });
     });
   }
 
   function handleNoShow() {
-    if (!selectedAppointment || !confirm("Mark this appointment as a no-show?")) return;
+    if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
     const prevStatus = selectedAppointment.status;
+    const clientName = selectedAppointment.clients?.name || "appointment";
     patchAppointment(apptId, { status: "no_show" });
     setDetailModalOpen(false);
     setSelectedAppointment(null);
@@ -283,33 +297,58 @@ export default function HomeView({
       if (result?.error) {
         setError(result.error);
         patchAppointment(apptId, { status: prevStatus });
-      } else {
-        refreshActivitiesInBackground();
+        return;
       }
+      refreshActivitiesInBackground();
+      undo.show(`Marked no-show · ${clientName}`, () => {
+        patchAppointment(apptId, { status: prevStatus });
+        void updateAppointmentStatus(apptId, prevStatus).then(() => {
+          refreshActivitiesInBackground();
+        });
+      });
     });
   }
 
   function handleDelete() {
     if (!selectedAppointment) return;
-    if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
     const apptId = selectedAppointment.id;
-    // Snapshot for rollback if the server rejects the delete.
     const removed = selectedAppointment;
+    const clientName = selectedAppointment.clients?.name || "appointment";
+    // Optimistically remove and DEFER the actual server delete so the
+    // user has a chance to undo. If they don't, the timeout fires the
+    // hard delete after the toast goes away.
     setAppointments((prev) => prev.filter((a) => a.id !== apptId));
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    void deleteAppointment(apptId).then((result) => {
-      if (result?.error) {
-        setError(result.error);
-        // Re-add at its original time-sorted position.
+    let undone = false;
+    const timer = setTimeout(() => {
+      if (undone) return;
+      void deleteAppointment(apptId).then((result) => {
+        if (result?.error) {
+          setError(result.error);
+          // Server rejected — restore in the list.
+          setAppointments((prev) => {
+            if (prev.some((a) => a.id === apptId)) return prev;
+            return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
+          });
+        } else {
+          refreshActivitiesInBackground();
+        }
+      });
+    }, 6000);
+    undo.show(
+      `Deleted · ${clientName}`,
+      () => {
+        undone = true;
+        clearTimeout(timer);
+        // Restore in the list at its original time-sorted position.
         setAppointments((prev) => {
           if (prev.some((a) => a.id === apptId)) return prev;
           return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
         });
-      } else {
-        refreshActivitiesInBackground();
-      }
-    });
+      },
+      6000,
+    );
   }
 
   const statusLabel = (status: string) =>
