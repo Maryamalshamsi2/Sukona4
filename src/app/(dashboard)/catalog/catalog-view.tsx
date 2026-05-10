@@ -667,8 +667,13 @@ export default function CatalogView({
       {/* Category tabs — single horizontal line, left-aligned (scrolls if overflow).
           For owners/admins, the user-defined category pills are draggable to
           reorder. The "All" and "Uncategorized" pills sit outside the
-          sortable set so they always anchor the row. */}
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+          sortable set so they always anchor the row.
+
+          Sticky on scroll so switching category from deep in a long
+          service list doesn't require scrolling back up. Negative
+          margins + matching padding extend the bg to the page edges
+          to cover content scrolling under in the gutters. */}
+      <div className="sticky top-0 z-20 mt-4 -mx-4 flex gap-2 overflow-x-auto bg-[#F5F5F7] px-4 pb-2 pt-1 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <button
             onClick={() => setActiveTab("all")}
             className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${

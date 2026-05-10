@@ -470,21 +470,29 @@ export default function ReportsView({
       {/* Detail tabs — 2x2 grid on mobile, 4-up on desktop. Each tab is
           self-contained: it owns its own counts/totals/summary. The
           page header above is intentionally bare (just title + filter)
-          so the user lands somewhere quiet and drills in. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`rounded-xl px-3 py-3 text-body-sm font-semibold transition-colors ${
-              tab === t.key
-                ? "bg-neutral-900 text-text-inverse"
-                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+          so the user lands somewhere quiet and drills in.
+
+          Sticky on scroll so the user can switch tabs from anywhere
+          in a long list without scrolling back up. The negative
+          horizontal margins + matching padding extend the bg to the
+          page edges so content scrolling underneath doesn't show in
+          the dashboard's content gutter. */}
+      <div className="sticky top-0 z-20 -mx-4 bg-[#F5F5F7] px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-xl px-3 py-3 text-body-sm font-semibold transition-colors ${
+                tab === t.key
+                  ? "bg-neutral-900 text-text-inverse"
+                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
