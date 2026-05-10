@@ -91,12 +91,12 @@ function Nav() {
             : "border-b border-transparent bg-white"
         }`}
       >
-        {/* The bar is flex on mobile (logo left, burger right via
+        {/* The bar is flex on mobile (logo left, right cluster
             justify-between) and becomes a 3-column grid on md+ so the
-            desktop links sit centered between logo and Sign in. The
-            earlier version was grid-only on every breakpoint, which
-            parked the burger in the middle column on mobile. */}
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:h-16 sm:px-8 md:grid md:grid-cols-[1fr_auto_1fr]">
+            desktop links sit centered between logo and Sign in. Logo
+            sized to match the dashboard + auth pages (46/50px), so
+            the bar is taller (h-16/h-20) to give it breathing room. */}
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 sm:h-20 sm:px-8 md:grid md:grid-cols-[1fr_auto_1fr]">
           {/* Logo (left) */}
           <Link
             href="/"
@@ -104,7 +104,7 @@ function Nav() {
             className="flex shrink-0 md:justify-self-start"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-dark.png" alt="Sukona" className="h-7 w-auto sm:h-8" />
+            <img src="/logo-dark.png" alt="Sukona" className="h-[46px] w-auto sm:h-[50px]" />
           </Link>
 
           {/* Center links — desktop only */}
@@ -114,56 +114,63 @@ function Nav() {
             <NavLink href="#contact">Contact</NavLink>
           </nav>
 
-          {/* Sign in (right) — desktop only, text link not a button */}
-          <div className="hidden md:block md:justify-self-end">
+          {/* Right cluster — Sign in CTA (mobile pill + desktop text
+              link) and the mobile burger. Wrapped together so the
+              flex layout on mobile groups them at the right edge,
+              while md:justify-self-end pins the cluster to col 3 on
+              desktop. */}
+          <div className="flex items-center gap-2 md:justify-self-end">
+            {/* Mobile sign-in pill — visible up to md, lifted out of
+                the burger drawer so it's reachable in one tap. */}
             <Link
               href="/login"
-              className="inline-flex items-center gap-1 text-body-sm font-medium text-text-primary transition hover:text-primary-600"
+              className="inline-flex items-center justify-center rounded-full bg-text-primary px-4 py-2 text-body-sm font-medium text-text-inverse transition active:scale-[0.98] md:hidden"
+            >
+              Sign in
+            </Link>
+
+            {/* Desktop sign-in text link */}
+            <Link
+              href="/login"
+              className="hidden items-center gap-1 text-body-sm font-medium text-text-primary transition hover:text-primary-600 md:inline-flex"
             >
               Sign in <span aria-hidden>→</span>
             </Link>
-          </div>
 
-          {/* Mobile burger */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen((v) => !v)}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileOpen}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-text-primary transition hover:bg-surface-hover active:scale-95 md:hidden"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              {mobileOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-              )}
-            </svg>
-          </button>
+            {/* Mobile burger — only houses About/Pricing/Contact now */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileOpen}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-text-primary transition hover:bg-surface-hover active:scale-95 md:hidden"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                {mobileOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Mobile drawer — slides down from the bar with a smooth
             transition. Renders inside the sticky header so it tracks
-            with scroll. max-h transition keeps the surrounding page
-            from jumping. */}
+            with scroll. Sign in lives in the bar now, so the drawer
+            is just three links — shorter max-height. */}
         <div
           className={`overflow-hidden bg-white transition-[max-height,opacity] duration-200 ease-out md:hidden ${
-            mobileOpen ? "max-h-80 opacity-100" : "pointer-events-none max-h-0 opacity-0"
+            mobileOpen ? "max-h-64 opacity-100" : "pointer-events-none max-h-0 opacity-0"
           }`}
         >
-          <div className="border-t border-black/[0.06] px-5 pb-5 pt-1">
+          <div className="border-t border-black/[0.06] px-5 pb-3 pt-1">
             <nav className="divide-y divide-black/[0.04]">
               <MobileNavLink href="#about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
               <MobileNavLink href="#pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
               <MobileNavLink href="#contact" onClick={() => setMobileOpen(false)}>Contact</MobileNavLink>
             </nav>
-            <Link
-              href="/login"
-              onClick={() => setMobileOpen(false)}
-              className="mt-5 flex items-center justify-center rounded-full bg-text-primary px-5 py-3 text-body-sm font-medium text-text-inverse transition active:scale-[0.98]"
-            >
-              Sign in
-            </Link>
           </div>
         </div>
       </header>
@@ -216,8 +223,7 @@ function Hero() {
           all in one place.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
-          Bookings, team, payments, and reports. Built for mobile beauty
-          and wellness businesses — solo or team.
+          For mobile beauty and wellness businesses — solo or team.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
@@ -408,9 +414,8 @@ function Manifesto() {
           <span className="text-text-secondary">More appointments.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary sm:text-xl">
-          Home-service businesses run on WhatsApp threads, paper notes, and
-          memory. Sukona replaces all of it with one operational system —
-          built specifically for mobile beauty and wellness.
+          Sukona replaces WhatsApp threads, paper notes, and memory, with
+          one operational system.
         </p>
       </div>
     </section>
@@ -426,13 +431,13 @@ function MobileSection() {
     <section className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
-          Designed for your phone.
+          Manage your business
           <br />
-          <span className="text-text-secondary">Not a desk.</span>
+          <span className="text-text-secondary">from anywhere.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Update your day from anywhere — between appointments, on the way
-          to the next, on a client&rsquo;s couch.
+          between appointments, on the way to the next, on a client&rsquo;s
+          couch.
         </p>
       </div>
 
@@ -570,8 +575,7 @@ function PaymentsSection() {
           <span className="text-text-secondary">Send the receipt.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Cash, card, anything. WhatsApp the receipt before the client
-          reaches the door. Every payment tracked, automatically.
+          Share receipts. Every payment tracked, automatically.
         </p>
       </div>
 
@@ -653,8 +657,7 @@ function ReportsSection() {
           <span className="text-text-secondary">actually working.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Revenue, expenses, profit. Per day, week, or month. The numbers
-          that run your business — without the spreadsheets.
+          The numbers that run your business. Revenue, expenses, profit.
         </p>
       </div>
 
@@ -756,7 +759,7 @@ function Pricing() {
     {
       name: "Solo",
       price: 95,
-      tagline: "For freelancers going client-to-client.",
+      tagline: "For freelancers.",
       features: [
         "Unlimited appointments",
         "Calendar + payments",
@@ -768,7 +771,7 @@ function Pricing() {
     {
       name: "Team",
       price: 149,
-      tagline: "For small home-service teams.",
+      tagline: "For small teams.",
       features: [
         "Everything in Solo",
         "Up to 3 team members",
@@ -780,7 +783,7 @@ function Pricing() {
     {
       name: "Multi-Team",
       price: 299,
-      tagline: "For multi-team home-service businesses.",
+      tagline: "For multi-team businesses.",
       features: [
         "Everything in Team",
         "Unlimited team members",
@@ -801,7 +804,7 @@ function Pricing() {
             <span className="text-text-secondary">Cancel anytime.</span>
           </h2>
           <p className="mx-auto mt-6 max-w-md text-lg text-text-secondary sm:text-xl">
-            Every plan starts with a 7-day free trial. No card required.
+            7-day free trial. No card required.
           </p>
         </div>
 
@@ -978,8 +981,10 @@ function Footer() {
       <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
         <div className="flex flex-col gap-10 sm:flex-row sm:justify-between">
           <div>
+            {/* Footer uses the icon-only mark (the wordmark already
+                anchors the nav at the top). Smaller + square. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-dark.png" alt="Sukona" className="h-8 w-auto sm:h-9" />
+            <img src="/symbol-dark.png" alt="Sukona" className="h-9 w-auto sm:h-10" />
             <p className="mt-4 max-w-xs text-body-sm text-text-secondary">
               The operational system for home-service beauty and wellness.
             </p>
