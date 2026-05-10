@@ -35,21 +35,42 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // If not logged in and not on an auth page, redirect to login.
+  // Anon routing:
+  //   /               → rewrite to /landing (marketing page at the root
+  //                     URL; URL stays "/" in the address bar)
+  //   /landing        → allow through
+  //   public routes   → allow (login / signup / auth / api / r / receipt)
+  //   anything else   → redirect to /login
   // /r/* is the public review page and /receipt/* is the public receipt
   // page — anyone with a token can access them, so they must NOT redirect
   // to login.
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/signup") &&
-    !request.nextUrl.pathname.startsWith("/auth/") &&
-    !request.nextUrl.pathname.startsWith("/api/") &&
-    !request.nextUrl.pathname.startsWith("/r/") &&
-    !request.nextUrl.pathname.startsWith("/receipt/")
-  ) {
+  if (!user) {
+    const path = request.nextUrl.pathname;
+    if (path === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/landing";
+      return NextResponse.rewrite(url);
+    }
+    const isPublic =
+      path.startsWith("/landing") ||
+      path.startsWith("/login") ||
+      path.startsWith("/signup") ||
+      path.startsWith("/auth/") ||
+      path.startsWith("/api/") ||
+      path.startsWith("/r/") ||
+      path.startsWith("/receipt/");
+    if (!isPublic) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Authed user lands on /landing? Bounce them to their dashboard so
+  // they don't see marketing chrome on top of their actual app.
+  if (user && request.nextUrl.pathname.startsWith("/landing")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
