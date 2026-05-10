@@ -446,7 +446,11 @@ export function DetailView({
     canEdit && onEditPayment && appointment.status === "paid" && (appointment.payments?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-7">
+    // Outer rhythm: space-y-8 (32 px) between major blocks. Apple-
+    // style: generous whitespace BETWEEN logical groups, tight
+    // spacing WITHIN them. Inner blocks use space-y-1 / space-y-1.5
+    // so each group reads as a single unit.
+    <div className="space-y-8">
       {/* ---- Client block ---- */}
       {/* Date + time live in the modal's title bar (passed by the
           caller), so this single block now consolidates everything
@@ -546,17 +550,16 @@ export function DetailView({
                 return (
                   <div key={t.svc.id || i}>
                     {isFirstInBundle && (
-                      <div className="flex items-center justify-between gap-2 bg-surface-hover px-4 py-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-body-sm font-semibold text-text-primary">
-                            {t.svc.bundle_name || "Bundle"}
-                          </span>
-                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-caption font-medium text-text-secondary ring-1 ring-border">
-                            Bundle
-                          </span>
-                        </div>
+                      // Bundle header: bundle name + total price. The
+                      // separate "Bundle" pill was over-labeling — the
+                      // subtle background plus indented children below
+                      // already say "this is a bundle".
+                      <div className="flex items-center justify-between gap-3 bg-neutral-50 px-4 py-3">
+                        <span className="min-w-0 truncate text-body-sm font-semibold text-text-primary">
+                          {t.svc.bundle_name || "Bundle"}
+                        </span>
                         {t.svc.bundle_total_price != null && (
-                          <span className="shrink-0 text-body-sm font-semibold text-text-primary">
+                          <span className="shrink-0 text-body-sm font-semibold text-text-primary tabular-nums">
                             AED {Math.round(Number(t.svc.bundle_total_price))}
                           </span>
                         )}
@@ -564,18 +567,16 @@ export function DetailView({
                     )}
                     {/* Single line per service: name (+ price for non-
                         bundle items) on the left, staff on the right.
-                        Duration + (parallel) indicator dropped — the
-                        appointment's total duration shows in the
-                        when-block above; per-service timing was visual
-                        clutter for the daily-use case. */}
-                    <div className="flex items-center justify-between gap-3 px-4 py-3">
+                        Bundle children get extra left padding so they
+                        read as nested under the bundle header above
+                        (replacing the previous "·" prefix). */}
+                    <div className={`flex items-center justify-between gap-3 py-3.5 pr-4 ${inBundle ? "pl-8" : "pl-4"}`}>
                       <p className="min-w-0 flex-1 truncate text-body-sm">
                         <span className={inBundle ? "text-text-secondary" : "font-semibold text-text-primary"}>
-                          {inBundle && <span className="text-text-tertiary mr-1.5">·</span>}
                           {t.svc.services?.name || "Unknown"}
                         </span>
                         {!inBundle && (
-                          <span className="ml-2 text-text-tertiary">· AED {t.svc.services?.price || 0}</span>
+                          <span className="ml-2 text-text-tertiary tabular-nums">AED {t.svc.services?.price || 0}</span>
                         )}
                       </p>
                       {staffMember && (
@@ -588,20 +589,26 @@ export function DetailView({
                 );
               })}
             </div>
-            {/* Totals strip sits inside the card, separated by a divider.
-                Adjustment rows render only when their value is non-zero
-                so a clean appointment shows just one "Total" line. */}
-            <div className="border-t border-border bg-surface-hover/40 px-4 py-3 space-y-1 text-body-sm">
+            {/* Totals strip — the financial summary lives inside the
+                same card as the services so the eye reads them as one
+                unit. Adjustment rows (subtotal/transport/discount/
+                override) render only when relevant; a clean
+                appointment shows just the Total line.
+                The Total amount renders at title-section size — same
+                visual weight as the client name in the hero, since
+                "how much" is the second-most-asked question after
+                "who". */}
+            <div className="border-t border-border bg-surface-hover/40 px-4 pt-3 pb-4 space-y-1.5 text-body-sm">
               {hasAppointmentAdjustments(appointment) && (
                 <div className="flex items-center justify-between text-text-secondary">
                   <span>Subtotal</span>
-                  <span>AED {getApptSubtotal(appointment)}</span>
+                  <span className="tabular-nums">AED {getApptSubtotal(appointment)}</span>
                 </div>
               )}
               {getApptTransport(appointment) > 0 && (
                 <div className="flex items-center justify-between text-text-secondary">
                   <span>Transportation</span>
-                  <span>+ AED {getApptTransport(appointment)}</span>
+                  <span className="tabular-nums">+ AED {getApptTransport(appointment)}</span>
                 </div>
               )}
               {Number(appointment.discount_value ?? 0) > 0 && (
@@ -612,7 +619,7 @@ export function DetailView({
                       <span className="text-text-tertiary"> ({Number(appointment.discount_value)}% off)</span>
                     )}
                   </span>
-                  <span>− AED {getApptDiscountAmount(appointment)}</span>
+                  <span className="tabular-nums">− AED {getApptDiscountAmount(appointment)}</span>
                 </div>
               )}
               {appointment.total_override != null && (
@@ -621,9 +628,9 @@ export function DetailView({
                   <span></span>
                 </div>
               )}
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-body font-bold text-text-primary">Total</span>
-                <span className="text-body font-bold text-text-primary tabular-nums">
+              <div className={`flex items-baseline justify-between gap-3 ${hasAppointmentAdjustments(appointment) ? "pt-2 mt-1 border-t border-border/60" : ""}`}>
+                <span className="text-body font-semibold text-text-primary">Total</span>
+                <span className="text-title-section font-bold text-text-primary tabular-nums tracking-tight">
                   AED {getApptTotal(appointment)}
                 </span>
               </div>
