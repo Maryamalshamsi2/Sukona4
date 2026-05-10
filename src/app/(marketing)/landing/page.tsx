@@ -1,32 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 /**
- * Sukona landing page (v2 — bento + peach palette).
+ * Sukona landing page (v3 — Apple-strict).
  *
- * Visual direction:
- *   - Floating pill nav (logo left, links centered, Sign In right) like
- *     Popcorn / BookingLedger.
- *   - Warm cream → peach palette that matches the auth pages
- *     (`from-violet-50` is remapped to `#FFF8F1` in globals.css; ditto
- *     `violet-100` → `#FEEAD2`). The "violet" tokens are intentional —
- *     they're reused throughout the dashboard for the warm accent.
- *   - Less copy, more visuals. A bento grid replaces the old 4-card row,
- *     and the hero anchors itself to a real-looking calendar mock instead
- *     of an empty preview frame.
+ * Design notes:
+ *   - Flat surfaces. No gradient washes, no decorative blobs. White is
+ *     the canvas; whitespace and type carry the page.
+ *   - Display type runs large (lg:text-7xl–8xl) at font-semibold with
+ *     tight tracking — the rhythm Apple uses on iPhone / Watch pages.
+ *   - One idea per section. Each section is full-width, has a single
+ *     statement, a single visual, optionally a single CTA.
+ *   - Product visuals are inline-rendered UI, not skeletons. The hero
+ *     mock is a multi-staff calendar grid; subsequent sections show a
+ *     phone view, a payment confirmation, and a revenue stat.
+ *   - Color is monochrome with the existing peach accent (`primary-*`)
+ *     used sparingly — the "today" cell, a CTA arrow, a "+ New" link.
  *
- * In-page anchors: #about · #pricing · #contact (smooth-scroll is enabled
- * by the marketing layout).
+ * Routing: anon → here (rewrite from /), authed → bounced to dashboard
+ * by middleware.
  */
 export default function LandingPage() {
   return (
     <>
       <Nav />
-      <main className="overflow-hidden">
+      <main>
         <Hero />
-        <Bento />
+        <MobileSection />
+        <PaymentsSection />
+        <ReportsSection />
         <Pricing />
         <FAQ />
         <FinalCTA />
@@ -37,12 +41,13 @@ export default function LandingPage() {
 }
 
 // ============================================================
-// Nav  — pill-shaped, floats over the page
+// Nav — flat horizontal bar, centered links
 // ============================================================
 
 function Nav() {
-  // Slight surface lift once the user scrolls past the hero so the nav
-  // pill stays legible against denser content below.
+  // Subtle backdrop blur once the user scrolls past the hero so the
+  // bar lifts off the content beneath. Stays bg-white at the top so
+  // the hero feels seamless with the chrome.
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -54,48 +59,44 @@ function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full px-4 pt-4 sm:px-6 sm:pt-5">
-      <div
-        className={`mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-full px-3 py-2 transition-all sm:px-4 sm:py-2.5 ${
-          scrolled
-            ? "bg-white/90 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur-md"
-            : "bg-white/70 ring-1 ring-black/[0.04] backdrop-blur"
-        }`}
-      >
+    <header
+      className={`sticky top-0 z-50 transition-colors ${
+        scrolled
+          ? "border-b border-black/[0.06] bg-white/85 backdrop-blur-xl"
+          : "border-b border-transparent bg-white"
+      }`}
+    >
+      <div className="mx-auto grid h-14 max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-5 sm:h-16 sm:px-8">
         {/* Logo (left) */}
-        <Link
-          href="/"
-          aria-label="Sukona — home"
-          className="flex shrink-0 items-center pl-2"
-        >
+        <Link href="/" aria-label="Sukona — home" className="justify-self-start">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-dark.png" alt="Sukona" className="h-8 w-auto sm:h-9" />
+          <img src="/logo-dark.png" alt="Sukona" className="h-7 w-auto sm:h-8" />
         </Link>
 
         {/* Center links — desktop */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-9 md:flex">
           <NavLink href="#about">About</NavLink>
           <NavLink href="#pricing">Pricing</NavLink>
           <NavLink href="#contact">Contact</NavLink>
         </nav>
 
-        {/* Sign in (right) — desktop */}
-        <div className="hidden md:block">
+        {/* Sign in (right) — text link, not a button. Apple uses these. */}
+        <div className="hidden justify-self-end md:block">
           <Link
             href="/login"
-            className="inline-flex items-center rounded-full bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse transition hover:bg-neutral-800 active:scale-[0.98]"
+            className="inline-flex items-center gap-1 text-body-sm font-medium text-text-primary transition hover:text-primary-600"
           >
-            Sign in
+            Sign in <span aria-hidden>→</span>
           </Link>
         </div>
 
-        {/* Mobile hamburger */}
+        {/* Mobile burger */}
         <button
           type="button"
           onClick={() => setMobileOpen((v) => !v)}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileOpen}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-text-primary md:hidden"
+          className="flex h-9 w-9 items-center justify-center justify-self-end text-text-primary md:hidden"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
             {mobileOpen ? (
@@ -107,19 +108,18 @@ function Nav() {
         </button>
       </div>
 
-      {/* Mobile drawer — drops out of the pill */}
       {mobileOpen && (
-        <div className="mx-auto mt-2 max-w-5xl rounded-2xl bg-white/95 p-2 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur md:hidden">
-          <nav className="flex flex-col">
+        <div className="border-t border-black/[0.06] bg-white md:hidden">
+          <nav className="mx-auto flex max-w-6xl flex-col px-5 py-2">
             <MobileNavLink href="#about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
             <MobileNavLink href="#pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
             <MobileNavLink href="#contact" onClick={() => setMobileOpen(false)}>Contact</MobileNavLink>
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}
-              className="mt-1 rounded-xl bg-neutral-900 px-4 py-3 text-center text-body-sm font-semibold text-text-inverse"
+              className="px-3 py-3 text-body font-medium text-text-primary"
             >
-              Sign in
+              Sign in →
             </Link>
           </nav>
         </div>
@@ -132,7 +132,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <a
       href={href}
-      className="rounded-full px-4 py-2 text-body-sm font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+      className="text-body-sm font-medium text-text-primary transition-colors hover:text-primary-600"
     >
       {children}
     </a>
@@ -152,7 +152,7 @@ function MobileNavLink({
     <a
       href={href}
       onClick={onClick}
-      className="rounded-xl px-4 py-3 text-body font-medium text-text-primary hover:bg-surface-hover"
+      className="px-3 py-3 text-body font-medium text-text-primary"
     >
       {children}
     </a>
@@ -160,309 +160,453 @@ function MobileNavLink({
 }
 
 // ============================================================
-// Hero — peach gradient backdrop + calendar mock anchor
+// Hero — big type, then a big multi-staff calendar surface
 // ============================================================
 
 function Hero() {
   return (
-    <section className="relative isolate -mt-[72px] pt-[72px] sm:-mt-[84px] sm:pt-[84px]">
-      {/* Soft peach radial blobs behind the hero — match the auth-page
-          gradient feel without the hard linear-gradient seam. */}
-      <BackgroundBlobs />
-
-      <div className="mx-auto max-w-5xl px-5 pt-12 pb-16 text-center sm:px-8 sm:pt-16 sm:pb-20 lg:pt-24 lg:pb-24">
-        {/* Trust pill */}
-        <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-white/70 px-3.5 py-1.5 text-caption font-medium text-text-secondary shadow-sm ring-1 ring-black/[0.04] backdrop-blur">
-          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary-500" />
-          7-day free trial · No credit card
-        </div>
-
-        <h1 className="mx-auto mt-6 max-w-3xl text-[2.5rem] font-bold tracking-tight text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
-          Run your salon from
-          <br className="hidden sm:block" />{" "}
-          <span className="text-primary-600">one calm app.</span>
+    <section className="bg-white">
+      <div className="mx-auto max-w-5xl px-5 pt-20 text-center sm:px-8 sm:pt-28 lg:pt-36">
+        <h1 className="mx-auto max-w-4xl text-5xl font-semibold tracking-tighter text-text-primary leading-[1.02] sm:text-6xl lg:text-7xl xl:text-[5.5rem]">
+          Your salon.
+          <br />
+          From your phone.
         </h1>
-        <p className="mx-auto mt-5 max-w-xl text-body text-text-secondary sm:text-lg">
-          Calendar, payments, and team — designed for the way you actually
-          work. On your phone, between appointments.
+        <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
+          Calendar, payments, and team. One quiet app, designed for the way
+          you actually work.
         </p>
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
           <Link
             href="/signup"
-            className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-neutral-900 px-7 py-3.5 text-body-sm font-semibold text-text-inverse transition hover:bg-neutral-800 active:scale-[0.98] sm:w-auto"
+            className="inline-flex items-center justify-center rounded-full bg-text-primary px-7 py-3.5 text-body-sm font-medium text-text-inverse transition hover:opacity-90 active:scale-[0.98]"
           >
             Start free trial
-            <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-            </svg>
           </Link>
           <a
             href="#about"
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-white/70 px-6 py-3.5 text-body-sm font-semibold text-text-primary ring-1 ring-black/[0.04] backdrop-blur transition hover:bg-white sm:w-auto"
+            className="inline-flex items-center gap-1.5 text-body-sm font-medium text-primary-600 transition hover:text-primary-700"
           >
-            See how it works
+            See how it works <span aria-hidden>→</span>
           </a>
         </div>
+      </div>
 
-        {/* Calendar mock — anchors the hero. Real-feeling micro UI like
-            the orange Sun–Sat reference. */}
-        <div className="mx-auto mt-14 max-w-3xl sm:mt-20">
-          <CalendarMock />
-        </div>
+      {/* Big calendar mock */}
+      <div className="mx-auto mt-16 max-w-6xl px-5 pb-20 sm:mt-20 sm:px-8 sm:pb-28 lg:mt-24 lg:pb-36">
+        <CalendarMock />
       </div>
     </section>
   );
 }
 
-function BackgroundBlobs() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      {/* Top peach wash */}
-      <div className="absolute -top-32 left-1/2 h-[640px] w-[1100px] -translate-x-1/2 rounded-full bg-[#FEEAD2] opacity-60 blur-3xl" />
-      {/* Lower-right warm accent */}
-      <div className="absolute right-[-8%] top-[18%] h-[420px] w-[420px] rounded-full bg-[#FBB97A] opacity-30 blur-3xl" />
-      {/* Lower-left soft cream */}
-      <div className="absolute -left-32 top-[45%] h-[420px] w-[420px] rounded-full bg-[#FFF8F1] opacity-90 blur-3xl" />
-    </div>
-  );
-}
-
 // ============================================================
-// Calendar mock — an inline UI snapshot used as the hero's visual.
-// Designed to feel like a real Sukona calendar surface, not a skeleton.
+// CalendarMock — wide multi-staff grid, the hero's anchor
 // ============================================================
 
 function CalendarMock() {
-  const days = [
-    { d: "Sun", n: 1 },
-    { d: "Mon", n: 2 },
-    { d: "Tue", n: 3, today: true },
-    { d: "Wed", n: 4 },
-    { d: "Thu", n: 5 },
-    { d: "Fri", n: 6 },
-    { d: "Sat", n: 7 },
+  const staff = ["Layla", "Aisha", "Maya"];
+  const hours = ["9", "10", "11", "12", "1", "2", "3", "4"];
+  const HOUR_PX = 56;
+  const HEAD_PX = 56;
+  const TIME_COL_PX = 60;
+
+  // [staffColumn, hourOffsetFromStart, durationHours, label, tone]
+  const apps: Array<{
+    col: number;
+    top: number;
+    dur: number;
+    label: string;
+    sub: string;
+    tone: "peach" | "sky" | "neutral";
+  }> = [
+    { col: 0, top: 0,    dur: 1.5, label: "Highlights",  sub: "Sara M.",   tone: "peach" },
+    { col: 0, top: 2.5,  dur: 1,   label: "Cut & blow",  sub: "Noor",      tone: "neutral" },
+    { col: 1, top: 0.5,  dur: 2,   label: "Color",       sub: "Layla S.",  tone: "sky" },
+    { col: 1, top: 3.5,  dur: 1,   label: "Manicure",    sub: "Reem",      tone: "peach" },
+    { col: 2, top: 1,    dur: 1,   label: "Brows",       sub: "Lina",      tone: "neutral" },
+    { col: 2, top: 2.5,  dur: 2,   label: "Treatment",   sub: "Mariam",    tone: "sky" },
   ];
 
+  const tones = {
+    peach: "bg-primary-50 text-primary-800 ring-primary-100",
+    sky: "bg-sky-50 text-sky-900 ring-sky-100",
+    neutral: "bg-neutral-100 text-text-primary ring-neutral-200",
+  };
+
   return (
-    <div className="mx-auto rounded-3xl bg-white/80 p-3 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.18)] ring-1 ring-black/[0.04] backdrop-blur sm:p-4">
-      {/* Day strip */}
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-black/[0.04] sm:p-5">
-        <div className="grid grid-cols-7 gap-1 text-center">
-          {days.map((day) => (
-            <div key={day.d} className="flex flex-col items-center gap-2 py-1">
-              <div
-                className={`text-caption font-medium ${
-                  day.today ? "text-primary-600" : "text-text-tertiary"
-                }`}
-              >
-                {day.d}
-              </div>
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-xl text-body-sm font-semibold sm:h-10 sm:w-10 ${
-                  day.today
-                    ? "bg-primary-100 text-primary-700"
-                    : "text-text-primary"
-                }`}
-              >
-                {day.n}
-              </div>
-            </div>
-          ))}
+    <div className="relative overflow-hidden rounded-3xl bg-white shadow-[0_40px_100px_-40px_rgba(0,0,0,0.28)] ring-1 ring-black/[0.06]">
+      {/* Window chrome */}
+      <div className="flex items-center justify-between border-b border-black/[0.06] bg-white px-5 py-3.5 sm:px-7 sm:py-4">
+        <div className="flex items-center gap-1.5">
+          <div className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
+          <div className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
+          <div className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
         </div>
+        <div className="text-body-sm font-semibold text-text-primary">
+          Friday, May 10
+        </div>
+        <div className="text-body-sm font-medium text-primary-600">+ New</div>
       </div>
 
-      {/* Appointment row */}
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3.5 ring-1 ring-black/[0.04] sm:px-5 sm:py-4">
-        <div className="flex items-center gap-3 text-left">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <circle cx="12" cy="12" r="9" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5v4.5l3 1.5" />
-            </svg>
+      {/* Body */}
+      <div className="overflow-x-auto">
+        <div className="relative" style={{ minWidth: 640 }}>
+          {/* Staff header row */}
+          <div
+            className="grid border-b border-black/[0.06]"
+            style={{
+              gridTemplateColumns: `${TIME_COL_PX}px repeat(3, 1fr)`,
+              height: HEAD_PX,
+            }}
+          >
+            <div />
+            {staff.map((s, i) => (
+              <div
+                key={s}
+                className={`flex items-center px-4 text-body-sm font-semibold text-text-primary ${
+                  i < staff.length - 1 ? "border-r border-black/[0.04]" : ""
+                }`}
+              >
+                {s}
+              </div>
+            ))}
           </div>
-          <div>
-            <div className="text-body font-semibold text-text-primary">5:30 pm</div>
-            <div className="text-caption text-text-tertiary">Brooklyn — Hair color</div>
+
+          {/* Time grid + appointment chips */}
+          <div
+            className="relative grid"
+            style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(3, 1fr)` }}
+          >
+            {hours.map((h) => (
+              <Fragment key={h}>
+                <div
+                  className="border-b border-r border-black/[0.04] px-3 pt-1.5 text-right text-caption text-text-tertiary"
+                  style={{ height: HOUR_PX }}
+                >
+                  {h}
+                </div>
+                {staff.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`border-b border-black/[0.04] ${
+                      i < staff.length - 1 ? "border-r" : ""
+                    }`}
+                    style={{ height: HOUR_PX }}
+                  />
+                ))}
+              </Fragment>
+            ))}
+
+            {apps.map((a, i) => (
+              <div
+                key={i}
+                className={`absolute flex flex-col rounded-lg px-3 py-1.5 ring-1 ${tones[a.tone]}`}
+                style={{
+                  left: `calc(${TIME_COL_PX}px + ${a.col} * ((100% - ${TIME_COL_PX}px) / 3) + 6px)`,
+                  width: `calc((100% - ${TIME_COL_PX}px) / 3 - 12px)`,
+                  top: a.top * HOUR_PX + 3,
+                  height: a.dur * HOUR_PX - 6,
+                }}
+              >
+                <div className="text-caption font-semibold leading-tight">
+                  {a.label}
+                </div>
+                <div className="text-[11px] opacity-70 leading-tight">
+                  {a.sub}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        <button
-          type="button"
-          className="rounded-full bg-neutral-900 px-4 py-2 text-caption font-semibold text-text-inverse"
-        >
-          Book now
-        </button>
       </div>
     </div>
   );
 }
 
 // ============================================================
-// Bento — feature grid with mixed sizes/visuals
+// MobileSection — phone-in-hand value prop with a phone mock
 // ============================================================
 
-function Bento() {
+function MobileSection() {
   return (
-    <section id="about" className="relative bg-white py-20 sm:py-28">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-caption font-semibold uppercase tracking-wider text-primary-600">
-            Why Sukona
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            Built for the way you actually work.
-          </h2>
-        </div>
+    <section id="about" className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
+      <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
+        <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+          Designed for your phone.
+          <br />
+          <span className="text-text-secondary">Not a desk.</span>
+        </h2>
+        <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
+          Tap to create, drag to reschedule. Multiple staff, side by side.
+          Everything within thumb&rsquo;s reach.
+        </p>
+      </div>
 
-        {/*
-          Bento grid:
-          - Tile 1: Calendar (large, feature)         span 2 cols, 2 rows
-          - Tile 2: Payments (top-right)              span 2 cols
-          - Tile 3: WhatsApp (bottom-right)           span 1 col
-          - Tile 4: Reports stat (bottom-mid)         span 1 col
-        */}
-        <div className="mt-12 grid gap-4 sm:mt-16 sm:gap-5 lg:grid-cols-4 lg:grid-rows-2">
-          <BentoCalendar />
-          <BentoPayments />
-          <BentoStat />
-          <BentoWhatsApp />
-        </div>
+      <div className="mx-auto mt-16 flex max-w-5xl justify-center px-5 sm:mt-20 sm:px-8">
+        <PhoneMock />
       </div>
     </section>
   );
 }
 
-function BentoCalendar() {
-  return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-50 to-white p-7 ring-1 ring-black/[0.04] sm:p-8 lg:col-span-2 lg:row-span-2">
-      <div className="text-caption font-semibold uppercase tracking-wider text-primary-600">
-        Calendar
-      </div>
-      <h3 className="mt-2 text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
-        A calendar that
-        <br />
-        fits in your hand.
-      </h3>
-      <p className="mt-3 max-w-sm text-body-sm text-text-secondary">
-        Tap to create. Drag to reschedule. Multiple staff, side by side.
-        Designed for a 5-inch screen.
-      </p>
+function PhoneMock() {
+  const items = [
+    { time: "9:00",  name: "Highlights", who: "Sara M.",  tone: "peach" as const },
+    { time: "11:30", name: "Color",      who: "Layla S.", tone: "sky" as const },
+    { time: "14:00", name: "Manicure",   who: "Reem",     tone: "peach" as const },
+    { time: "16:30", name: "Brows",      who: "Lina",     tone: "neutral" as const },
+  ];
 
-      {/* Mini week strip — same visual language as the hero mock */}
-      <div className="mt-6 rounded-2xl bg-white p-4 ring-1 ring-black/[0.04]">
-        <div className="grid grid-cols-7 gap-1 text-center text-caption">
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-            <div key={i} className="text-text-tertiary">
-              {d}
-            </div>
-          ))}
-        </div>
-        <div className="mt-2 grid grid-cols-7 gap-1">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <div
-              key={i}
-              className={`flex h-9 items-center justify-center rounded-lg text-caption font-semibold ${
-                i === 2
-                  ? "bg-primary-100 text-primary-700"
-                  : "text-text-primary"
-              }`}
-            >
-              {i + 1}
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 space-y-1.5">
-          <div className="flex items-center gap-2 rounded-lg bg-primary-50/60 px-3 py-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-primary-500" />
-            <div className="text-caption font-medium text-text-primary">
-              10:00 — Layla, Highlights
+  const tones = {
+    peach: "bg-primary-50 text-primary-800 ring-primary-100",
+    sky: "bg-sky-50 text-sky-900 ring-sky-100",
+    neutral: "bg-neutral-100 text-text-primary ring-neutral-200",
+  };
+
+  return (
+    <div className="relative">
+      {/* Phone bezel */}
+      <div className="relative w-[280px] rounded-[2.5rem] bg-neutral-900 p-2 shadow-[0_50px_100px_-30px_rgba(0,0,0,0.45)] sm:w-[320px]">
+        <div className="overflow-hidden rounded-[2rem] bg-white">
+          {/* Status bar */}
+          <div className="flex items-center justify-between px-6 pt-3.5 pb-1 text-[11px] font-semibold text-text-primary">
+            <span>9:41</span>
+            <div className="flex items-center gap-1">
+              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 6a4 4 0 014-4h8a4 4 0 014 4v8a4 4 0 01-4 4H6a4 4 0 01-4-4V6z" opacity=".3" />
+                <path d="M2 6a4 4 0 014-4h2v16H6a4 4 0 01-4-4V6z" />
+              </svg>
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
-            <div className="text-caption font-medium text-text-primary">
-              14:30 — Aisha, Manicure
+
+          {/* Header */}
+          <div className="px-6 pt-4 pb-5">
+            <div className="text-caption font-medium text-text-tertiary">Friday, May 10</div>
+            <div className="mt-0.5 text-2xl font-semibold tracking-tight text-text-primary">
+              Today
+            </div>
+          </div>
+
+          {/* Appointments */}
+          <div className="space-y-2 px-4 pb-6">
+            {items.map((it) => (
+              <div
+                key={it.time}
+                className={`flex items-center justify-between rounded-2xl px-4 py-3 ring-1 ${tones[it.tone]}`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-caption opacity-70">{it.time}</span>
+                  <span className="text-body-sm font-semibold leading-tight">
+                    {it.name}
+                  </span>
+                </div>
+                <span className="text-caption font-medium opacity-80">{it.who}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Tab bar hint */}
+          <div className="flex items-center justify-around border-t border-black/[0.06] px-4 py-3">
+            <div className="flex flex-col items-center gap-0.5 text-primary-600">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <rect x="3" y="4" width="14" height="14" rx="3" />
+              </svg>
+              <span className="text-[10px] font-semibold">Calendar</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 20 20">
+                <circle cx="10" cy="6" r="3" />
+                <path d="M3 17a7 7 0 0114 0" strokeLinecap="round" />
+              </svg>
+              <span className="text-[10px] font-medium">Team</span>
+            </div>
+            <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 20 20">
+                <path d="M3 10h14M3 6h14M3 14h8" strokeLinecap="round" />
+              </svg>
+              <span className="text-[10px] font-medium">Reports</span>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Decorative blob */}
-      <div
-        aria-hidden
-        className="absolute -bottom-10 -right-10 h-48 w-48 rounded-full bg-primary-200/40 blur-2xl"
-      />
-    </div>
-  );
-}
-
-function BentoPayments() {
-  return (
-    <div className="relative overflow-hidden rounded-3xl bg-neutral-900 p-7 text-text-inverse sm:p-8 lg:col-span-2">
-      <div className="text-caption font-semibold uppercase tracking-wider text-primary-300">
-        Payments
-      </div>
-      <h3 className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">
-        One tap. Paid. Receipt sent.
-      </h3>
-      <p className="mt-2 max-w-md text-body-sm text-white/70">
-        Cash, card, anything. Snap the receipt. WhatsApp it to your client
-        without leaving the appointment.
-      </p>
-
-      {/* Mock receipt chip */}
-      <div className="mt-5 inline-flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10 backdrop-blur">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/90 text-white">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        </div>
-        <div>
-          <div className="text-caption text-white/60">Paid · Visa ending 4242</div>
-          <div className="text-body-sm font-semibold">AED 240.00</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BentoStat() {
-  return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#FEEAD2] to-[#FFF8F1] p-7 ring-1 ring-black/[0.04] sm:p-8">
-      <div className="text-caption font-semibold uppercase tracking-wider text-primary-700">
-        Reports
-      </div>
-      <div className="mt-4 text-5xl font-bold tracking-tight text-text-primary sm:text-6xl">
-        95%
-      </div>
-      <p className="mt-2 text-body-sm text-text-secondary">
-        of owners say Sukona shows them numbers they couldn&apos;t see before.
-      </p>
-    </div>
-  );
-}
-
-function BentoWhatsApp() {
-  return (
-    <div className="relative overflow-hidden rounded-3xl bg-white p-7 ring-1 ring-black/[0.04] sm:p-8">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-        </svg>
-      </div>
-      <h3 className="mt-5 text-body font-semibold text-text-primary">
-        WhatsApp built-in.
-      </h3>
-      <p className="mt-2 text-body-sm text-text-secondary leading-relaxed">
-        Reminders, receipts, and confirmations in the channel your clients
-        already use.
-      </p>
     </div>
   );
 }
 
 // ============================================================
-// Pricing — soften with peach accents
+// Payments — confirmation card
+// ============================================================
+
+function PaymentsSection() {
+  return (
+    <section className="bg-white py-24 sm:py-32 lg:py-40">
+      <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
+        <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+          One tap. Paid.
+          <br />
+          <span className="text-text-secondary">Receipt sent.</span>
+        </h2>
+        <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
+          Cash, card, anything. Snap the receipt. WhatsApp it to your client
+          before they reach the door.
+        </p>
+      </div>
+
+      <div className="mx-auto mt-16 flex max-w-3xl justify-center px-5 sm:mt-20 sm:px-8">
+        <PaymentMock />
+      </div>
+    </section>
+  );
+}
+
+function PaymentMock() {
+  return (
+    <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.06] sm:p-8">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <div>
+            <div className="text-caption font-medium text-text-tertiary">
+              Payment received
+            </div>
+            <div className="text-body-sm font-semibold text-text-primary">
+              Sara M. · Highlights
+            </div>
+          </div>
+        </div>
+        <span className="text-caption font-medium text-emerald-700">Paid</span>
+      </div>
+
+      <div className="mt-6 border-t border-black/[0.06] pt-5">
+        <div className="text-caption font-medium text-text-tertiary">Total</div>
+        <div className="mt-1 text-4xl font-semibold tracking-tight text-text-primary">
+          AED 240
+        </div>
+        <div className="mt-1 text-caption text-text-secondary">
+          Visa ending 4242
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center gap-2 rounded-2xl bg-[#F5F5F7] px-4 py-3">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 0C4.48 0 0 4.48 0 10s4.48 10 10 10c1.85 0 3.58-.5 5.06-1.39L20 20l-1.39-4.94A9.96 9.96 0 0020 10c0-5.52-4.48-10-10-10z" />
+          </svg>
+        </div>
+        <div className="flex-1 text-caption font-medium text-text-secondary">
+          Receipt sent on WhatsApp
+        </div>
+        <div className="text-caption text-text-tertiary">Just now</div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Reports — revenue stat + sparkline
+// ============================================================
+
+function ReportsSection() {
+  return (
+    <section className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
+      <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
+        <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+          See what&rsquo;s
+          <br />
+          <span className="text-text-secondary">actually working.</span>
+        </h2>
+        <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
+          Revenue, expenses, profit. Per day, week, or month. The numbers you
+          actually need — no spreadsheets.
+        </p>
+      </div>
+
+      <div className="mx-auto mt-16 flex max-w-3xl justify-center px-5 sm:mt-20 sm:px-8">
+        <RevenueMock />
+      </div>
+    </section>
+  );
+}
+
+function RevenueMock() {
+  // Sparkline points — fake values, smoothed shape that ends on a high
+  const points = [40, 38, 45, 42, 50, 48, 56, 54, 62, 58, 68, 72];
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const W = 320;
+  const H = 80;
+  const path = points
+    .map((v, i) => {
+      const x = (i / (points.length - 1)) * W;
+      const y = H - ((v - min) / (max - min)) * H;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const areaPath = `${path} L${W},${H} L0,${H} Z`;
+
+  return (
+    <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.06] sm:p-8">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-caption font-medium text-text-tertiary">
+            Revenue · This month
+          </div>
+          <div className="mt-1 text-5xl font-semibold tracking-tighter text-text-primary">
+            AED 28,400
+          </div>
+        </div>
+        <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-caption font-semibold text-emerald-700">
+          ↑ 17%
+        </div>
+      </div>
+
+      {/* Sparkline */}
+      <div className="mt-6">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F08C2D" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#F08C2D" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill="url(#sparkfill)" />
+          <path
+            d={path}
+            fill="none"
+            stroke="#F08C2D"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-4 border-t border-black/[0.06] pt-5">
+        <div>
+          <div className="text-caption text-text-tertiary">Last month</div>
+          <div className="mt-0.5 text-body font-semibold text-text-primary">
+            AED 24,200
+          </div>
+        </div>
+        <div>
+          <div className="text-caption text-text-tertiary">Bookings</div>
+          <div className="mt-0.5 text-body font-semibold text-text-primary">
+            142
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Pricing — typographic, three tiers
 // ============================================================
 
 function Pricing() {
@@ -477,7 +621,7 @@ function Pricing() {
         "WhatsApp receipts",
         "Basic reports",
       ],
-      popular: false,
+      featured: false,
     },
     {
       name: "Team",
@@ -489,7 +633,7 @@ function Pricing() {
         "Per-staff schedules",
         "Per-staff reports",
       ],
-      popular: true,
+      featured: true,
     },
     {
       name: "Multi-Team",
@@ -501,79 +645,59 @@ function Pricing() {
         "Multi-team grouping",
         "Priority support",
       ],
-      popular: false,
+      featured: false,
     },
   ];
 
   return (
-    <section
-      id="pricing"
-      className="relative bg-gradient-to-b from-[#FFF8F1] via-white to-white py-20 sm:py-28 lg:py-32"
-    >
+    <section id="pricing" className="bg-white py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-caption font-semibold uppercase tracking-wider text-primary-600">
-            Pricing
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            Simple, monthly.
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+            Simple pricing.
+            <br />
+            <span className="text-text-secondary">Cancel anytime.</span>
           </h2>
-          <p className="mt-4 text-body text-text-secondary">
-            Every plan starts with a 7-day free trial. No card needed.
+          <p className="mx-auto mt-6 max-w-md text-lg text-text-secondary sm:text-xl">
+            Every plan starts with a 7-day free trial. No card required.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-5 sm:mt-16 lg:grid-cols-3 lg:gap-6">
+        <div className="mt-16 grid gap-5 sm:mt-20 lg:grid-cols-3 lg:gap-6">
           {plans.map((p) => (
             <div
               key={p.name}
-              className={`relative flex flex-col rounded-3xl p-7 sm:p-8 ${
-                p.popular
-                  ? "bg-neutral-900 text-text-inverse shadow-[0_24px_60px_-30px_rgba(0,0,0,0.4)]"
-                  : "bg-white ring-1 ring-black/[0.04]"
+              className={`relative flex flex-col rounded-3xl bg-white p-7 sm:p-8 ${
+                p.featured
+                  ? "ring-2 ring-primary-500 shadow-[0_30px_60px_-30px_rgba(240,140,45,0.35)]"
+                  : "ring-1 ring-black/[0.06]"
               }`}
             >
-              {p.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary-100 px-3 py-1 text-caption font-semibold text-primary-700 ring-1 ring-primary-200/60">
+              {p.featured && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary-500 px-3 py-1 text-caption font-semibold text-text-inverse">
                   Most popular
                 </span>
               )}
-              <h3
-                className={`text-body font-semibold ${
-                  p.popular ? "text-text-inverse" : "text-text-primary"
-                }`}
-              >
+              <div className="text-body font-semibold text-text-primary">
                 {p.name}
-              </h3>
-              <p
-                className={`mt-1 text-caption ${
-                  p.popular ? "text-white/70" : "text-text-secondary"
-                }`}
-              >
+              </div>
+              <div className="mt-1 text-caption text-text-secondary">
                 {p.tagline}
-              </p>
+              </div>
               <div className="mt-7 flex items-baseline">
-                <span
-                  className={`text-5xl font-bold tracking-tight ${
-                    p.popular ? "text-text-inverse" : "text-text-primary"
-                  }`}
-                >
+                <span className="text-5xl font-semibold tracking-tighter text-text-primary">
                   {p.price}
                 </span>
-                <span
-                  className={`ml-2 text-body-sm ${
-                    p.popular ? "text-white/70" : "text-text-secondary"
-                  }`}
-                >
+                <span className="ml-2 text-body-sm text-text-secondary">
                   AED / month
                 </span>
               </div>
               <Link
                 href="/signup"
-                className={`mt-7 inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-body-sm font-semibold transition active:scale-[0.98] ${
-                  p.popular
-                    ? "bg-white text-neutral-900 hover:bg-neutral-100"
-                    : "bg-neutral-900 text-text-inverse hover:bg-neutral-800"
+                className={`mt-7 inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-body-sm font-medium transition active:scale-[0.98] ${
+                  p.featured
+                    ? "bg-primary-500 text-text-inverse hover:bg-primary-600"
+                    : "bg-text-primary text-text-inverse hover:opacity-90"
                 }`}
               >
                 Start free trial
@@ -583,7 +707,7 @@ function Pricing() {
                   <li key={f} className="flex items-start gap-2.5">
                     <svg
                       className={`mt-0.5 h-4 w-4 shrink-0 ${
-                        p.popular ? "text-primary-300" : "text-primary-500"
+                        p.featured ? "text-primary-500" : "text-text-tertiary"
                       }`}
                       fill="none"
                       viewBox="0 0 24 24"
@@ -592,13 +716,7 @@ function Pricing() {
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
-                    <span
-                      className={`text-body-sm ${
-                        p.popular ? "text-white/90" : "text-text-secondary"
-                      }`}
-                    >
-                      {f}
-                    </span>
+                    <span className="text-body-sm text-text-secondary">{f}</span>
                   </li>
                 ))}
               </ul>
@@ -611,41 +729,36 @@ function Pricing() {
 }
 
 // ============================================================
-// FAQ — light, condensed
+// FAQ — quiet, condensed
 // ============================================================
 
 function FAQ() {
   const faqs = [
     {
       q: "Do I need a credit card to start?",
-      a: "No. Sign up, use Sukona for 7 days, decide if it works for you. No card up front.",
+      a: "No. Sign up, use Sukona for 7 days, decide if it works for you.",
     },
     {
       q: "Can I cancel anytime?",
-      a: "Yes. No contracts, no notice period. If you stop paying, your data stays exportable for 30 days.",
+      a: "Yes. No contracts, no notice period. If you stop, your data stays exportable for 30 days.",
     },
     {
       q: "Is my data safe?",
-      a: "Your data is yours. Encrypted at rest. We don't share or sell anything to anyone, ever.",
+      a: "Your data is yours. Encrypted at rest. We never share or sell anything.",
     },
     {
       q: "Does it work outside the UAE?",
-      a: "Yes. Sukona supports salons across the GCC and beyond, with multi-currency support.",
+      a: "Yes. Sukona works across the GCC and beyond, with multi-currency support.",
     },
   ];
 
   return (
-    <section className="bg-white py-20 sm:py-28">
+    <section className="bg-[#F5F5F7] py-24 sm:py-32">
       <div className="mx-auto max-w-3xl px-5 sm:px-8">
-        <div className="text-center">
-          <p className="text-caption font-semibold uppercase tracking-wider text-primary-600">
-            FAQ
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            Common questions.
-          </h2>
-        </div>
-        <div className="mt-12 divide-y divide-black/5 rounded-3xl bg-[#FAFAFA] ring-1 ring-black/[0.04] sm:mt-16">
+        <h2 className="text-center text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl">
+          Common questions.
+        </h2>
+        <div className="mt-14 divide-y divide-black/[0.06] sm:mt-16">
           {faqs.map((f) => (
             <FAQItem key={f.q} q={f.q} a={f.a} />
           ))}
@@ -663,9 +776,9 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition hover:bg-white/60 sm:px-7"
+        className="flex w-full items-center justify-between gap-4 py-5 text-left transition sm:py-6"
       >
-        <span className="text-body font-semibold text-text-primary">{q}</span>
+        <span className="text-body font-semibold text-text-primary sm:text-lg">{q}</span>
         <svg
           className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
@@ -677,7 +790,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         </svg>
       </button>
       {open && (
-        <div className="px-6 pb-5 text-body-sm text-text-secondary leading-relaxed sm:px-7">
+        <div className="pb-5 text-body-sm text-text-secondary leading-relaxed sm:pb-6 sm:text-body">
           {a}
         </div>
       )}
@@ -686,57 +799,41 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 }
 
 // ============================================================
-// Final CTA — peach gradient panel
+// Final CTA — single statement, single button
 // ============================================================
 
 function FinalCTA() {
   return (
-    <section className="px-5 py-20 sm:px-8 sm:py-28">
-      <div className="relative mx-auto max-w-5xl overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#FEEAD2] via-[#FFF8F1] to-white px-7 py-16 text-center ring-1 ring-black/[0.04] sm:px-12 sm:py-20">
-        {/* Soft decorative blob */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-24 right-0 h-72 w-72 rounded-full bg-primary-200/50 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-32 -left-12 h-72 w-72 rounded-full bg-[#FBB97A]/30 blur-3xl"
-        />
-
-        <div className="relative">
-          <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-text-primary sm:text-4xl lg:text-5xl">
-            Try Sukona free for 7 days.
-          </h2>
-          <p className="mx-auto mt-4 max-w-md text-body text-text-secondary">
-            Set up in minutes. No card. Cancel anytime.
-          </p>
-          <Link
-            href="/signup"
-            className="group mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-neutral-900 px-7 py-3.5 text-body-sm font-semibold text-text-inverse transition hover:bg-neutral-800 active:scale-[0.98]"
-          >
-            Get started
-            <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-            </svg>
-          </Link>
-        </div>
+    <section className="bg-white py-24 text-center sm:py-32 lg:py-40">
+      <div className="mx-auto max-w-3xl px-5 sm:px-8">
+        <h2 className="text-4xl font-semibold tracking-tighter text-text-primary leading-[1.02] sm:text-5xl lg:text-6xl">
+          Try Sukona free for
+          <br />
+          <span className="text-primary-600">seven days.</span>
+        </h2>
+        <Link
+          href="/signup"
+          className="mt-10 inline-flex items-center justify-center rounded-full bg-text-primary px-7 py-3.5 text-body-sm font-medium text-text-inverse transition hover:opacity-90 active:scale-[0.98]"
+        >
+          Get started
+        </Link>
       </div>
     </section>
   );
 }
 
 // ============================================================
-// Footer
+// Footer — minimal
 // ============================================================
 
 function Footer() {
   return (
-    <footer id="contact" className="border-t border-black/5 bg-white">
+    <footer id="contact" className="border-t border-black/[0.06] bg-white">
       <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
         <div className="flex flex-col gap-10 sm:flex-row sm:justify-between">
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-dark.png" alt="Sukona" className="h-9 w-auto sm:h-10" />
+            <img src="/logo-dark.png" alt="Sukona" className="h-8 w-auto sm:h-9" />
             <p className="mt-4 max-w-xs text-body-sm text-text-secondary">
               Run your home-service business from one calm, mobile-first app.
             </p>
@@ -748,9 +845,9 @@ function Footer() {
                 Product
               </h4>
               <ul className="mt-4 space-y-2.5 text-body-sm">
-                <li><a href="#about" className="text-text-secondary hover:text-text-primary">About</a></li>
-                <li><a href="#pricing" className="text-text-secondary hover:text-text-primary">Pricing</a></li>
-                <li><Link href="/login" className="text-text-secondary hover:text-text-primary">Sign in</Link></li>
+                <li><a href="#about" className="text-text-secondary transition hover:text-text-primary">About</a></li>
+                <li><a href="#pricing" className="text-text-secondary transition hover:text-text-primary">Pricing</a></li>
+                <li><Link href="/login" className="text-text-secondary transition hover:text-text-primary">Sign in</Link></li>
               </ul>
             </div>
             <div>
@@ -759,7 +856,7 @@ function Footer() {
               </h4>
               <ul className="mt-4 space-y-2.5 text-body-sm">
                 <li>
-                  <a href="mailto:hellosukona@gmail.com" className="text-text-secondary hover:text-text-primary">
+                  <a href="mailto:hellosukona@gmail.com" className="text-text-secondary transition hover:text-text-primary">
                     hellosukona@gmail.com
                   </a>
                 </li>
@@ -768,7 +865,7 @@ function Footer() {
                     href="https://instagram.com/wearesukona"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-text-secondary hover:text-text-primary"
+                    className="text-text-secondary transition hover:text-text-primary"
                   >
                     @wearesukona
                   </a>
@@ -778,7 +875,7 @@ function Footer() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 border-t border-black/5 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-10 flex flex-col gap-3 border-t border-black/[0.06] pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-caption text-text-tertiary">
             © {new Date().getFullYear()} Sukona. All rights reserved.
           </p>
