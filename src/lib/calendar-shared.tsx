@@ -216,6 +216,24 @@ export function formatDuration(minutes: number) {
   return `${h}h ${m}m`;
 }
 
+/**
+ * Long-form date for the appointment detail header: "May 10, 2026".
+ * Input is the ISO yyyy-mm-dd we store on the row. Parsing is local-tz
+ * (matches the rest of the app — see formatDate notes elsewhere) so a
+ * row dated "2026-05-10" displays as May 10 regardless of the user's
+ * UTC offset.
+ */
+export function formatDateLong(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return dateStr;
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export function getServiceTimings(appt: AppointmentData) {
   const startMin = timeToMinutes(appt.time);
   const sorted = [...appt.appointment_services].sort((a, b) => a.sort_order - b.sort_order);
@@ -460,39 +478,44 @@ export function DetailView({
         )}
       </div>
 
-      {/* ---- When + where: tight stack, no heading ---- */}
-      <div className="space-y-1 text-body-sm text-text-secondary">
-        <p className="text-text-primary font-medium">
-          {appointment.date} · {formatTime12(appointment.time)} – {formatTime12(endTime)}
-        </p>
-        <p className="flex items-center gap-1.5">
-          <span>{formatDuration(totalDuration)} total</span>
-          {appointment.duration_override != null && (
-            <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
-              adjusted
+      {/* ---- When + where ---- */}
+      {/* Two visually-separate sub-blocks: when (date + time/duration)
+          on top, where (address + map link on its own line) below.
+          Each piece of info gets its own line so nothing reads packed
+          together. The date is rendered in long form ("May 10, 2026")
+          rather than the ISO yyyy-mm-dd that's stored on the row. */}
+      <div className="space-y-3 text-body-sm">
+        <div className="space-y-0.5">
+          <p className="text-text-primary font-medium">{formatDateLong(appointment.date)}</p>
+          <p className="flex items-center gap-1.5 text-text-secondary">
+            <span>
+              {formatTime12(appointment.time)} – {formatTime12(endTime)}
+              {" "}({formatDuration(totalDuration)})
             </span>
-          )}
-        </p>
-        {appointment.clients?.address && (
-          <p className="pt-1">
-            {appointment.clients.address}
-            {appointment.clients.map_link && (
-              <>
-                {" "}·{" "}
-                <a
-                  href={appointment.clients.map_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
-                >
-                  Open in Maps
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                  </svg>
-                </a>
-              </>
+            {appointment.duration_override != null && (
+              <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
+                adjusted
+              </span>
             )}
           </p>
+        </div>
+        {appointment.clients?.address && (
+          <div className="space-y-0.5">
+            <p className="text-text-secondary">{appointment.clients.address}</p>
+            {appointment.clients.map_link && (
+              <a
+                href={appointment.clients.map_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+              >
+                Open in Maps
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </a>
+            )}
+          </div>
         )}
       </div>
 
