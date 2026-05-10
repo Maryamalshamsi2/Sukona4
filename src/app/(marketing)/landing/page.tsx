@@ -202,71 +202,87 @@ function Hero() {
 }
 
 // ============================================================
-// CalendarMock — wide multi-staff grid, the hero's anchor
+// CalendarMock — mirrors the real dashboard calendar grid.
+// Container, borders, status colors, and layout match
+// `(dashboard)/calendar/calendar-view.tsx` so this reads as a
+// screenshot, not a generic SaaS mock.
 // ============================================================
 
 function CalendarMock() {
   const staff = ["Layla", "Aisha", "Maya"];
   const hours = ["9", "10", "11", "12", "1", "2", "3", "4"];
   const HOUR_PX = 56;
-  const HEAD_PX = 56;
-  const TIME_COL_PX = 60;
+  const HEAD_PX = 48;
+  const TIME_COL_PX = 56;
 
-  // [staffColumn, hourOffsetFromStart, durationHours, label, tone]
+  // Status tones lifted from the real app — see calendar-shared.tsx.
+  type Status = "scheduled" | "arrived" | "paid" | "on_the_way";
   const apps: Array<{
     col: number;
     top: number;
     dur: number;
-    label: string;
-    sub: string;
-    tone: "peach" | "sky" | "neutral";
+    name: string;
+    svc: string;
+    status: Status;
   }> = [
-    { col: 0, top: 0,    dur: 1.5, label: "Highlights",  sub: "Sara M.",   tone: "peach" },
-    { col: 0, top: 2.5,  dur: 1,   label: "Cut & blow",  sub: "Noor",      tone: "neutral" },
-    { col: 1, top: 0.5,  dur: 2,   label: "Color",       sub: "Layla S.",  tone: "sky" },
-    { col: 1, top: 3.5,  dur: 1,   label: "Manicure",    sub: "Reem",      tone: "peach" },
-    { col: 2, top: 1,    dur: 1,   label: "Brows",       sub: "Lina",      tone: "neutral" },
-    { col: 2, top: 2.5,  dur: 2,   label: "Treatment",   sub: "Mariam",    tone: "sky" },
+    { col: 0, top: 0,    dur: 1.5, name: "Sara M.",  svc: "Highlights", status: "paid" },
+    { col: 0, top: 2.5,  dur: 1,   name: "Noor K.",  svc: "Cut & blow", status: "scheduled" },
+    { col: 1, top: 0.5,  dur: 2,   name: "Layla S.", svc: "Color",      status: "arrived" },
+    { col: 1, top: 3.5,  dur: 1,   name: "Reem A.",  svc: "Manicure",   status: "scheduled" },
+    { col: 2, top: 1,    dur: 1,   name: "Lina H.",  svc: "Brows",      status: "on_the_way" },
+    { col: 2, top: 2.5,  dur: 2,   name: "Mariam Z.", svc: "Treatment", status: "scheduled" },
   ];
 
-  const tones = {
-    peach: "bg-primary-50 text-primary-800 ring-primary-100",
-    sky: "bg-sky-50 text-sky-900 ring-sky-100",
-    neutral: "bg-neutral-100 text-text-primary ring-neutral-200",
+  const statusStyles: Record<Status, string> = {
+    scheduled:  "bg-[#FFF8F0] text-[#CC7700] border-[#F4DDB7]",
+    on_the_way: "bg-[#F0FAF2] text-[#1B8736] border-[#C7E8D2]",
+    arrived:    "bg-[#F0F7FF] text-[#0062CC] border-[#C7DCF5]",
+    paid:       "bg-[#F5F5F7] text-[#48484A] border-[#E5E5E7]",
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-white shadow-[0_40px_100px_-40px_rgba(0,0,0,0.28)] ring-1 ring-black/[0.06]">
-      {/* Window chrome */}
-      <div className="flex items-center justify-between border-b border-black/[0.06] bg-white px-5 py-3.5 sm:px-7 sm:py-4">
-        <div className="flex items-center gap-1.5">
-          <div className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
-          <div className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
-          <div className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
+    <div className="relative overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white shadow-[0_40px_100px_-40px_rgba(0,0,0,0.28)]">
+      {/* Top bar — matches the real calendar-view top bar */}
+      <div className="flex items-center justify-between border-b border-[#EAEAEA] px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="text-body font-semibold text-text-primary sm:text-title-section">
+            Friday, May 10
+          </div>
+          <div className="rounded-full bg-neutral-900 px-3 py-1 text-caption font-semibold text-text-inverse">
+            Today
+          </div>
         </div>
-        <div className="text-body-sm font-semibold text-text-primary">
-          Friday, May 10
+        <div className="flex items-center gap-1">
+          <button className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <button className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
         </div>
-        <div className="text-body-sm font-medium text-primary-600">+ New</div>
       </div>
 
-      {/* Body */}
-      <div className="overflow-x-auto">
+      {/* Grid body — bg-[#FAFAFA] like the real one */}
+      <div className="overflow-x-auto bg-[#FAFAFA]">
         <div className="relative" style={{ minWidth: 640 }}>
           {/* Staff header row */}
           <div
-            className="grid border-b border-black/[0.06]"
+            className="grid border-b border-[#EAEAEA] bg-[#FAFAFA]"
             style={{
               gridTemplateColumns: `${TIME_COL_PX}px repeat(3, 1fr)`,
               height: HEAD_PX,
             }}
           >
-            <div />
+            <div className="border-r border-[#EAEAEA]" />
             {staff.map((s, i) => (
               <div
                 key={s}
-                className={`flex items-center px-4 text-body-sm font-semibold text-text-primary ${
-                  i < staff.length - 1 ? "border-r border-black/[0.04]" : ""
+                className={`flex items-center justify-center text-body-sm font-semibold text-text-primary ${
+                  i < staff.length - 1 ? "border-r border-[#EAEAEA]" : ""
                 }`}
               >
                 {s}
@@ -274,7 +290,7 @@ function CalendarMock() {
             ))}
           </div>
 
-          {/* Time grid + appointment chips */}
+          {/* Time grid + appointment blocks */}
           <div
             className="relative grid"
             style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(3, 1fr)` }}
@@ -282,7 +298,7 @@ function CalendarMock() {
             {hours.map((h) => (
               <Fragment key={h}>
                 <div
-                  className="border-b border-r border-black/[0.04] px-3 pt-1.5 text-right text-caption text-text-tertiary"
+                  className="border-b border-r border-[#EAEAEA] px-2 pt-1 text-right text-caption text-text-tertiary"
                   style={{ height: HOUR_PX }}
                 >
                   {h}
@@ -290,7 +306,7 @@ function CalendarMock() {
                 {staff.map((_, i) => (
                   <div
                     key={i}
-                    className={`border-b border-black/[0.04] ${
+                    className={`border-b border-[#EAEAEA] ${
                       i < staff.length - 1 ? "border-r" : ""
                     }`}
                     style={{ height: HOUR_PX }}
@@ -302,19 +318,19 @@ function CalendarMock() {
             {apps.map((a, i) => (
               <div
                 key={i}
-                className={`absolute flex flex-col rounded-lg px-3 py-1.5 ring-1 ${tones[a.tone]}`}
+                className={`absolute overflow-hidden rounded-lg border px-2 py-1 ${statusStyles[a.status]}`}
                 style={{
-                  left: `calc(${TIME_COL_PX}px + ${a.col} * ((100% - ${TIME_COL_PX}px) / 3) + 6px)`,
-                  width: `calc((100% - ${TIME_COL_PX}px) / 3 - 12px)`,
-                  top: a.top * HOUR_PX + 3,
-                  height: a.dur * HOUR_PX - 6,
+                  left: `calc(${TIME_COL_PX}px + ${a.col} * ((100% - ${TIME_COL_PX}px) / 3) + 4px)`,
+                  width: `calc((100% - ${TIME_COL_PX}px) / 3 - 8px)`,
+                  top: a.top * HOUR_PX + 2,
+                  height: a.dur * HOUR_PX - 4,
                 }}
               >
-                <div className="text-caption font-semibold leading-tight">
-                  {a.label}
+                <div className="text-[11px] font-semibold leading-tight">
+                  {a.name}
                 </div>
-                <div className="text-[11px] opacity-70 leading-tight">
-                  {a.sub}
+                <div className="text-[10px] opacity-80 leading-tight">
+                  {a.svc}
                 </div>
               </div>
             ))}
@@ -352,79 +368,108 @@ function MobileSection() {
 }
 
 function PhoneMock() {
-  const items = [
-    { time: "9:00",  name: "Highlights", who: "Sara M.",  tone: "peach" as const },
-    { time: "11:30", name: "Color",      who: "Layla S.", tone: "sky" as const },
-    { time: "14:00", name: "Manicure",   who: "Reem",     tone: "peach" as const },
-    { time: "16:30", name: "Brows",      who: "Lina",     tone: "neutral" as const },
+  // Mirrors the real "Today" appointment list from
+  // (dashboard)/home-view.tsx — same row layout, same status badges,
+  // same typography, even the count badge.
+  type Status = "scheduled" | "on_the_way" | "arrived" | "paid";
+  const items: Array<{ time: string; name: string; svc: string; status: Status; label: string }> = [
+    { time: "9:00",  name: "Sara M.",  svc: "Highlights",  status: "paid",       label: "Paid" },
+    { time: "11:30", name: "Layla S.", svc: "Color",       status: "arrived",    label: "Arrived" },
+    { time: "14:00", name: "Reem A.",  svc: "Manicure",    status: "scheduled",  label: "Scheduled" },
+    { time: "16:30", name: "Lina H.",  svc: "Brows",       status: "on_the_way", label: "On the way" },
   ];
 
-  const tones = {
-    peach: "bg-primary-50 text-primary-800 ring-primary-100",
-    sky: "bg-sky-50 text-sky-900 ring-sky-100",
-    neutral: "bg-neutral-100 text-text-primary ring-neutral-200",
+  const statusStyles: Record<Status, string> = {
+    scheduled:  "bg-[#FFF8F0] text-[#CC7700]",
+    on_the_way: "bg-[#F0FAF2] text-[#1B8736]",
+    arrived:    "bg-[#F0F7FF] text-[#0062CC]",
+    paid:       "bg-[#F5F5F7] text-[#48484A]",
   };
 
   return (
     <div className="relative">
-      {/* Phone bezel */}
-      <div className="relative w-[280px] rounded-[2.5rem] bg-neutral-900 p-2 shadow-[0_50px_100px_-30px_rgba(0,0,0,0.45)] sm:w-[320px]">
-        <div className="overflow-hidden rounded-[2rem] bg-white">
+      {/* iPhone-style bezel */}
+      <div className="relative w-[300px] rounded-[2.75rem] bg-neutral-900 p-2 shadow-[0_50px_120px_-30px_rgba(0,0,0,0.5)] sm:w-[340px]">
+        <div className="overflow-hidden rounded-[2.25rem] bg-[#F5F5F7]">
           {/* Status bar */}
-          <div className="flex items-center justify-between px-6 pt-3.5 pb-1 text-[11px] font-semibold text-text-primary">
+          <div className="flex items-center justify-between px-7 pt-4 pb-1 text-[12px] font-semibold text-text-primary">
             <span>9:41</span>
-            <div className="flex items-center gap-1">
-              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M2 6a4 4 0 014-4h8a4 4 0 014 4v8a4 4 0 01-4 4H6a4 4 0 01-4-4V6z" opacity=".3" />
-                <path d="M2 6a4 4 0 014-4h2v16H6a4 4 0 01-4-4V6z" />
-              </svg>
-            </div>
+            <span className="flex items-center gap-1">
+              <span className="h-1 w-1 rounded-full bg-text-primary" />
+              <span className="h-1 w-1 rounded-full bg-text-primary" />
+              <span className="h-1 w-1 rounded-full bg-text-primary" />
+              <span className="h-1 w-1 rounded-full bg-text-primary" />
+              <span className="ml-1 text-[10px]">100%</span>
+            </span>
           </div>
 
-          {/* Header */}
-          <div className="px-6 pt-4 pb-5">
-            <div className="text-caption font-medium text-text-tertiary">Friday, May 10</div>
-            <div className="mt-0.5 text-2xl font-semibold tracking-tight text-text-primary">
-              Today
-            </div>
-          </div>
-
-          {/* Appointments */}
-          <div className="space-y-2 px-4 pb-6">
-            {items.map((it) => (
-              <div
-                key={it.time}
-                className={`flex items-center justify-between rounded-2xl px-4 py-3 ring-1 ${tones[it.tone]}`}
-              >
-                <div className="flex flex-col">
-                  <span className="text-caption opacity-70">{it.time}</span>
-                  <span className="text-body-sm font-semibold leading-tight">
-                    {it.name}
-                  </span>
+          {/* The actual "Today" card — matches the real home-view */}
+          <div className="px-3 pt-3 pb-4">
+            <div className="overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4">
+                <div className="text-body font-semibold text-text-primary">
+                  Today
                 </div>
-                <span className="text-caption font-medium opacity-80">{it.who}</span>
+                <div className="rounded-full bg-[#F5F5F7] px-2 py-0.5 text-caption font-medium text-text-secondary">
+                  {items.length}
+                </div>
               </div>
-            ))}
+
+              {/* Rows */}
+              <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
+                {items.map((it) => (
+                  <div
+                    key={it.time}
+                    className={`flex items-center gap-3 px-5 py-3.5 ${
+                      it.status === "paid" ? "opacity-50" : ""
+                    }`}
+                  >
+                    <div className="w-12 text-body-sm font-semibold text-text-primary">
+                      {it.time}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <div className="truncate text-body-sm font-semibold text-text-primary">
+                        {it.name}
+                      </div>
+                      <div className="truncate text-caption text-text-tertiary">
+                        {it.svc}
+                      </div>
+                    </div>
+                    <div
+                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusStyles[it.status]}`}
+                    >
+                      {it.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Tab bar hint */}
-          <div className="flex items-center justify-around border-t border-black/[0.06] px-4 py-3">
+          {/* Bottom tab bar — same icons as the real app */}
+          <div className="flex items-center justify-around border-t border-[#EAEAEA] bg-white px-4 py-2.5">
+            <div className="flex flex-col items-center gap-0.5 text-text-primary">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
+              </svg>
+              <span className="text-[10px] font-medium">Home</span>
+            </div>
             <div className="flex flex-col items-center gap-0.5 text-primary-600">
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <rect x="3" y="4" width="14" height="14" rx="3" />
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
               </svg>
               <span className="text-[10px] font-semibold">Calendar</span>
             </div>
             <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 20 20">
-                <circle cx="10" cy="6" r="3" />
-                <path d="M3 17a7 7 0 0114 0" strokeLinecap="round" />
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
               </svg>
-              <span className="text-[10px] font-medium">Team</span>
+              <span className="text-[10px] font-medium">Payments</span>
             </div>
             <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 20 20">
-                <path d="M3 10h14M3 6h14M3 14h8" strokeLinecap="round" />
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
               </svg>
               <span className="text-[10px] font-medium">Reports</span>
             </div>
@@ -462,48 +507,58 @@ function PaymentsSection() {
 }
 
 function PaymentMock() {
+  // Mirrors a real payment row card from
+  // (dashboard)/payments/payments-view.tsx — same outer ring, same
+  // method badge color (cash green, card blue), same right-side amount
+  // + receipt thumbnail layout.
+  type Method = "Cash" | "Card";
+  const rows: Array<{ name: string; svc: string; method: Method; amount: string; when: string; thumb: string }> = [
+    { name: "Sara M.",  svc: "Highlights · Color",     method: "Card", amount: "AED 240",  when: "Today, 10:30",   thumb: "#FEEAD2" },
+    { name: "Reem A.",  svc: "Manicure",                method: "Cash", amount: "AED 120",  when: "Today, 14:05",   thumb: "#F0FAF2" },
+    { name: "Layla S.", svc: "Treatment · Blow-dry",    method: "Card", amount: "AED 380",  when: "Today, 16:50",   thumb: "#F0F7FF" },
+  ];
+
+  const methodStyles: Record<Method, string> = {
+    Cash: "bg-[#F0FAF2] text-[#1B8736]",
+    Card: "bg-[#F0F7FF] text-[#0062CC]",
+  };
+
   return (
-    <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.06] sm:p-8">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-          </div>
-          <div>
-            <div className="text-caption font-medium text-text-tertiary">
-              Payment received
+    <div className="w-full max-w-xl space-y-3 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
+      {rows.map((r) => (
+        <div
+          key={r.name}
+          className="flex items-start justify-between gap-4 rounded-2xl border border-[#EAEAEA] bg-white p-5"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <div className="truncate text-body font-semibold text-text-primary">
+                {r.name}
+              </div>
+              <div className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-medium ${methodStyles[r.method]}`}>
+                {r.method}
+              </div>
             </div>
-            <div className="text-body-sm font-semibold text-text-primary">
-              Sara M. · Highlights
+            <div className="mt-1 text-body-sm text-text-secondary">{r.when}</div>
+            <div className="mt-0.5 truncate text-body-sm text-text-secondary">
+              {r.svc}
             </div>
           </div>
-        </div>
-        <span className="text-caption font-medium text-emerald-700">Paid</span>
-      </div>
 
-      <div className="mt-6 border-t border-black/[0.06] pt-5">
-        <div className="text-caption font-medium text-text-tertiary">Total</div>
-        <div className="mt-1 text-4xl font-semibold tracking-tight text-text-primary">
-          AED 240
+          <div className="flex items-start gap-3">
+            <div className="text-right">
+              <div className="text-lg font-semibold text-text-primary">
+                {r.amount}
+              </div>
+            </div>
+            <div
+              className="h-14 w-14 shrink-0 rounded-lg ring-1 ring-[#EAEAEA]"
+              style={{ background: r.thumb }}
+              aria-hidden
+            />
+          </div>
         </div>
-        <div className="mt-1 text-caption text-text-secondary">
-          Visa ending 4242
-        </div>
-      </div>
-
-      <div className="mt-6 flex items-center gap-2 rounded-2xl bg-[#F5F5F7] px-4 py-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-          <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 0C4.48 0 0 4.48 0 10s4.48 10 10 10c1.85 0 3.58-.5 5.06-1.39L20 20l-1.39-4.94A9.96 9.96 0 0020 10c0-5.52-4.48-10-10-10z" />
-          </svg>
-        </div>
-        <div className="flex-1 text-caption font-medium text-text-secondary">
-          Receipt sent on WhatsApp
-        </div>
-        <div className="text-caption text-text-tertiary">Just now</div>
-      </div>
+      ))}
     </div>
   );
 }
@@ -535,12 +590,23 @@ function ReportsSection() {
 }
 
 function RevenueMock() {
-  // Sparkline points — fake values, smoothed shape that ends on a high
+  // Mirrors the StatCard layout from
+  // (dashboard)/reports/reports-view.tsx — `rounded-2xl bg-white
+  // ring-1 ring-border p-6` with a uppercase-tracked label and a
+  // big numeric value. Revenue green-700, Expenses red-600, Profit
+  // green when positive.
+  const cards = [
+    { label: "Revenue",   value: "AED 28,400", sub: "vs AED 24,200",   color: "text-green-700",   accent: "↑ 17%" },
+    { label: "Expenses",  value: "AED 6,820",  sub: "vs AED 7,140",    color: "text-red-600",     accent: "↓ 4%" },
+    { label: "Profit",    value: "AED 21,580", sub: "vs AED 17,060",   color: "text-green-700",   accent: "↑ 27%" },
+  ];
+
+  // Sparkline values shaped to climb at the end.
   const points = [40, 38, 45, 42, 50, 48, 56, 54, 62, 58, 68, 72];
   const max = Math.max(...points);
   const min = Math.min(...points);
-  const W = 320;
-  const H = 80;
+  const W = 600;
+  const H = 90;
   const path = points
     .map((v, i) => {
       const x = (i / (points.length - 1)) * W;
@@ -551,54 +617,54 @@ function RevenueMock() {
   const areaPath = `${path} L${W},${H} L0,${H} Z`;
 
   return (
-    <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.06] sm:p-8">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-caption font-medium text-text-tertiary">
-            Revenue · This month
+    <div className="w-full max-w-3xl space-y-4 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
+      {/* Three stat cards — same layout as the reports page */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {cards.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6"
+          >
+            <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+              {c.label}
+            </div>
+            <div className={`mt-2 text-xl font-bold sm:text-2xl ${c.color}`}>
+              {c.value}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-caption text-text-tertiary">
+              <span className={c.color}>{c.accent}</span>
+              <span>{c.sub}</span>
+            </div>
           </div>
-          <div className="mt-1 text-5xl font-semibold tracking-tighter text-text-primary">
-            AED 28,400
-          </div>
-        </div>
-        <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-caption font-semibold text-emerald-700">
-          ↑ 17%
-        </div>
+        ))}
       </div>
 
-      {/* Sparkline */}
-      <div className="mt-6">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#F08C2D" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#F08C2D" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={areaPath} fill="url(#sparkfill)" />
-          <path
-            d={path}
-            fill="none"
-            stroke="#F08C2D"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-
-      <div className="mt-6 grid grid-cols-2 gap-4 border-t border-black/[0.06] pt-5">
-        <div>
-          <div className="text-caption text-text-tertiary">Last month</div>
-          <div className="mt-0.5 text-body font-semibold text-text-primary">
-            AED 24,200
+      {/* Trend chart card — pairs the stat row with the visual */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6">
+        <div className="flex items-center justify-between">
+          <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+            Last 30 days
           </div>
+          <div className="text-caption text-text-tertiary">142 bookings</div>
         </div>
-        <div>
-          <div className="text-caption text-text-tertiary">Bookings</div>
-          <div className="mt-0.5 text-body font-semibold text-text-primary">
-            142
-          </div>
+        <div className="mt-4">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#F08C2D" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#F08C2D" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={areaPath} fill="url(#sparkfill)" />
+            <path
+              d={path}
+              fill="none"
+              stroke="#F08C2D"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
       </div>
     </div>
