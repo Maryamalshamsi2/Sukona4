@@ -59,73 +59,115 @@ function Nav() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Escape closes the drawer.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   return (
-    <header
-      className={`sticky top-0 z-50 transition-colors ${
-        scrolled
-          ? "border-b border-black/[0.06] bg-white/85 backdrop-blur-xl"
-          : "border-b border-transparent bg-white"
-      }`}
-    >
-      <div className="mx-auto grid h-14 max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-5 sm:h-16 sm:px-8">
-        {/* Logo (left) */}
-        <Link href="/" aria-label="Sukona — home" className="justify-self-start">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-dark.png" alt="Sukona" className="h-7 w-auto sm:h-8" />
-        </Link>
-
-        {/* Center links — desktop */}
-        <nav className="hidden items-center gap-9 md:flex">
-          <NavLink href="#about">About</NavLink>
-          <NavLink href="#pricing">Pricing</NavLink>
-          <NavLink href="#contact">Contact</NavLink>
-        </nav>
-
-        {/* Sign in (right) — text link, not a button. Apple uses these. */}
-        <div className="hidden justify-self-end md:block">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1 text-body-sm font-medium text-text-primary transition hover:text-primary-600"
-          >
-            Sign in <span aria-hidden>→</span>
-          </Link>
-        </div>
-
-        {/* Mobile burger */}
+    <>
+      {/* Tap-anywhere-to-close backdrop. Sibling of the header so the
+          z-stacking is straightforward: backdrop at z-40, header
+          (with its drawer) at z-50, page content at default. */}
+      {mobileOpen && (
         <button
           type="button"
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileOpen}
-          className="flex h-9 w-9 items-center justify-center justify-self-end text-text-primary md:hidden"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-            {mobileOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-            )}
-          </svg>
-        </button>
-      </div>
+          aria-hidden
+          tabIndex={-1}
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 cursor-default bg-black/15 backdrop-blur-[2px] md:hidden"
+        />
+      )}
 
-      {mobileOpen && (
-        <div className="border-t border-black/[0.06] bg-white md:hidden">
-          <nav className="mx-auto flex max-w-6xl flex-col px-5 py-2">
-            <MobileNavLink href="#about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
-            <MobileNavLink href="#pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
-            <MobileNavLink href="#contact" onClick={() => setMobileOpen(false)}>Contact</MobileNavLink>
+      <header
+        className={`sticky top-0 z-50 transition-colors ${
+          scrolled
+            ? "border-b border-black/[0.06] bg-white/85 backdrop-blur-xl"
+            : "border-b border-transparent bg-white"
+        }`}
+      >
+        {/* The bar is flex on mobile (logo left, burger right via
+            justify-between) and becomes a 3-column grid on md+ so the
+            desktop links sit centered between logo and Sign in. The
+            earlier version was grid-only on every breakpoint, which
+            parked the burger in the middle column on mobile. */}
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:h-16 sm:px-8 md:grid md:grid-cols-[1fr_auto_1fr]">
+          {/* Logo (left) */}
+          <Link
+            href="/"
+            aria-label="Sukona — home"
+            className="flex shrink-0 md:justify-self-start"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-dark.png" alt="Sukona" className="h-7 w-auto sm:h-8" />
+          </Link>
+
+          {/* Center links — desktop only */}
+          <nav className="hidden items-center gap-9 md:flex">
+            <NavLink href="#about">About</NavLink>
+            <NavLink href="#pricing">Pricing</NavLink>
+            <NavLink href="#contact">Contact</NavLink>
+          </nav>
+
+          {/* Sign in (right) — desktop only, text link not a button */}
+          <div className="hidden md:block md:justify-self-end">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1 text-body-sm font-medium text-text-primary transition hover:text-primary-600"
+            >
+              Sign in <span aria-hidden>→</span>
+            </Link>
+          </div>
+
+          {/* Mobile burger */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-text-primary transition hover:bg-surface-hover active:scale-95 md:hidden"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              {mobileOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile drawer — slides down from the bar with a smooth
+            transition. Renders inside the sticky header so it tracks
+            with scroll. max-h transition keeps the surrounding page
+            from jumping. */}
+        <div
+          className={`overflow-hidden bg-white transition-[max-height,opacity] duration-200 ease-out md:hidden ${
+            mobileOpen ? "max-h-80 opacity-100" : "pointer-events-none max-h-0 opacity-0"
+          }`}
+        >
+          <div className="border-t border-black/[0.06] px-5 pb-5 pt-1">
+            <nav className="divide-y divide-black/[0.04]">
+              <MobileNavLink href="#about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
+              <MobileNavLink href="#pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
+              <MobileNavLink href="#contact" onClick={() => setMobileOpen(false)}>Contact</MobileNavLink>
+            </nav>
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}
-              className="px-3 py-3 text-body font-medium text-text-primary"
+              className="mt-5 flex items-center justify-center rounded-full bg-text-primary px-5 py-3 text-body-sm font-medium text-text-inverse transition active:scale-[0.98]"
             >
-              Sign in →
+              Sign in
             </Link>
-          </nav>
+          </div>
         </div>
-      )}
-    </header>
+      </header>
+    </>
   );
 }
 
@@ -153,7 +195,7 @@ function MobileNavLink({
     <a
       href={href}
       onClick={onClick}
-      className="px-3 py-3 text-body font-medium text-text-primary"
+      className="block py-4 text-body font-medium text-text-primary transition active:text-text-secondary"
     >
       {children}
     </a>
