@@ -168,7 +168,7 @@ function Hero() {
   return (
     <section className="bg-white">
       <div className="mx-auto max-w-5xl px-5 pt-20 text-center sm:px-8 sm:pt-28 lg:pt-36">
-        <h1 className="mx-auto max-w-4xl text-5xl font-semibold tracking-tighter text-text-primary leading-[1.02] sm:text-6xl lg:text-7xl xl:text-[5.5rem]">
+        <h1 className="mx-auto max-w-4xl text-[2.5rem] font-medium tracking-tight text-text-primary leading-[1.05] sm:text-6xl sm:leading-[1.02] lg:text-7xl xl:text-[5.5rem]">
           Home beauty,
           <br />
           all in one place.
@@ -214,7 +214,10 @@ function CalendarMock() {
   const hours = ["9", "10", "11", "12", "1", "2", "3", "4"];
   const HOUR_PX = 56;
   const HEAD_PX = 48;
-  const TIME_COL_PX = 56;
+  // Narrower gutter than the desktop dashboard uses (the real app has
+  // w-16 = 64px). At 48px we give phones more room for the staff
+  // columns; appointment chips still read at the smaller width.
+  const TIME_COL_PX = 48;
 
   // Status tones lifted from the real app — see calendar-shared.tsx.
   type Status = "scheduled" | "arrived" | "paid" | "on_the_way";
@@ -267,9 +270,12 @@ function CalendarMock() {
         </div>
       </div>
 
-      {/* Grid body — bg-[#FAFAFA] like the real one */}
-      <div className="overflow-x-auto bg-[#FAFAFA]">
-        <div className="relative" style={{ minWidth: 640 }}>
+      {/* Grid body — bg-[#FAFAFA] like the real one. No min-width:
+          the columns shrink to fit the viewport on mobile so the
+          calendar reads as one self-contained surface, not a
+          horizontally-scrolling fragment. */}
+      <div className="bg-[#FAFAFA]">
+        <div className="relative">
           {/* Staff header row */}
           <div
             className="grid border-b border-[#EAEAEA] bg-[#FAFAFA]"
@@ -354,7 +360,7 @@ function Manifesto() {
         <p className="text-caption font-semibold uppercase tracking-wider text-primary-600">
           Why Sukona
         </p>
-        <h2 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+        <h2 className="mx-auto mt-4 max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
           Less juggling.
           <br />
           <span className="text-text-secondary">More appointments.</span>
@@ -377,7 +383,7 @@ function MobileSection() {
   return (
     <section className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
-        <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+        <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
           Designed for your phone.
           <br />
           <span className="text-text-secondary">Not a desk.</span>
@@ -516,7 +522,7 @@ function PaymentsSection() {
   return (
     <section className="bg-white py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
-        <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+        <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
           Get paid.
           <br />
           <span className="text-text-secondary">Send the receipt.</span>
@@ -599,7 +605,7 @@ function ReportsSection() {
   return (
     <section className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
-        <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+        <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
           See what&rsquo;s
           <br />
           <span className="text-text-secondary">actually working.</span>
@@ -747,7 +753,7 @@ function Pricing() {
     <section id="pricing" className="bg-white py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+          <h2 className="text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
             Simple pricing.
             <br />
             <span className="text-text-secondary">Cancel anytime.</span>
@@ -779,7 +785,7 @@ function Pricing() {
                 {p.tagline}
               </div>
               <div className="mt-7 flex items-baseline">
-                <span className="text-5xl font-semibold tracking-tighter text-text-primary">
+                <span className="text-5xl font-medium tracking-tight text-text-primary">
                   {p.price}
                 </span>
                 <span className="ml-2 text-body-sm text-text-secondary">
@@ -853,7 +859,7 @@ function FAQ() {
   return (
     <section className="bg-[#F5F5F7] py-24 sm:py-32">
       <div className="mx-auto max-w-3xl px-5 sm:px-8">
-        <h2 className="text-center text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl">
+        <h2 className="text-center text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05]">
           Common questions.
         </h2>
         <div className="mt-14 divide-y divide-black/[0.06] sm:mt-16">
@@ -904,7 +910,7 @@ function FinalCTA() {
   return (
     <section className="bg-white py-24 text-center sm:py-32 lg:py-40">
       <div className="mx-auto max-w-3xl px-5 sm:px-8">
-        <h2 className="text-4xl font-semibold tracking-tighter text-text-primary leading-[1.02] sm:text-5xl lg:text-6xl">
+        <h2 className="text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.02] lg:text-6xl">
           Try Sukona free for
           <br />
           <span className="text-primary-600">seven days.</span>
