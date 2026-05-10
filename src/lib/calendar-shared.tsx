@@ -386,186 +386,221 @@ export function DetailView({
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
   const [receiptPreviewIdx, setReceiptPreviewIdx] = useState(0);
 
+  // Hierarchy of the redesigned drawer:
+  //   1. HERO        — client name (largest) + status pill (right). Phone +
+  //                    paperclip/edit-payment on the second row. The
+  //                    important state of the appointment lives here.
+  //   2. WHEN        — date / time / duration / address. Compact, no
+  //                    label heading — the content speaks for itself.
+  //   3. SERVICES    — wrapped in a card with the total at the bottom in
+  //                    bold. Eyebrow ("SERVICES") instead of an h3.
+  //   4. NOTES       — eyebrow + body, only when notes exist.
+  //   5. SHARE       — only when paid (existing component).
+  //   6. ACTIONS     — primary status / cancel / edit / delete.
+  //
+  // The space-y-7 between blocks is bigger than the old space-y-6 so
+  // the eye registers them as distinct stops. Internal spacing inside
+  // each block is tight (1–2 lines) to feel grouped.
+  const hasPaidReceiptControls =
+    canEdit && onEditPayment && appointment.status === "paid" && (appointment.payments?.length ?? 0) > 0;
+
   return (
-    <div className="space-y-6">
-      {/* ---- Status (top) ---- */}
+    <div className="space-y-7">
+      {/* ---- Hero: client name + status + phone + paid-receipt controls ---- */}
       <div>
-        <h3 className="text-body font-bold text-text-primary mb-2">Status</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_LABELS[appointment.status]?.color || "bg-gray-100 text-text-primary"}`}>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="min-w-0 text-title-section font-semibold tracking-tight text-text-primary truncate">
+            {appointment.clients?.name || "Unknown"}
+          </h2>
+          <span className={`shrink-0 inline-block rounded-full px-3 py-1 text-body-sm font-medium ${STATUS_LABELS[appointment.status]?.color || "bg-gray-100 text-text-primary"}`}>
             {STATUS_LABELS[appointment.status]?.label || appointment.status}
           </span>
-          {uploadedReceiptUrls.length > 0 && (
-            <button
-              type="button"
-              onClick={() => { setReceiptPreviewIdx(0); setReceiptPreviewOpen(true); }}
-              aria-label={`View ${uploadedReceiptUrls.length} uploaded receipt${uploadedReceiptUrls.length > 1 ? "s" : ""}`}
-              className="flex h-8 items-center justify-center gap-1 rounded-lg px-1.5 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-              </svg>
-              {uploadedReceiptUrls.length > 1 && (
-                <span className="text-caption font-semibold tabular-nums">{uploadedReceiptUrls.length}</span>
-              )}
-            </button>
-          )}
-          {/* Edit payment — only when the appointment is paid AND the
-              caller wired the callback (owner/admin pages do; staff
-              don't pass it). Lets the owner fix a wrong method or
-              swap the receipt photo without re-doing the whole flow. */}
-          {canEdit && onEditPayment && appointment.status === "paid" && (appointment.payments?.length ?? 0) > 0 && (
-            <button
-              type="button"
-              onClick={onEditPayment}
-              className="text-caption font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
-            >
-              Edit payment
-            </button>
-          )}
         </div>
-      </div>
-
-      {/* ---- Date & Time ---- */}
-      <div>
-        <h3 className="text-body font-bold text-text-primary mb-2">Date & Time</h3>
-        <div className="space-y-1 text-body-sm text-text-secondary">
-          <p>{appointment.date}</p>
-          <p>{formatTime12(appointment.time)} – {formatTime12(endTime)}</p>
-          <p className="flex items-center gap-1.5">
-            <span>{formatDuration(totalDuration)} total</span>
-            {appointment.duration_override != null && (
-              <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
-                adjusted
-              </span>
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* ---- Client ---- */}
-      <div>
-        <h3 className="text-body font-bold text-text-primary mb-2">Client</h3>
-        <div className="space-y-1 text-body-sm">
-          <p className="font-semibold text-text-primary">{appointment.clients?.name || "Unknown"}</p>
-          {appointment.clients?.phone && (
-            <p>
+        {(appointment.clients?.phone || uploadedReceiptUrls.length > 0 || hasPaidReceiptControls) && (
+          <div className="mt-1.5 flex items-center justify-between gap-3">
+            {appointment.clients?.phone ? (
               <a
                 href={`tel:${appointment.clients.phone}`}
-                className="text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+                className="min-w-0 truncate text-body-sm text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
               >
                 {appointment.clients.phone}
               </a>
-            </p>
-          )}
-          {appointment.clients?.address && <p className="text-text-secondary">{appointment.clients.address}</p>}
-          {appointment.clients?.map_link && (
-            <a href={appointment.clients.map_link} target="_blank" rel="noopener noreferrer"
-              className="mt-1.5 inline-flex items-center gap-2 text-body-sm text-text-secondary hover:text-text-primary transition-colors">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-              </svg>
-              Open in Google Maps
-            </a>
-          )}
-        </div>
+            ) : (
+              <span />
+            )}
+            {(uploadedReceiptUrls.length > 0 || hasPaidReceiptControls) && (
+              <div className="flex shrink-0 items-center gap-2">
+                {uploadedReceiptUrls.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setReceiptPreviewIdx(0); setReceiptPreviewOpen(true); }}
+                    aria-label={`View ${uploadedReceiptUrls.length} uploaded receipt${uploadedReceiptUrls.length > 1 ? "s" : ""}`}
+                    className="flex h-7 items-center justify-center gap-1 rounded-lg px-1.5 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                    </svg>
+                    {uploadedReceiptUrls.length > 1 && (
+                      <span className="text-caption font-semibold tabular-nums">{uploadedReceiptUrls.length}</span>
+                    )}
+                  </button>
+                )}
+                {hasPaidReceiptControls && (
+                  <button
+                    type="button"
+                    onClick={onEditPayment}
+                    className="text-caption font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                  >
+                    Edit payment
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ---- Services ---- */}
+      {/* ---- When + where: tight stack, no heading ---- */}
+      <div className="space-y-1 text-body-sm text-text-secondary">
+        <p className="text-text-primary font-medium">
+          {appointment.date} · {formatTime12(appointment.time)} – {formatTime12(endTime)}
+        </p>
+        <p className="flex items-center gap-1.5">
+          <span>{formatDuration(totalDuration)} total</span>
+          {appointment.duration_override != null && (
+            <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
+              adjusted
+            </span>
+          )}
+        </p>
+        {appointment.clients?.address && (
+          <p className="pt-1">
+            {appointment.clients.address}
+            {appointment.clients.map_link && (
+              <>
+                {" "}·{" "}
+                <a
+                  href={appointment.clients.map_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+                >
+                  Open in Maps
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </a>
+              </>
+            )}
+          </p>
+        )}
+      </div>
+
+      {/* ---- Services: single card with total inside ---- */}
       {timings.length > 0 && (
         <div>
-          <h3 className="text-body font-bold text-text-primary mb-2.5">Services</h3>
-          <div className="space-y-2.5">
-            {timings.map((t, i) => {
-              const staffMember = staff.find((s) => s.id === t.svc.staff_id);
-              // Bundle grouping (migration 025). When a row carries a
-              // bundle_instance_id and the previous row does not share it,
-              // we're at the start of a bundle group — render a header
-              // with the bundle name + its total price and suppress
-              // per-service prices for rows in the group (the bundle
-              // price replaces them).
-              const inBundle = !!t.svc.bundle_instance_id;
-              const prevInstance = i > 0 ? timings[i - 1].svc.bundle_instance_id : null;
-              const isFirstInBundle = inBundle && prevInstance !== t.svc.bundle_instance_id;
-              return (
-                <div key={t.svc.id || i}>
-                  {isFirstInBundle && (
-                    <div className="flex items-center justify-between mb-1.5 px-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-body-sm font-semibold text-text-primary">
-                          {t.svc.bundle_name || "Bundle"}
-                        </span>
-                        <span className="rounded-full bg-surface-active px-2 py-0.5 text-caption font-medium text-text-secondary">
-                          Bundle
-                        </span>
+          <h3 className="text-caption font-semibold uppercase tracking-wide text-text-tertiary mb-2">
+            Services
+          </h3>
+          <div className="rounded-2xl ring-1 ring-border bg-white overflow-hidden">
+            <div className="divide-y divide-border">
+              {timings.map((t, i) => {
+                const staffMember = staff.find((s) => s.id === t.svc.staff_id);
+                // Bundle grouping (migration 025). When a row carries a
+                // bundle_instance_id and the previous row does not share
+                // it, we're at the start of a bundle group — render a
+                // header with the bundle name + its total price and
+                // suppress per-service prices for rows in the group
+                // (the bundle price replaces them).
+                const inBundle = !!t.svc.bundle_instance_id;
+                const prevInstance = i > 0 ? timings[i - 1].svc.bundle_instance_id : null;
+                const isFirstInBundle = inBundle && prevInstance !== t.svc.bundle_instance_id;
+                return (
+                  <div key={t.svc.id || i}>
+                    {isFirstInBundle && (
+                      <div className="flex items-center justify-between gap-2 bg-surface-hover px-4 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-body-sm font-semibold text-text-primary">
+                            {t.svc.bundle_name || "Bundle"}
+                          </span>
+                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-caption font-medium text-text-secondary ring-1 ring-border">
+                            Bundle
+                          </span>
+                        </div>
+                        {t.svc.bundle_total_price != null && (
+                          <span className="shrink-0 text-body-sm font-semibold text-text-primary">
+                            AED {Math.round(Number(t.svc.bundle_total_price))}
+                          </span>
+                        )}
                       </div>
-                      {t.svc.bundle_total_price != null && (
-                        <span className="text-body-sm font-semibold text-text-primary">
-                          AED {Math.round(Number(t.svc.bundle_total_price))}
+                    )}
+                    <div className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className={`min-w-0 truncate text-body-sm ${inBundle ? "text-text-secondary" : "font-semibold text-text-primary"}`}>
+                          {inBundle && <span className="text-text-tertiary mr-1.5">·</span>}
+                          {t.svc.services?.name || "Unknown"}
+                        </p>
+                        {!inBundle && (
+                          <span className="shrink-0 text-body-sm font-semibold text-text-primary">
+                            AED {t.svc.services?.price || 0}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-3 text-caption text-text-secondary">
+                        <span>
+                          {formatDuration(t.endMin - t.startMin)}
+                          {t.svc.is_parallel && <span className="ml-1">(parallel)</span>}
                         </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="rounded-lg bg-surface-hover px-3 py-2.5 text-body-sm">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-text-primary">{t.svc.services?.name || "Unknown"}</p>
-                      {!inBundle && (
-                        <span className="font-semibold text-text-primary">AED {t.svc.services?.price || 0}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-text-secondary">
-                        {formatDuration(t.endMin - t.startMin)}
-                        {t.svc.is_parallel && <span className="ml-1">(parallel)</span>}
-                      </p>
-                      {staffMember && (
-                        <span className="rounded-full bg-surface-active px-2 py-0.5 text-caption font-semibold text-text-primary">
-                          {staffMember.full_name}
-                        </span>
-                      )}
+                        {staffMember && (
+                          <span className="shrink-0 truncate text-text-primary font-medium">
+                            {staffMember.full_name}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+            {/* Totals strip sits inside the card, separated by a divider.
+                Adjustment rows render only when their value is non-zero
+                so a clean appointment shows just one "Total" line. */}
+            <div className="border-t border-border bg-surface-hover/40 px-4 py-3 space-y-1 text-body-sm">
+              {hasAppointmentAdjustments(appointment) && (
+                <div className="flex items-center justify-between text-text-secondary">
+                  <span>Subtotal</span>
+                  <span>AED {getApptSubtotal(appointment)}</span>
                 </div>
-              );
-            })}
-          </div>
-          {/* Subtotal + adjustments + total. The breakdown rows only render
-              when their value is non-zero/set so a clean appointment shows
-              just one "Total" line. */}
-          <div className="mt-3 space-y-1.5 px-1 text-body-sm">
-            {hasAppointmentAdjustments(appointment) && (
-              <div className="flex items-center justify-between text-text-secondary">
-                <span>Subtotal</span>
-                <span>AED {getApptSubtotal(appointment)}</span>
-              </div>
-            )}
-            {getApptTransport(appointment) > 0 && (
-              <div className="flex items-center justify-between text-text-secondary">
-                <span>Transportation</span>
-                <span>+ AED {getApptTransport(appointment)}</span>
-              </div>
-            )}
-            {Number(appointment.discount_value ?? 0) > 0 && (
-              <div className="flex items-center justify-between text-text-secondary">
-                <span>
-                  Discount
-                  {appointment.discount_type === "percentage" && (
-                    <span className="text-text-tertiary"> ({Number(appointment.discount_value)}% off)</span>
-                  )}
+              )}
+              {getApptTransport(appointment) > 0 && (
+                <div className="flex items-center justify-between text-text-secondary">
+                  <span>Transportation</span>
+                  <span>+ AED {getApptTransport(appointment)}</span>
+                </div>
+              )}
+              {Number(appointment.discount_value ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-text-secondary">
+                  <span>
+                    Discount
+                    {appointment.discount_type === "percentage" && (
+                      <span className="text-text-tertiary"> ({Number(appointment.discount_value)}% off)</span>
+                    )}
+                  </span>
+                  <span>− AED {getApptDiscountAmount(appointment)}</span>
+                </div>
+              )}
+              {appointment.total_override != null && (
+                <div className="flex items-center justify-between text-caption text-text-tertiary">
+                  <span>Manual total override</span>
+                  <span></span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-body font-bold text-text-primary">Total</span>
+                <span className="text-body font-bold text-text-primary tabular-nums">
+                  AED {getApptTotal(appointment)}
                 </span>
-                <span>− AED {getApptDiscountAmount(appointment)}</span>
               </div>
-            )}
-            {appointment.total_override != null && (
-              <div className="flex items-center justify-between text-caption text-text-tertiary">
-                <span>Manual total override</span>
-                <span></span>
-              </div>
-            )}
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-body-sm font-bold text-text-primary">Total</span>
-              <span className="text-body-sm font-bold text-text-primary">AED {getApptTotal(appointment)}</span>
             </div>
           </div>
         </div>
@@ -574,8 +609,10 @@ export function DetailView({
       {/* ---- Notes ---- */}
       {appointment.notes && (
         <div>
-          <h3 className="text-body font-bold text-text-primary mb-2">Notes</h3>
-          <p className="text-body-sm text-text-secondary">{appointment.notes}</p>
+          <h3 className="text-caption font-semibold uppercase tracking-wide text-text-tertiary mb-2">
+            Notes
+          </h3>
+          <p className="text-body-sm text-text-secondary whitespace-pre-line">{appointment.notes}</p>
         </div>
       )}
 
