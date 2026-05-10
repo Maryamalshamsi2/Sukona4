@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import PhoneInput from "@/components/phone-input";
 
 // ---- Types ----
@@ -596,86 +596,86 @@ export function DetailView({
                 const isFirstInBundle = inBundle && prevInstance !== t.svc.bundle_instance_id;
                 const instanceId = t.svc.bundle_instance_id;
                 const isExpanded = !!instanceId && expandedBundles.has(instanceId);
+                const bundleStaff = instanceId ? bundleStaffByInstance.get(instanceId) : undefined;
 
-                // Hidden bundle child — collapsed state.
-                if (inBundle && !isFirstInBundle && !isExpanded) {
-                  return null;
-                }
+                // Visual hierarchy of the row content:
+                //   - Name      — primary, semibold
+                //   - Staff     — secondary (lighter, regular weight)
+                //   - Price     — primary, medium weight, tabular,
+                //                 sits at the far right edge (Apple
+                //                 transaction-list pattern)
+                // Same font + position across bundle headers and
+                // standalone services so the eye scans columns.
 
-                // Bundle header — top-level row, clickable.
-                if (isFirstInBundle && instanceId) {
-                  const bundleStaff = bundleStaffByInstance.get(instanceId);
-                  return (
-                    <button
-                      key={t.svc.id || i}
-                      type="button"
-                      onClick={() => toggleBundle(instanceId)}
-                      aria-expanded={isExpanded}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
-                    >
-                      <span className="min-w-0 flex flex-1 items-center gap-1.5">
-                        <span className="truncate text-body-sm font-semibold text-text-primary">
-                          {t.svc.bundle_name || "Bundle"}
-                        </span>
-                        <svg
-                          className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                        </svg>
-                      </span>
-                      {t.svc.bundle_total_price != null && (
-                        <span className="shrink-0 text-body-sm text-text-tertiary tabular-nums">
-                          AED {Math.round(Number(t.svc.bundle_total_price))}
-                        </span>
-                      )}
-                      {bundleStaff && (
-                        <span className="shrink-0 truncate text-body-sm font-medium text-text-primary max-w-[40%]">
-                          {bundleStaff}
-                        </span>
-                      )}
-                    </button>
-                  );
-                }
-
-                // Bundle child — visible only when expanded. Indented;
-                // name + staff (no price column; the bundle has it).
-                if (inBundle) {
-                  return (
-                    <div
-                      key={t.svc.id || i}
-                      className="flex items-center justify-between gap-3 py-3 pl-8 pr-4"
-                    >
-                      <p className="min-w-0 flex-1 truncate text-body-sm text-text-secondary">
-                        {t.svc.services?.name || "Unknown"}
-                      </p>
-                      {staffMember && (
-                        <span className="shrink-0 truncate text-body-sm font-medium text-text-primary max-w-[40%]">
-                          {staffMember.full_name}
-                        </span>
-                      )}
-                    </div>
-                  );
-                }
-
-                // Non-bundle row — name, price, staff.
                 return (
-                  <div
-                    key={t.svc.id || i}
-                    className="flex items-center justify-between gap-3 px-4 py-3.5"
-                  >
-                    <p className="min-w-0 flex-1 truncate text-body-sm font-semibold text-text-primary">
-                      {t.svc.services?.name || "Unknown"}
-                    </p>
-                    <span className="shrink-0 text-body-sm text-text-tertiary tabular-nums">
-                      AED {t.svc.services?.price || 0}
-                    </span>
-                    {staffMember && (
-                      <span className="shrink-0 truncate text-body-sm font-medium text-text-primary max-w-[40%]">
-                        {staffMember.full_name}
-                      </span>
+                  <Fragment key={t.svc.id || i}>
+                    {/* Bundle header — only on the first row of a bundle
+                        group. The header AND the row beneath both render
+                        when expanded; previously the header consumed
+                        the first row's data which made expansion only
+                        ever show N-1 children. */}
+                    {isFirstInBundle && instanceId && (
+                      <button
+                        type="button"
+                        onClick={() => toggleBundle(instanceId)}
+                        aria-expanded={isExpanded}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+                      >
+                        <span className="min-w-0 flex flex-1 items-center gap-1.5">
+                          <span className="truncate text-body-sm font-semibold text-text-primary">
+                            {t.svc.bundle_name || "Bundle"}
+                          </span>
+                          <svg
+                            className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        </span>
+                        {bundleStaff && (
+                          <span className="shrink-0 truncate text-body-sm text-text-secondary max-w-[40%]">
+                            {bundleStaff}
+                          </span>
+                        )}
+                        {t.svc.bundle_total_price != null && (
+                          <span className="shrink-0 text-body-sm font-medium text-text-primary tabular-nums">
+                            AED {Math.round(Number(t.svc.bundle_total_price))}
+                          </span>
+                        )}
+                      </button>
                     )}
-                  </div>
+                    {/* The row itself — bundle child (when expanded)
+                        or standalone service. Bundle children hide
+                        when their bundle is collapsed. */}
+                    {inBundle ? (
+                      isExpanded && (
+                        <div className="flex items-center justify-between gap-3 py-3 pl-8 pr-4">
+                          <p className="min-w-0 flex-1 truncate text-body-sm text-text-secondary">
+                            {t.svc.services?.name || "Unknown"}
+                          </p>
+                          {staffMember && (
+                            <span className="shrink-0 truncate text-body-sm text-text-secondary max-w-[40%]">
+                              {staffMember.full_name}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                        <p className="min-w-0 flex-1 truncate text-body-sm font-semibold text-text-primary">
+                          {t.svc.services?.name || "Unknown"}
+                        </p>
+                        {staffMember && (
+                          <span className="shrink-0 truncate text-body-sm text-text-secondary max-w-[40%]">
+                            {staffMember.full_name}
+                          </span>
+                        )}
+                        <span className="shrink-0 text-body-sm font-medium text-text-primary tabular-nums">
+                          AED {t.svc.services?.price || 0}
+                        </span>
+                      </div>
+                    )}
+                  </Fragment>
                 );
               })}
             </div>
