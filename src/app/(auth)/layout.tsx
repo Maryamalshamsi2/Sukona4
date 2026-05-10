@@ -1,4 +1,5 @@
 import type { Viewport } from "next";
+import Link from "next/link";
 
 /**
  * Tints the iOS Safari URL bar and bottom toolbar so they blend with
@@ -22,6 +23,26 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           bounce and the Safari chrome both blend with the page's
           pure white. */}
       <style>{`body { background-color: #FFFFFF; }`}</style>
+      {/* "Homepage" affordance — top-left, above the auth card. Anon
+          visitors hit /login or /signup directly via shared links and
+          may want to read the marketing page first. Tiny chevron + text,
+          minimal weight so it never competes with the form. */}
+      <Link
+        href="/landing"
+        className="fixed left-4 top-4 z-50 inline-flex items-center gap-1 text-body-sm text-text-secondary transition hover:text-text-primary sm:left-6 sm:top-6"
+      >
+        <svg
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden="true"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+        Homepage
+      </Link>
       {children}
     </>
   );

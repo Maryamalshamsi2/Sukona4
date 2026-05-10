@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 
 export default function ResetPasswordPage() {
@@ -58,6 +59,25 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center px-4 bg-gradient-to-br from-violet-50 via-white to-violet-100/60">
+      {/* Same "Homepage" affordance as /login and /signup. Lives outside
+          the (auth) route group so the shared layout link doesn't apply
+          here — duplicated locally to keep the UX consistent. */}
+      <Link
+        href="/landing"
+        className="fixed left-4 top-4 z-50 inline-flex items-center gap-1 text-body-sm text-text-secondary transition hover:text-text-primary sm:left-6 sm:top-6"
+      >
+        <svg
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden="true"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+        </svg>
+        Homepage
+      </Link>
       <div className="w-full max-w-sm rounded-3xl border border-white/60 bg-white/70 px-6 py-8 shadow-xl backdrop-blur-xl sm:px-8 sm:py-10">
         <div className="mb-8 text-center">
           <img src="/logo-dark.png" alt="Sukona" className="mx-auto h-[46px] w-auto sm:h-[50px]" />
