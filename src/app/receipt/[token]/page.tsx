@@ -154,7 +154,7 @@ export default function ReceiptPage({
                 <tr key={i}>
                   <td className="px-4 py-3 text-text-primary">{line.name}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-text-primary">
-                    {formatMoney(line.price)}
+                    {formatMoney(line.price, ctx.salon_currency)}
                   </td>
                 </tr>
               ))}
@@ -175,17 +175,17 @@ export default function ReceiptPage({
             <>
               <div className="flex items-center justify-between text-text-secondary">
                 <span>Subtotal</span>
-                <span className="tabular-nums">{formatMoney(ctx.subtotal)}</span>
+                <span className="tabular-nums">{formatMoney(ctx.subtotal, ctx.salon_currency)}</span>
               </div>
               <div className="flex items-center justify-between text-text-secondary">
                 <span>VAT ({Number(ctx.vat_percent)}%)</span>
-                <span className="tabular-nums">{formatMoney(ctx.vat_amount)}</span>
+                <span className="tabular-nums">{formatMoney(ctx.vat_amount, ctx.salon_currency)}</span>
               </div>
             </>
           )}
           <div className="flex items-center justify-between border-t border-gray-200 pt-2 text-base font-bold text-text-primary">
             <span>Total</span>
-            <span className="tabular-nums">{formatMoney(ctx.total_due)}</span>
+            <span className="tabular-nums">{formatMoney(ctx.total_due, ctx.salon_currency)}</span>
           </div>
         </div>
 
@@ -205,7 +205,7 @@ export default function ReceiptPage({
                     </span>
                   </span>
                   <span className="font-semibold tabular-nums text-text-primary">
-                    {formatMoney(p.amount)}
+                    {formatMoney(p.amount, ctx.salon_currency)}
                   </span>
                 </li>
               ))}
@@ -213,7 +213,7 @@ export default function ReceiptPage({
             <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 text-sm">
               <span className="font-semibold text-text-primary">Total paid</span>
               <span className="font-bold tabular-nums text-text-primary">
-                {formatMoney(ctx.total_paid)}
+                {formatMoney(ctx.total_paid, ctx.salon_currency)}
               </span>
             </div>
           </div>
@@ -242,8 +242,8 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 // ---- Formatters ----
 
-function formatMoney(amount: number) {
-  return `AED ${Number(amount).toLocaleString("en-US", {
+function formatMoney(amount: number, currency: string) {
+  return `${currency} ${Number(amount).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;

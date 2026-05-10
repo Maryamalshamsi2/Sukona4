@@ -16,6 +16,7 @@ import {
 import type { WhatsAppSendLog } from "@/types";
 import PhoneInput from "@/components/phone-input";
 import { useCurrentUser } from "@/lib/user-context";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 
 export interface Profile {
   id: string;
@@ -35,6 +36,7 @@ export interface SalonSettings {
   public_review_url: string | null;
   signoff: string | null;
   default_language: string;
+  currency: string;
   vat_percent: number;
   vat_trn: string | null;
   is_onboarded: boolean;
@@ -375,6 +377,7 @@ function SalonSection({
   const [reviewUrl, setReviewUrl] = useState(salon.public_review_url || "");
   const [signoff, setSignoff] = useState(salon.signoff || "");
   const [language, setLanguage] = useState(salon.default_language || "en");
+  const [currency, setCurrency] = useState(salon.currency || "AED");
   // VAT is stored as a string in the input so we can show "" instead of "0"
   // when the salon hasn't set anything (cleaner UX). Coerced on submit.
   const [vatPercent, setVatPercent] = useState(
@@ -394,6 +397,7 @@ function SalonSection({
     reviewUrl !== (salon.public_review_url || "") ||
     signoff !== (salon.signoff || "") ||
     language !== (salon.default_language || "en") ||
+    currency !== (salon.currency || "AED") ||
     vatNum !== (salon.vat_percent || 0) ||
     vatTrn.trim() !== (salon.vat_trn || "");
 
@@ -431,6 +435,7 @@ function SalonSection({
       public_review_url: reviewUrl.trim() || null,
       signoff: signoff.trim() || null,
       default_language: language,
+      currency,
       vat_percent: vatNum,
       vat_trn: vatTrn.trim() || null,
     });
@@ -513,6 +518,26 @@ function SalonSection({
             </select>
             <p className="mt-1 text-caption text-text-tertiary">
               Used for client-facing messages.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-body-sm font-semibold text-text-primary mb-1">
+              Currency
+            </label>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="w-full rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            >
+              {SUPPORTED_CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} — {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-caption text-text-tertiary">
+              Shown next to all amounts across the app and receipts.
             </p>
           </div>
         </div>

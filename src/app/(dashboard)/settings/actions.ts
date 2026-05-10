@@ -95,7 +95,7 @@ export async function getSalon() {
   const { data, error } = await supabase
     .from("salons")
     .select(
-      "id, name, slug, brand_color, contact_phone, public_review_url, signoff, default_language, vat_percent, vat_trn, is_onboarded"
+      "id, name, slug, brand_color, contact_phone, public_review_url, signoff, default_language, currency, vat_percent, vat_trn, is_onboarded"
     )
     .eq("id", profile.salon_id)
     .single();
@@ -116,6 +116,7 @@ export async function updateSalon(input: {
   public_review_url: string | null;
   signoff: string | null;
   default_language: string;
+  currency: string;
   vat_percent: number;
   vat_trn: string | null;
 }) {
@@ -128,6 +129,13 @@ export async function updateSalon(input: {
   const name = input.name.trim();
   if (!name) return { error: "Salon name is required" };
   if (name.length > 80) return { error: "Salon name is too long (max 80)" };
+
+  // Validate currency against the supported list (migration 030).
+  const { isSupportedCurrency } = await import("@/lib/currency");
+  const currency = (input.currency || "AED").trim();
+  if (!isSupportedCurrency(currency)) {
+    return { error: "Unsupported currency" };
+  }
 
   // VAT validation — bounds match the DB check constraint.
   const vatPercent = Number(input.vat_percent);
@@ -150,6 +158,7 @@ export async function updateSalon(input: {
       public_review_url: input.public_review_url || null,
       signoff: input.signoff || null,
       default_language: input.default_language || "en",
+      currency,
       vat_percent: vatPercent,
       vat_trn: trnTrimmed || null,
       updated_at: new Date().toISOString(),

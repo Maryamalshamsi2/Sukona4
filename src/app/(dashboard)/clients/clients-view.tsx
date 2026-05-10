@@ -5,6 +5,7 @@ import Modal from "@/components/modal";
 import MarkPaidModal from "@/components/mark-paid-modal";
 import PhoneInput from "@/components/phone-input";
 import { useUndo } from "@/components/undo-toast";
+import { useCurrency } from "@/lib/user-context";
 import { useCurrentUser } from "@/lib/user-context";
 import { getClients, addClient, updateClient, deleteClient, getClientAppointments } from "./actions";
 import {
@@ -58,6 +59,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   const currentUser = useCurrentUser();
   const isStaff = currentUser?.role === "staff";
   const undo = useUndo();
+  const currency = useCurrency();
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
@@ -707,7 +709,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                         {statusLabel}
                       </span>
                       <span className="text-caption font-semibold text-text-primary tabular-nums">
-                        AED {totalPrice}
+                        {currency} {totalPrice}
                       </span>
                     </div>
                   </button>

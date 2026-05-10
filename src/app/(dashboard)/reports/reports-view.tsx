@@ -10,6 +10,8 @@ import {
 import { deleteAppointment } from "../calendar/actions";
 import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-modal";
 import type { PaymentMethod } from "@/types";
+import { useCurrency } from "@/lib/user-context";
+import { formatCurrency as fmtCurrency } from "@/lib/currency";
 
 // ---- Types ----
 
@@ -108,9 +110,6 @@ type DatePreset = "today" | "week" | "month" | "custom";
 
 // ---- Helpers ----
 
-function formatCurrency(amount: number) {
-  return `AED ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -209,6 +208,8 @@ export default function ReportsView({
   initialExpenses,
   initialReviews,
 }: ReportsViewProps) {
+  const currency = useCurrency();
+  const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
   const [tab, setTab] = useState<TabKey>("expenses");
   const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");

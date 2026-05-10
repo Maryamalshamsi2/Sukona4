@@ -6,6 +6,8 @@ import { useSearchQuery } from "@/lib/search-context";
 import { createBrowserClient } from "@supabase/ssr";
 import { useCurrentUser } from "@/lib/user-context";
 import { useUndo } from "@/components/undo-toast";
+import { useCurrency } from "@/lib/user-context";
+import { formatCurrency as fmtCurrency } from "@/lib/currency";
 import {
   getExpenses,
   createExpense,
@@ -97,9 +99,6 @@ function getPresetRange(preset: DatePreset): { from: string; to: string } {
   }
 }
 
-function formatCurrency(amount: number) {
-  return `AED ${amount.toFixed(2)}`;
-}
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -174,6 +173,8 @@ export default function ExpensesView({
   // can only modify expenses they themselves created).
   const [userRole, setUserRole] = useState<string | null>(initialUserRole);
   const currentUser = useCurrentUser();
+  const currency = useCurrency();
+  const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
 
   const isOwner = userRole === "owner";
   const isOwnerOrAdmin = userRole === "owner" || userRole === "admin";
@@ -656,6 +657,7 @@ function DepositForm({
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const currency = useCurrency();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -668,7 +670,7 @@ function DepositForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Amount (AED)</label>
+        <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Amount ({currency})</label>
         <input
           type="number"
           step="0.01"
@@ -722,6 +724,7 @@ function ExpenseForm({
   onDelete?: () => void;
   submitLabel: string;
 }) {
+  const currency = useCurrency();
   const [description, setDescription] = useState(defaultValues?.description || "");
   const [amount, setAmount] = useState(defaultValues?.amount?.toString() || "");
   const [expenseType, setExpenseType] = useState(defaultValues?.expense_type || "Supplies");
@@ -831,7 +834,7 @@ function ExpenseForm({
       {/* Amount + Type */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Amount (AED)</label>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Amount ({currency})</label>
           <input
             type="number"
             step="0.01"

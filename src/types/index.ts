@@ -257,6 +257,7 @@ export interface ReceiptContext {
   salon_brand_color: string | null;
   salon_signoff: string | null;
   salon_vat_trn: string | null;
+  salon_currency: string;
   is_voided: boolean;
 }
 

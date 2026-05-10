@@ -10,6 +10,18 @@ export interface CurrentUser {
   full_name: string;
   group_id: string | null;
   salon_id: string;
+  /** ISO 4217 code from the salons row (migration 030). Default 'AED'. */
+  currency: string;
+}
+
+/**
+ * Convenience hook for reading just the salon's currency code.
+ * Falls back to 'AED' when the user isn't loaded yet so currency-
+ * dependent renders don't flash undefined during the first paint.
+ */
+export function useCurrency(): string {
+  const u = useContext(UserContext);
+  return u?.currency || "AED";
 }
 
 /**

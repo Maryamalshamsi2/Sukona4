@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Modal from "@/components/modal";
 import { useSearchQuery } from "@/lib/search-context";
 import { useUndo } from "@/components/undo-toast";
+import { useCurrency } from "@/lib/user-context";
 import {
   getInventoryItems,
   createInventoryItem,
@@ -37,6 +38,7 @@ const UNITS = ["pcs", "bottles", "tubes", "sets", "boxes", "kg", "g", "L", "mL"]
 export default function InventoryView({ initialItems }: { initialItems: InventoryItem[] }) {
   const [items, setItems] = useState<InventoryItem[]>(initialItems);
   const undo = useUndo();
+  const currency = useCurrency();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
@@ -246,7 +248,7 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
                     <p className="truncate text-body-sm font-semibold text-text-primary">{item.name}</p>
                     <p className="truncate text-caption text-text-secondary">
                       {item.category}
-                      {item.cost_per_unit && <> · AED {Number(item.cost_per_unit).toFixed(2)} per {item.unit}</>}
+                      {item.cost_per_unit && <> · {currency} {Number(item.cost_per_unit).toFixed(2)} per {item.unit}</>}
                     </p>
                   </button>
                 </div>
@@ -361,6 +363,7 @@ function InventoryForm({
   onDelete?: () => void;
   submitLabel: string;
 }) {
+  const currency = useCurrency();
   const [name, setName] = useState(defaultValues?.name || "");
   const [quantity, setQuantity] = useState(defaultValues?.quantity?.toString() || "0");
   const [threshold, setThreshold] = useState(defaultValues?.low_stock_threshold?.toString() || "5");
@@ -455,7 +458,7 @@ function InventoryForm({
 
       {/* Cost per unit */}
       <div>
-        <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Cost per Unit (AED, optional)</label>
+        <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Cost per Unit ({currency}, optional)</label>
         <input
           type="number"
           step="0.01"

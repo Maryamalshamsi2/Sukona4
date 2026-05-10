@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { isSupportedCurrency } from "@/lib/currency";
 
 /**
  * Fetch the current user's salon (used by the onboarding page to
@@ -15,7 +16,7 @@ export async function getCurrentSalon() {
 
   const { data, error } = await supabase
     .from("salons")
-    .select("id, name, is_onboarded, owner_id")
+    .select("id, name, is_onboarded, owner_id, currency")
     .eq("id", profile.salon_id)
     .single();
 
@@ -38,11 +39,15 @@ export async function completeOnboarding(formData: FormData) {
   if (!name) return { error: "Please enter a salon name" };
   if (name.length > 80) return { error: "Salon name is too long" };
 
+  const currency = ((formData.get("currency") as string) || "AED").trim();
+  if (!isSupportedCurrency(currency)) return { error: "Unsupported currency" };
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("salons")
     .update({
       name,
+      currency,
       is_onboarded: true,
       updated_at: new Date().toISOString(),
     })

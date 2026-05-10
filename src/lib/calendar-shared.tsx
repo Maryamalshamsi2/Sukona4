@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useEffect } from "react";
 import PhoneInput from "@/components/phone-input";
+import { useCurrency } from "@/lib/user-context";
 
 // ---- Types ----
 
@@ -406,6 +407,7 @@ export function DetailView({
   const timings = getServiceTimings(appointment);
   const totalDuration = getApptTotalDuration(appointment);
   const endTime = getApptEndTime(appointment);
+  const currency = useCurrency();
 
   const currentStatusIdx = STATUS_FLOW.findIndex((s) => s.value === appointment.status);
   const nextStatus = currentStatusIdx >= 0 && currentStatusIdx < STATUS_FLOW.length - 1
@@ -636,7 +638,7 @@ export function DetailView({
                         )}
                         {t.svc.bundle_total_price != null && (
                           <span className="shrink-0 text-body-sm font-medium text-text-primary tabular-nums">
-                            AED {Math.round(Number(t.svc.bundle_total_price))}
+                            {currency} {Math.round(Number(t.svc.bundle_total_price))}
                           </span>
                         )}
                       </button>
@@ -668,7 +670,7 @@ export function DetailView({
                           </span>
                         )}
                         <span className="shrink-0 text-body-sm font-medium text-text-primary tabular-nums">
-                          AED {t.svc.services?.price || 0}
+                          {currency} {t.svc.services?.price || 0}
                         </span>
                       </div>
                     )}
@@ -689,13 +691,13 @@ export function DetailView({
               {hasAppointmentAdjustments(appointment) && (
                 <div className="flex items-center justify-between text-text-secondary">
                   <span>Subtotal</span>
-                  <span className="tabular-nums">AED {getApptSubtotal(appointment)}</span>
+                  <span className="tabular-nums">{currency} {getApptSubtotal(appointment)}</span>
                 </div>
               )}
               {getApptTransport(appointment) > 0 && (
                 <div className="flex items-center justify-between text-text-secondary">
                   <span>Transportation</span>
-                  <span className="tabular-nums">+ AED {getApptTransport(appointment)}</span>
+                  <span className="tabular-nums">+ {currency} {getApptTransport(appointment)}</span>
                 </div>
               )}
               {Number(appointment.discount_value ?? 0) > 0 && (
@@ -706,7 +708,7 @@ export function DetailView({
                       <span className="text-text-tertiary"> ({Number(appointment.discount_value)}% off)</span>
                     )}
                   </span>
-                  <span className="tabular-nums">− AED {getApptDiscountAmount(appointment)}</span>
+                  <span className="tabular-nums">− {currency} {getApptDiscountAmount(appointment)}</span>
                 </div>
               )}
               {appointment.total_override != null && (
@@ -718,7 +720,7 @@ export function DetailView({
               <div className={`flex items-baseline justify-between gap-3 ${hasAppointmentAdjustments(appointment) ? "pt-2 mt-1 border-t border-border/60" : ""}`}>
                 <span className="text-body font-semibold text-text-primary">Total</span>
                 <span className="text-title-section font-bold text-text-primary tabular-nums tracking-tight">
-                  AED {getApptTotal(appointment)}
+                  {currency} {getApptTotal(appointment)}
                 </span>
               </div>
             </div>
@@ -1122,6 +1124,7 @@ export function AppointmentForm({
   prefillTime?: string | null;
   prefillStaffId?: string | null;
 }) {
+  const currency = useCurrency();
   const [clientMode, setClientMode] = useState<"existing" | "new">(defaultValues ? "existing" : "existing");
   const [selectedClientId, setSelectedClientId] = useState(defaultValues?.client_id || "");
   const [newClientName, setNewClientName] = useState("");
@@ -1550,7 +1553,7 @@ export function AppointmentForm({
                       <span className="rounded-full bg-surface-active px-2 py-0.5 text-caption font-medium text-text-secondary">Bundle</span>
                     </div>
                     {bundlePriceDisplay != null && (
-                      <span className="text-xs font-normal text-text-secondary">AED {bundlePriceDisplay}</span>
+                      <span className="text-xs font-normal text-text-secondary">{currency} {bundlePriceDisplay}</span>
                     )}
                   </div>
                 )}
@@ -1598,7 +1601,7 @@ export function AppointmentForm({
                           <option value="">Select service</option>
                           {services.map((s) => (
                             <option key={s.id} value={s.id}>
-                              {s.name} ({s.duration_minutes} min, AED {s.price})
+                              {s.name} ({s.duration_minutes} min, {currency} {s.price})
                             </option>
                           ))}
                           {bundles && bundles.length > 0 && (
@@ -1614,7 +1617,7 @@ export function AppointmentForm({
                                     : originalPrice;
                                 return (
                                   <option key={b.id} value={`bundle:${b.id}`}>
-                                    {b.name} ({b.service_bundle_items.length} services, AED {bundlePrice})
+                                    {b.name} ({b.service_bundle_items.length} services, {currency} {bundlePrice})
                                   </option>
                                 );
                               })}
@@ -1712,7 +1715,7 @@ export function AppointmentForm({
                   </button>
                 )}
               </div>
-              <span className="shrink-0 font-semibold">AED {totalPrice}</span>
+              <span className="shrink-0 font-semibold">{currency} {totalPrice}</span>
             </div>
           </div>
         )}
@@ -1751,7 +1754,7 @@ export function AppointmentForm({
               <>
                 <div>
                   <label className="block text-body-sm font-semibold text-text-primary">
-                    Transportation charge <span className="font-normal text-text-tertiary">(AED)</span>
+                    Transportation charge <span className="font-normal text-text-tertiary">({currency})</span>
                   </label>
                   <input
                     type="number"
@@ -1769,7 +1772,7 @@ export function AppointmentForm({
                     Discount
                   </label>
                   <div className="flex gap-2">
-                    {/* % / AED toggle */}
+                    {/* % / currency toggle */}
                     <div className="flex shrink-0 rounded-xl bg-surface-active p-0.5">
                       {(["percentage", "fixed"] as const).map((m) => (
                         <button
@@ -1782,7 +1785,7 @@ export function AppointmentForm({
                               : "text-text-secondary hover:text-text-primary"
                           }`}
                         >
-                          {m === "percentage" ? "%" : "AED"}
+                          {m === "percentage" ? "%" : currency}
                         </button>
                       ))}
                     </div>

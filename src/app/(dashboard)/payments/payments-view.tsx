@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useCurrency } from "@/lib/user-context";
+import { formatCurrency as fmtCurrency } from "@/lib/currency";
 
 export type PaymentRow = {
   id: string;
@@ -19,9 +21,6 @@ export type PaymentRow = {
   } | null;
 };
 
-function formatCurrency(amount: number) {
-  return `AED ${amount.toFixed(0)}`;
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -51,6 +50,8 @@ function methodColor(m: "cash" | "card" | "other") {
 export default function PaymentsView({ initialPayments }: { initialPayments: PaymentRow[] }) {
   const [payments] = useState<PaymentRow[]>(initialPayments);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const currency = useCurrency();
+  const formatCurrency = (n: number) => fmtCurrency(n, currency);
 
   const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 

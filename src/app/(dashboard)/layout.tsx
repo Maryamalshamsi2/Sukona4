@@ -36,20 +36,27 @@ export default function DashboardLayout({
         setUserInitials(authParts[0][0].toUpperCase());
       }
 
-      // Fetch the profile row so every descendant has access to `role`, `group_id`, and `salon_id`.
+      // Fetch the profile row + the salon's currency so every descendant
+      // has access to role, group_id, salon_id, and currency.
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, role, full_name, group_id, salon_id")
+        .select("id, role, full_name, group_id, salon_id, salon:salon_id ( currency )")
         .eq("id", user.id)
         .single();
 
       if (profile) {
+        // PostgREST nests the joined salon as either an object or
+        // a single-element array depending on inference.
+        const salonRow = Array.isArray(profile.salon)
+          ? profile.salon[0]
+          : (profile.salon as { currency?: string } | null);
         setCurrentUser({
           id: profile.id,
           role: profile.role,
           full_name: profile.full_name,
           group_id: profile.group_id ?? null,
           salon_id: profile.salon_id,
+          currency: salonRow?.currency || "AED",
         });
         // Prefer the profile's full_name for initials if it's richer than auth metadata.
         if (profile.full_name) {

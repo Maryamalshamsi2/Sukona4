@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentSalonCurrency } from "@/lib/salon-server";
 
 // Helper to get current user role
 async function getCurrentUserRole() {
@@ -113,7 +114,7 @@ export async function createExpense(
     supabase,
     userId,
     "expense_added",
-    `Expense · AED ${amount}${expenseType ? ` (${expenseType})` : ""}`,
+    `Expense · ${await getCurrentSalonCurrency()} ${amount}${expenseType ? ` (${expenseType})` : ""}`,
     isPrivate,
   );
 
@@ -260,7 +261,7 @@ export async function addPettyCashDeposit(amount: number, description: string) {
     supabase,
     userId,
     "petty_cash_added",
-    `Petty cash · +AED ${amount}`,
+    `Petty cash · +${await getCurrentSalonCurrency()} ${amount}`,
   );
 
   revalidatePath("/expenses");

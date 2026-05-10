@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import PhoneInput from "@/components/phone-input";
 import { useUndo } from "@/components/undo-toast";
+import { useCurrency } from "@/lib/user-context";
 import {
   getGroups,
   addGroup,
@@ -31,6 +32,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   const [members, setMembers] = useState<Profile[]>(initialMembers);
   const [groups, setGroups] = useState<TeamGroup[]>(initialGroups);
   const undo = useUndo();
+  const currency = useCurrency();
 
   // Filter by group
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -436,7 +438,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               <div className="flex shrink-0 items-center gap-3 sm:gap-4">
                 {member.salary > 0 && (
                   <span className="hidden text-body-sm font-semibold text-text-primary sm:block">
-                    AED {member.salary}/mo
+                    {currency} {member.salary}/mo
                   </span>
                 )}
                 <button
@@ -680,7 +682,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </div>
             <div>
               <label htmlFor="mem-salary" className="block text-body-sm font-semibold text-text-primary">
-                Salary (AED/mo) <span className="font-normal text-text-tertiary">(optional)</span>
+                Salary ({currency}/mo) <span className="font-normal text-text-tertiary">(optional)</span>
               </label>
               <input
                 id="mem-salary"

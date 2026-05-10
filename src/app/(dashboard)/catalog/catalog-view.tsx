@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Modal from "@/components/modal";
-import { useCurrentUser } from "@/lib/user-context";
+import { useCurrentUser, useCurrency } from "@/lib/user-context";
 import { useUndo } from "@/components/undo-toast";
 import {
   getCategories,
@@ -143,6 +143,7 @@ export default function CatalogView({
 }: CatalogViewProps) {
   const currentUser = useCurrentUser();
   const isStaff = currentUser?.role === "staff";
+  const currency = useCurrency();
 
   const [categories, setCategories] = useState<ServiceCategory[]>(initialCategories);
   const [services, setServices] = useState<Service[]>(initialServices);
@@ -441,7 +442,7 @@ export default function CatalogView({
           </div>
           <div className="flex items-start gap-3 shrink-0">
             <p className="text-lg font-semibold text-text-primary">
-              AED {service.price}
+              {currency} {service.price}
             </p>
             {handle}
           </div>
@@ -502,16 +503,16 @@ export default function CatalogView({
           <div className="flex items-start gap-3 shrink-0">
             <div className="text-right">
               <p className="text-lg font-semibold text-text-primary">
-                AED {bundlePrice.toFixed(0)}
+                {currency} {bundlePrice.toFixed(0)}
               </p>
               {savings > 0 && (
                 <p className="text-caption text-text-tertiary line-through">
-                  AED {originalPrice.toFixed(0)}
+                  {currency} {originalPrice.toFixed(0)}
                 </p>
               )}
               {savings > 0 && (
                 <span className="mt-1.5 inline-block rounded-full bg-green-50 px-2 py-0.5 text-caption font-semibold text-green-700">
-                  Save AED {savings.toFixed(0)}
+                  Save {currency} {savings.toFixed(0)}
                   {bundle.discount_type === "percentage" && bundle.discount_percentage
                     ? ` (${bundle.discount_percentage}%)`
                     : ""}
@@ -931,7 +932,7 @@ export default function CatalogView({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="svc-price" className="block text-body-sm font-semibold text-text-primary">
-                Price (AED) *
+                Price ({currency}) *
               </label>
               <input
                 id="svc-price"
@@ -1117,6 +1118,7 @@ function BundleForm({
   }) => Promise<void>;
   onCancel: () => void;
 }) {
+  const currency = useCurrency();
   const [name, setName] = useState(editingBundle?.name || "");
   const [categoryId, setCategoryId] = useState<string>(editingBundle?.category_id || "");
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
@@ -1248,7 +1250,7 @@ function BundleForm({
                 <div className="flex-1 min-w-0">
                   <p className="text-body-sm text-text-primary truncate">{svc.name}</p>
                   <p className="text-caption text-text-secondary">
-                    {svc.duration_minutes} min &middot; AED {svc.price}
+                    {svc.duration_minutes} min &middot; {currency} {svc.price}
                   </p>
                 </div>
               </label>
@@ -1289,7 +1291,7 @@ function BundleForm({
             {discountType === "fixed" ? (
               <div>
                 <label className="block text-caption text-text-secondary mb-1">
-                  Bundle Price (AED) — original: AED {originalPrice.toFixed(0)}
+                  Bundle Price ({currency}) — original: {currency} {originalPrice.toFixed(0)}
                 </label>
                 <input
                   type="number"
@@ -1341,7 +1343,7 @@ function BundleForm({
           <div className="rounded-xl bg-surface-hover px-3 py-2.5">
             <div className="flex items-center justify-between text-body-sm">
               <span className="text-text-secondary">Bundle price</span>
-              <span className="font-semibold text-text-primary">AED {bundlePrice.toFixed(0)}</span>
+              <span className="font-semibold text-text-primary">{currency} {bundlePrice.toFixed(0)}</span>
             </div>
             <div className="flex items-center justify-between text-body-sm mt-1">
               <span className="text-text-secondary">Duration</span>
@@ -1350,7 +1352,7 @@ function BundleForm({
             {savings > 0 && (
               <div className="flex items-center justify-between text-sm mt-1">
                 <span className="text-green-700">Savings</span>
-                <span className="font-semibold text-green-700">AED {savings.toFixed(0)}</span>
+                <span className="font-semibold text-green-700">{currency} {savings.toFixed(0)}</span>
               </div>
             )}
           </div>

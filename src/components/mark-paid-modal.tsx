@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Modal from "@/components/modal";
 import { recordPayment, updatePayment, uploadReceipt } from "@/app/(dashboard)/payments/actions";
 import type { PaymentMethod } from "@/types";
+import { useCurrency } from "@/lib/user-context";
 
 export type ExistingPayment = {
   id: string;
@@ -55,6 +56,7 @@ export default function MarkPaidModal({
   onPaid,
 }: Props) {
   const isEdit = !!existingPayment;
+  const currency = useCurrency();
 
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [note, setNote] = useState("");
@@ -217,7 +219,7 @@ export default function MarkPaidModal({
         {/* Amount */}
         <div>
           <label htmlFor="payment-amount" className="block text-body-sm font-semibold text-text-primary">
-            Amount (AED) *
+            Amount ({currency}) *
           </label>
           <input
             id="payment-amount"

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { getCurrentSalon, completeOnboarding } from "./actions";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 
 export default function OnboardingPage() {
   const [name, setName] = useState("");
+  const [currency, setCurrency] = useState("AED");
   const [loading, setLoading] = useState(false);
   const [bootLoading, setBootLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +26,7 @@ export default function OnboardingPage() {
         return;
       }
       setName(salon.name || "");
+      setCurrency(salon.currency || "AED");
       setBootLoading(false);
     }
     init();
@@ -85,6 +88,29 @@ export default function OnboardingPage() {
               className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
               placeholder="e.g. Ateeq Spa"
             />
+          </div>
+
+          <div>
+            <label htmlFor="currency" className="block text-body-sm font-semibold text-text-primary mb-1.5">
+              Currency
+            </label>
+            <select
+              id="currency"
+              name="currency"
+              required
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
+            >
+              {SUPPORTED_CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} — {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-caption text-text-tertiary">
+              All amounts in the app will display with this code. Change anytime in Settings.
+            </p>
           </div>
 
           {error && (
