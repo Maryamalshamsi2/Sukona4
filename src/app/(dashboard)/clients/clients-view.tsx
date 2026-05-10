@@ -429,10 +429,29 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       )}
 
       {clients.length === 0 ? (
-        <div className="mt-8 rounded-2xl ring-1 ring-border bg-white p-8 text-center text-text-secondary">
-          {isStaff
-            ? "No clients yet."
-            : "No clients yet. Click \u201C+\u201D to get started."}
+        // First-time empty: friendly icon, headline, and a primary
+        // action so the user has somewhere to go from a blank list.
+        // Staff can't add clients, so they get the icon + headline only.
+        <div className="mt-8 flex flex-col items-center justify-center rounded-2xl ring-1 ring-border bg-white px-6 py-14 text-center">
+          <svg className="h-12 w-12 text-neutral-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+          </svg>
+          <h2 className="mt-4 text-body font-semibold text-text-primary">No clients yet</h2>
+          <p className="mt-1 text-body-sm text-text-secondary">
+            {isStaff ? "Your owner hasn\u2019t added any clients." : "Add your first client to start booking appointments."}
+          </p>
+          {!isStaff && (
+            <button
+              type="button"
+              onClick={openAdd}
+              className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add your first client
+            </button>
+          )}
         </div>
       ) : (
         <div className="mt-6 overflow-hidden rounded-2xl ring-1 ring-border bg-white">

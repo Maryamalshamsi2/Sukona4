@@ -193,8 +193,33 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
 
       {/* Inventory List */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl ring-1 ring-border bg-white px-6 py-16 text-center text-body-sm text-text-tertiary">
-          No items found
+        <div className="flex flex-col items-center justify-center rounded-2xl ring-1 ring-border bg-white px-6 py-14 text-center">
+          <svg className="h-12 w-12 text-neutral-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+          </svg>
+          {items.length === 0 ? (
+            <>
+              <h2 className="mt-4 text-body font-semibold text-text-primary">No items yet</h2>
+              <p className="mt-1 text-body-sm text-text-secondary">
+                Track supplies and stock so you know when to reorder.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAddModalOpen(true)}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add your first item
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="mt-4 text-body font-semibold text-text-primary">No items match</h2>
+              <p className="mt-1 text-body-sm text-text-secondary">Try a different filter or search term.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="rounded-2xl ring-1 ring-border bg-white divide-y divide-border">

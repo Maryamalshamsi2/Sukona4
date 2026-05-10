@@ -388,8 +388,37 @@ export default function ExpensesView({
 
       {/* Expense List */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl ring-1 ring-border bg-white px-6 py-16 text-center text-body-sm text-text-tertiary">
-          No expenses found
+        // Two flavors of empty:
+        //   - first-time (nothing logged ever) → CTA to add the first one
+        //   - filtered (period yields no results) → just say so; the
+        //     filter UI is right above so the user knows how to widen it
+        <div className="flex flex-col items-center justify-center rounded-2xl ring-1 ring-border bg-white px-6 py-14 text-center">
+          <svg className="h-12 w-12 text-neutral-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          {expenses.length === 0 ? (
+            <>
+              <h2 className="mt-4 text-body font-semibold text-text-primary">No expenses yet</h2>
+              <p className="mt-1 text-body-sm text-text-secondary">
+                Log your first expense — supplies, taxi, anything you spent for the salon.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAddModalOpen(true)}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add your first expense
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="mt-4 text-body font-semibold text-text-primary">No expenses in this period</h2>
+              <p className="mt-1 text-body-sm text-text-secondary">Try widening the date range above.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="rounded-2xl ring-1 ring-border bg-white divide-y divide-border">
