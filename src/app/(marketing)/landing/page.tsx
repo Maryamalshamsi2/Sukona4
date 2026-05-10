@@ -28,6 +28,7 @@ export default function LandingPage() {
       <Nav />
       <main>
         <Hero />
+        <Manifesto />
         <MobileSection />
         <PaymentsSection />
         <ReportsSection />
@@ -168,13 +169,13 @@ function Hero() {
     <section className="bg-white">
       <div className="mx-auto max-w-5xl px-5 pt-20 text-center sm:px-8 sm:pt-28 lg:pt-36">
         <h1 className="mx-auto max-w-4xl text-5xl font-semibold tracking-tighter text-text-primary leading-[1.02] sm:text-6xl lg:text-7xl xl:text-[5.5rem]">
-          Your salon.
+          Home beauty,
           <br />
-          From your phone.
+          all in one place.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
-          Calendar, payments, and team. One quiet app, designed for the way
-          you actually work.
+          Bookings, team, payments, and reports. Built for mobile beauty
+          and wellness businesses — solo or team.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
@@ -342,12 +343,39 @@ function CalendarMock() {
 }
 
 // ============================================================
+// Manifesto — the "why we built this" interlude. Pure typography,
+// no visual. Anchors the #about nav link.
+// ============================================================
+
+function Manifesto() {
+  return (
+    <section id="about" className="bg-white pb-12 sm:pb-16 lg:pb-20">
+      <div className="mx-auto max-w-4xl px-5 text-center sm:px-8">
+        <p className="text-caption font-semibold uppercase tracking-wider text-primary-600">
+          Why Sukona
+        </p>
+        <h2 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
+          Less juggling.
+          <br />
+          <span className="text-text-secondary">More appointments.</span>
+        </h2>
+        <p className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary sm:text-xl">
+          Home-service businesses run on WhatsApp threads, paper notes, and
+          memory. Sukona replaces all of it with one operational system —
+          built specifically for mobile beauty and wellness.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
 // MobileSection — phone-in-hand value prop with a phone mock
 // ============================================================
 
 function MobileSection() {
   return (
-    <section id="about" className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
+    <section className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
           Designed for your phone.
@@ -355,8 +383,8 @@ function MobileSection() {
           <span className="text-text-secondary">Not a desk.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Tap to create, drag to reschedule. Multiple staff, side by side.
-          Everything within thumb&rsquo;s reach.
+          Update your day from anywhere — between appointments, on the way
+          to the next, on a client&rsquo;s couch.
         </p>
       </div>
 
@@ -489,13 +517,13 @@ function PaymentsSection() {
     <section className="bg-white py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tighter text-text-primary leading-[1.05] sm:text-5xl lg:text-6xl">
-          One tap. Paid.
+          Get paid.
           <br />
-          <span className="text-text-secondary">Receipt sent.</span>
+          <span className="text-text-secondary">Send the receipt.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Cash, card, anything. Snap the receipt. WhatsApp it to your client
-          before they reach the door.
+          Cash, card, anything. WhatsApp the receipt before the client
+          reaches the door. Every payment tracked, automatically.
         </p>
       </div>
 
@@ -577,8 +605,8 @@ function ReportsSection() {
           <span className="text-text-secondary">actually working.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Revenue, expenses, profit. Per day, week, or month. The numbers you
-          actually need — no spreadsheets.
+          Revenue, expenses, profit. Per day, week, or month. The numbers
+          that run your business — without the spreadsheets.
         </p>
       </div>
 
@@ -680,7 +708,7 @@ function Pricing() {
     {
       name: "Solo",
       price: 95,
-      tagline: "For freelancers running solo.",
+      tagline: "For freelancers going client-to-client.",
       features: [
         "Unlimited appointments",
         "Calendar + payments",
@@ -692,7 +720,7 @@ function Pricing() {
     {
       name: "Team",
       price: 149,
-      tagline: "For small salons of 2–3 staff.",
+      tagline: "For small home-service teams.",
       features: [
         "Everything in Solo",
         "Up to 3 team members",
@@ -704,7 +732,7 @@ function Pricing() {
     {
       name: "Multi-Team",
       price: 299,
-      tagline: "For multi-branch operations.",
+      tagline: "For multi-team home-service businesses.",
       features: [
         "Everything in Team",
         "Unlimited team members",
@@ -800,6 +828,10 @@ function Pricing() {
 
 function FAQ() {
   const faqs = [
+    {
+      q: "Is Sukona only for home-service businesses?",
+      a: "Yes. Sukona is built specifically for mobile beauty and wellness — freelancers and small teams who travel to clients. Everything from the booking flow to the team coordination is shaped around how home-service actually works.",
+    },
     {
       q: "Do I need a credit card to start?",
       a: "No. Sign up, use Sukona for 7 days, decide if it works for you.",
@@ -901,7 +933,7 @@ function Footer() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-dark.png" alt="Sukona" className="h-8 w-auto sm:h-9" />
             <p className="mt-4 max-w-xs text-body-sm text-text-secondary">
-              Run your home-service business from one calm, mobile-first app.
+              The operational system for home-service beauty and wellness.
             </p>
           </div>
 
@@ -946,7 +978,7 @@ function Footer() {
             © {new Date().getFullYear()} Sukona. All rights reserved.
           </p>
           <p className="text-caption text-text-tertiary">
-            Made for freelancers and small salons.
+            Made for mobile beauty and wellness.
           </p>
         </div>
       </div>

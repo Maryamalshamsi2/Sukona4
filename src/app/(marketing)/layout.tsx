@@ -8,9 +8,9 @@ import type { Metadata } from "next";
  */
 
 export const metadata: Metadata = {
-  title: "Sukona — Run your home-service business from one place",
+  title: "Sukona — The operational system for home-service beauty",
   description:
-    "Sukona is the calendar, payments, and team app built for freelancers and small home-service salons. Calm, mobile-first, designed for the way you actually work.",
+    "Sukona is the operational system for mobile beauty and wellness businesses. Bookings, team, clients, payments, and reports — all in one place. Built specifically for home-service freelancers and small teams.",
 };
 
 export default function MarketingLayout({
