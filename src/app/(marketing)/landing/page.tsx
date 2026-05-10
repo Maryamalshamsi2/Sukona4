@@ -223,7 +223,7 @@ function Hero() {
           More appointments.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
-          For mobile beauty and wellness businesses — solo or team.
+          Manage your mobile beauty and wellness business from one place.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
@@ -405,10 +405,7 @@ function Manifesto() {
   return (
     <section id="about" className="bg-white pb-12 sm:pb-16 lg:pb-20">
       <div className="mx-auto max-w-4xl px-5 text-center sm:px-8">
-        <p className="text-caption font-semibold uppercase tracking-wider text-primary-600">
-          Why Sukona
-        </p>
-        <h2 className="mx-auto mt-4 max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
+        <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
           Home beauty,
           <br />
           <span className="text-text-secondary">all in one place.</span>
@@ -450,14 +447,18 @@ function MobileSection() {
 
 function PhoneMock() {
   // Mirrors the real "Today" appointment list from
-  // (dashboard)/home-view.tsx — same row layout, same status badges,
-  // same typography, even the count badge.
+  // (dashboard)/home-view.tsx. Phone proportions match an actual
+  // iPhone (1:2.05 aspect ratio) so the device reads as a real
+  // device, not a stubby card. Includes the iOS Dynamic Island,
+  // status bar, page header, today list, a "this week" stat card,
+  // bottom tab bar, and the home-indicator pill.
   type Status = "scheduled" | "on_the_way" | "arrived" | "paid";
   const items: Array<{ time: string; name: string; svc: string; status: Status; label: string }> = [
     { time: "9:00",  name: "Sara M.",  svc: "Highlights",  status: "paid",       label: "Paid" },
     { time: "11:30", name: "Layla S.", svc: "Color",       status: "arrived",    label: "Arrived" },
     { time: "14:00", name: "Reem A.",  svc: "Manicure",    status: "scheduled",  label: "Scheduled" },
     { time: "16:30", name: "Lina H.",  svc: "Brows",       status: "on_the_way", label: "On the way" },
+    { time: "18:00", name: "Maya N.",  svc: "Treatment",   status: "scheduled",  label: "Scheduled" },
   ];
 
   const statusStyles: Record<Status, string> = {
@@ -469,57 +470,85 @@ function PhoneMock() {
 
   return (
     <div className="relative">
-      {/* iPhone-style bezel */}
-      <div className="relative w-[300px] rounded-[2.75rem] bg-neutral-900 p-2 shadow-[0_50px_120px_-30px_rgba(0,0,0,0.5)] sm:w-[340px]">
-        <div className="overflow-hidden rounded-[2.25rem] bg-[#F5F5F7]">
-          {/* Status bar */}
-          <div className="flex items-center justify-between px-7 pt-4 pb-1 text-[12px] font-semibold text-text-primary">
-            <span>9:41</span>
-            <span className="flex items-center gap-1">
-              <span className="h-1 w-1 rounded-full bg-text-primary" />
-              <span className="h-1 w-1 rounded-full bg-text-primary" />
-              <span className="h-1 w-1 rounded-full bg-text-primary" />
-              <span className="h-1 w-1 rounded-full bg-text-primary" />
-              <span className="ml-1 text-[10px]">100%</span>
+      {/* iPhone-style bezel — slim 3px frame, proper 1:2.05 ratio */}
+      <div
+        className="relative w-[300px] rounded-[2.75rem] bg-neutral-900 p-[3px] shadow-[0_50px_120px_-30px_rgba(0,0,0,0.5)] sm:w-[340px]"
+        style={{ aspectRatio: "300 / 615" }}
+      >
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[2.625rem] bg-[#F5F5F7]">
+          {/* Dynamic Island — sits over the status bar at top center */}
+          <div
+            className="absolute left-1/2 top-2 z-10 h-[26px] w-[100px] -translate-x-1/2 rounded-full bg-neutral-900"
+            aria-hidden
+          />
+
+          {/* Status bar — 9:41 left, signal/battery right, all hugging
+              the dynamic island */}
+          <div className="relative flex shrink-0 items-center justify-between px-6 pt-2.5 pb-1 text-[11px] font-semibold text-text-primary">
+            <span className="z-20">9:41</span>
+            <span className="z-20 flex items-center gap-1">
+              {/* Signal */}
+              <svg className="h-2.5 w-3.5" viewBox="0 0 18 12" fill="currentColor">
+                <rect x="0"  y="9" width="2.5" height="3" rx="0.4" />
+                <rect x="4"  y="6" width="2.5" height="6" rx="0.4" />
+                <rect x="8"  y="3" width="2.5" height="9" rx="0.4" />
+                <rect x="12" y="0" width="2.5" height="12" rx="0.4" />
+              </svg>
+              {/* Wi-Fi */}
+              <svg className="h-2.5 w-3.5" viewBox="0 0 16 12" fill="currentColor">
+                <path d="M8 11.5c.7 0 1.3-.6 1.3-1.3 0-.7-.6-1.3-1.3-1.3-.7 0-1.3.6-1.3 1.3 0 .7.6 1.3 1.3 1.3zm-3.5-3.5l1 1A3.5 3.5 0 018 7.5c.95 0 1.85.4 2.5 1l1-1A5 5 0 008 6.5a5 5 0 00-3.5 1.5zM2 5.5l1 1A6.5 6.5 0 018 4.5c1.75 0 3.4.7 4.6 1.85l1-1A8 8 0 008 3a8 8 0 00-6 2.5z" />
+              </svg>
+              {/* Battery */}
+              <span className="ml-0.5 inline-flex items-center">
+                <span className="relative h-3 w-6 rounded-[3px] border border-text-primary/80">
+                  <span className="absolute inset-y-0.5 left-0.5 right-1 rounded-[1.5px] bg-text-primary" />
+                </span>
+                <span className="ml-0.5 h-1 w-0.5 rounded-r-[1px] bg-text-primary/80" />
+              </span>
             </span>
           </div>
 
-          {/* The actual "Today" card — matches the real home-view */}
-          <div className="px-3 pt-3 pb-4">
+          {/* Page header — date + big "Today" title */}
+          <div className="shrink-0 px-5 pt-4 pb-3">
+            <div className="text-[11px] font-medium text-text-tertiary">
+              Friday, May 10
+            </div>
+            <div className="mt-0.5 text-[26px] font-semibold tracking-tight text-text-primary leading-tight">
+              Today
+            </div>
+          </div>
+
+          {/* Today card */}
+          <div className="shrink-0 px-3">
             <div className="overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white">
-              {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4">
-                <div className="text-body font-semibold text-text-primary">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div className="text-[13px] font-semibold text-text-primary">
                   Today
                 </div>
-                <div className="rounded-full bg-[#F5F5F7] px-2 py-0.5 text-caption font-medium text-text-secondary">
+                <div className="rounded-full bg-[#F5F5F7] px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
                   {items.length}
                 </div>
               </div>
-
-              {/* Rows */}
               <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
                 {items.map((it) => (
                   <div
                     key={it.time}
-                    className={`flex items-center gap-3 px-5 py-3.5 ${
+                    className={`flex items-center gap-2.5 px-4 py-2.5 ${
                       it.status === "paid" ? "opacity-50" : ""
                     }`}
                   >
-                    <div className="w-12 text-body-sm font-semibold text-text-primary">
+                    <div className="w-10 shrink-0 text-[11px] font-semibold text-text-primary">
                       {it.time}
                     </div>
-                    <div className="flex-1 overflow-hidden">
-                      <div className="truncate text-body-sm font-semibold text-text-primary">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12px] font-semibold leading-tight text-text-primary">
                         {it.name}
                       </div>
-                      <div className="truncate text-caption text-text-tertiary">
+                      <div className="truncate text-[10px] leading-tight text-text-tertiary">
                         {it.svc}
                       </div>
                     </div>
-                    <div
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${statusStyles[it.status]}`}
-                    >
+                    <div className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${statusStyles[it.status]}`}>
                       {it.label}
                     </div>
                   </div>
@@ -528,31 +557,58 @@ function PhoneMock() {
             </div>
           </div>
 
-          {/* Bottom tab bar — same icons as the real app */}
-          <div className="flex items-center justify-around border-t border-[#EAEAEA] bg-white px-4 py-2.5">
-            <div className="flex flex-col items-center gap-0.5 text-text-primary">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
-              </svg>
-              <span className="text-[10px] font-medium">Home</span>
+          {/* This week stat card */}
+          <div className="shrink-0 px-3 pt-3">
+            <div className="rounded-2xl border border-[#EAEAEA] bg-white px-4 py-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                This week
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-[20px] font-semibold tracking-tight text-text-primary">
+                  AED 5,400
+                </span>
+                <span className="text-[10px] font-semibold text-green-700">
+                  ↑ 12%
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-0.5 text-primary-600">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-              </svg>
-              <span className="text-[10px] font-semibold">Calendar</span>
+          </div>
+
+          {/* Spacer pushes the tab bar to the bottom */}
+          <div className="flex-1" />
+
+          {/* Bottom tab bar */}
+          <div className="shrink-0 border-t border-[#EAEAEA] bg-white">
+            <div className="flex items-center justify-around px-2 pt-1.5 pb-1">
+              <div className="flex flex-col items-center gap-0.5 text-text-primary">
+                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
+                </svg>
+                <span className="text-[9px] font-medium">Home</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 text-primary-600">
+                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+                <span className="text-[9px] font-semibold">Calendar</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
+                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                </svg>
+                <span className="text-[9px] font-medium">Payments</span>
+              </div>
+              <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
+                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+                <span className="text-[9px] font-medium">Reports</span>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-              </svg>
-              <span className="text-[10px] font-medium">Payments</span>
-            </div>
-            <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-              </svg>
-              <span className="text-[10px] font-medium">Reports</span>
+
+            {/* iOS home indicator pill */}
+            <div className="pb-2">
+              <div className="mx-auto h-[5px] w-[110px] rounded-full bg-text-primary" />
             </div>
           </div>
         </div>
@@ -981,9 +1037,12 @@ function Footer() {
           <div>
             {/* Footer uses the icon-only mark (the wordmark already
                 anchors the nav at the top). Sized to read as a real
-                brand presence, not a tucked-away byline. */}
+                brand presence, not a tucked-away byline. The negative
+                left margin compensates for the PNG's internal
+                whitespace so the visible icon edge aligns with the
+                tagline text below. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/symbol-dark.png" alt="Sukona" className="h-[72px] w-auto sm:h-[80px]" />
+            <img src="/symbol-dark.png" alt="Sukona" className="-ml-3 h-[72px] w-auto sm:h-[80px]" />
             <p className="mt-4 max-w-xs text-body-sm text-text-secondary">
               The operational system for home-service beauty and wellness.
             </p>
