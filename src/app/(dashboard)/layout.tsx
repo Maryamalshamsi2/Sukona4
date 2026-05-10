@@ -10,6 +10,7 @@ import { signOut } from "@/app/(dashboard)/actions";
 import { UserContext, type CurrentUser } from "@/lib/user-context";
 import { SearchProvider, HeaderSearchInput } from "@/lib/search-context";
 import { UndoToastProvider } from "@/components/undo-toast";
+import TrialBanner from "@/components/trial-banner";
 
 export default function DashboardLayout({
   children,
@@ -20,6 +21,7 @@ export default function DashboardLayout({
   const [userInitials, setUserInitials] = useState("");
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadUser() {
@@ -63,19 +65,24 @@ export default function DashboardLayout({
           currency: "AED",
         });
 
-        // Background currency fetch — never throws, never blocks the
-        // sidebar from rendering. Tolerant of missing column (pre-
-        // migration-030 deploys) and RLS denials.
+        // Background salon fetch — never throws, never blocks the
+        // sidebar from rendering. Tolerant of missing columns (pre-
+        // migration deploys) and RLS denials. Returns currency
+        // (migration 030) and trial_ends_at (migration 032).
         supabase
           .from("salons")
-          .select("currency")
+          .select("currency, trial_ends_at")
           .eq("id", profile.salon_id)
           .maybeSingle()
           .then(({ data: salonData }) => {
-            if (salonData?.currency) {
+            if (!salonData) return;
+            if (salonData.currency) {
               setCurrentUser((prev) =>
                 prev ? { ...prev, currency: salonData.currency as string } : prev,
               );
+            }
+            if (salonData.trial_ends_at) {
+              setTrialEndsAt(salonData.trial_ends_at as string);
             }
           });
         // Prefer the profile's full_name for initials if it's richer than auth metadata.
@@ -165,6 +172,12 @@ export default function DashboardLayout({
             </div>
           </div>
         </header>
+
+        {/* Trial banner — only renders when trial_ends_at is set
+            (migration 032). Sits above the body so it doesn't compete
+            with the top header but is the first thing the user sees
+            beneath chrome. */}
+        <TrialBanner trialEndsAt={trialEndsAt} />
 
         {/* Body: sidebar + content */}
         <div className="flex flex-1 overflow-hidden">
