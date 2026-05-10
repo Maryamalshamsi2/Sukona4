@@ -78,13 +78,8 @@ export default function Modal({
             </svg>
           </button>
         </div>
-        {/* Scrollable body. On mobile, extra bottom padding lifts the
-            content above the iOS home-indicator gesture bar — without
-            this the last action row of a long form/drawer crowded the
-            edge of the screen. Desktop keeps the original 24 px floor. */}
-        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-[max(1.5rem,calc(1rem+env(safe-area-inset-bottom)))] sm:pb-6">
-          {children}
-        </div>
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
       </div>
     </dialog>
   );

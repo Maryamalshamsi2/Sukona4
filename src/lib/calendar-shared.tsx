@@ -658,7 +658,11 @@ export function DetailView({
             and jumps straight to the Mark Paid modal. Hidden when
             the next step is already "paid". */}
       {canEdit && isActive && (onNoShow || (nextStatus && nextStatus.value !== "paid")) && (
-        <div className="-mb-1 flex items-center justify-between gap-2 text-caption font-semibold">
+        // Spacing: the row used to have -mb-1 (negative) which pushed
+        // it almost flush with the action button row below. Replaced
+        // with mb-3 so the two rows read as distinct — secondary
+        // shortcuts on top, primary actions on the bottom.
+        <div className="mb-3 flex items-center justify-between gap-2 text-caption font-semibold">
           {onNoShow ? (
             <button
               onClick={onNoShow}
