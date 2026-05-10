@@ -50,7 +50,6 @@ function methodColor(m: "cash" | "card" | "other") {
 
 export default function PaymentsView({ initialPayments }: { initialPayments: PaymentRow[] }) {
   const [payments] = useState<PaymentRow[]>(initialPayments);
-  const [error] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -66,7 +65,6 @@ export default function PaymentsView({ initialPayments }: { initialPayments: Pay
         </div>
       </div>
 
-      {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 
       {payments.length === 0 ? (
         <div className="mt-8 rounded-2xl ring-1 ring-border bg-white p-8 text-center text-text-secondary">

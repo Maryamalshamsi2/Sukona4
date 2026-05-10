@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import Modal from "@/components/modal";
 import { useSearchQuery } from "@/lib/search-context";
+import { useUndo } from "@/components/undo-toast";
 import {
   getInventoryItems,
   createInventoryItem,
@@ -35,7 +36,7 @@ const UNITS = ["pcs", "bottles", "tubes", "sets", "boxes", "kg", "g", "L", "mL"]
 
 export default function InventoryView({ initialItems }: { initialItems: InventoryItem[] }) {
   const [items, setItems] = useState<InventoryItem[]>(initialItems);
-  const [error, setError] = useState<string | null>(null);
+  const undo = useUndo();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
@@ -68,7 +69,7 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
       const data = await getInventoryItems();
       setItems(data as InventoryItem[]);
     } catch {
-      setError("Failed to load inventory");
+      undo.error("Failed to load inventory");
     }
   }, []);
 
@@ -86,7 +87,7 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
   async function handleQuickQuantity(item: InventoryItem, delta: number) {
     const newQty = Math.max(0, item.quantity + delta);
     const result = await updateInventoryQuantity(item.id, newQty);
-    if (result.error) { setError(result.error); return; }
+    if (result.error) { undo.error(result.error); return; }
     loadData();
   }
 
@@ -189,7 +190,6 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
         </div>
       </div>
 
-      {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-body-sm text-error-700">{error}</p>}
 
       {/* Inventory List */}
       {filtered.length === 0 ? (
@@ -295,9 +295,8 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
       <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)} title="Add Item">
         <InventoryForm
           onSubmit={async (name, qty, threshold, category, unit, cost, notes) => {
-            setError(null);
             const result = await createInventoryItem(name, qty, threshold, category, unit, cost, notes);
-            if (result.error) { setError(result.error); return; }
+            if (result.error) { undo.error(result.error); return; }
             setAddModalOpen(false);
             loadData();
           }}
@@ -312,9 +311,8 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
           <InventoryForm
             defaultValues={selected}
             onSubmit={async (name, qty, threshold, category, unit, cost, notes) => {
-              setError(null);
-              const result = await updateInventoryItem(selected.id, name, qty, threshold, category, unit, cost, notes);
-              if (result.error) { setError(result.error); return; }
+                const result = await updateInventoryItem(selected.id, name, qty, threshold, category, unit, cost, notes);
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelected(null);
               loadData();
@@ -323,7 +321,7 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
             onDelete={async () => {
               if (!confirm("Delete this item?")) return;
               const result = await deleteInventoryItem(selected.id);
-              if (result.error) { setError(result.error); return; }
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelected(null);
               loadData();

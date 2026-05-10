@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import PhoneInput from "@/components/phone-input";
+import { useUndo } from "@/components/undo-toast";
 import {
   getGroups,
   addGroup,
@@ -29,7 +30,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   const currentUser = useCurrentUser();
   const [members, setMembers] = useState<Profile[]>(initialMembers);
   const [groups, setGroups] = useState<TeamGroup[]>(initialGroups);
-  const [error, setError] = useState<string | null>(null);
+  const undo = useUndo();
 
   // Filter by group
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -88,7 +89,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
       setGroups(g);
       setMembers(m);
     } catch {
-      setError("Failed to load team");
+      undo.error("Failed to load team");
     }
   }
 
@@ -112,13 +113,12 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   }
 
   async function handleGroupSubmit(formData: FormData) {
-    setError(null);
     const result = editingGroup
       ? await updateGroup(editingGroup.id, formData)
       : await addGroup(formData);
 
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     setGroupModalOpen(false);
@@ -130,7 +130,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     if (!confirm("Delete this group? Members will become unassigned.")) return;
     const result = await deleteGroup(id);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     if (activeTab === id) setActiveTab("all");
@@ -193,7 +193,6 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   }
 
   async function handleMemberSubmit(formData: FormData) {
-    setError(null);
 
     const result = isAddingMember
       ? await addTeamMember(formData)
@@ -202,7 +201,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
         : { error: "No member selected" };
 
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
 
@@ -210,7 +209,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     if (editingMember) {
       const schedResult = await upsertStaffSchedules(editingMember.id, scheduleData);
       if (schedResult.error) {
-        setError(schedResult.error);
+        undo.error(schedResult.error);
         return;
       }
     }
@@ -242,7 +241,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     if (!editingMember || !newDayOffDate) return;
     const result = await addStaffDayOff(editingMember.id, newDayOffDate, newDayOffReason || null);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     const updated = await getStaffDaysOff(editingMember.id);
@@ -254,7 +253,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   async function handleDeleteDayOff(id: string) {
     const result = await deleteStaffDayOff(id);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     setDaysOff((prev) => prev.filter((d) => d.id !== id));
@@ -310,8 +309,6 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
           )}
         </div>
       </div>
-
-      {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 
       {/* Group tabs */}
       <div className="mt-6 flex gap-2 overflow-x-auto pb-2">

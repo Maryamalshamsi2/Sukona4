@@ -214,7 +214,6 @@ export default function CalendarView({
   const [staffScheduleMap, setStaffScheduleMap] =
     useState<Map<string, { isOff: boolean; startMin: number; endMin: number }>>(initialStaffScheduleMap);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Staff filter: empty set = show all
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
@@ -491,7 +490,7 @@ export default function CalendarView({
       }
       setStaffScheduleMap(map);
     } catch {
-      setError("Failed to load calendar data");
+      undo.error("Failed to load calendar data");
     } finally {
       setLoading(false);
     }
@@ -822,7 +821,6 @@ export default function CalendarView({
 
   function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
-    setError(null);
     // Intercept the transition to "paid" — collect method + receipt first.
     if (status === "paid") {
       setMarkPaidOpen(true);
@@ -833,7 +831,7 @@ export default function CalendarView({
     patchAppointment(apptId, { status });
     void updateAppointmentStatus(apptId, status).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
       }
     });
@@ -850,7 +848,7 @@ export default function CalendarView({
     setSelectedAppointment(null);
     void updateAppointmentStatus(apptId, "paid").then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
       } else {
         // Single targeted refetch so the freshly-minted receipt_token +
@@ -872,7 +870,7 @@ export default function CalendarView({
     setSelectedAppointment(null);
     void cancelAppointment(apptId).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
         return;
       }
@@ -893,7 +891,7 @@ export default function CalendarView({
     setSelectedAppointment(null);
     void markNoShow(apptId).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
         return;
       }
@@ -920,7 +918,7 @@ export default function CalendarView({
       if (undone) return;
       void deleteAppointment(apptId).then((result) => {
         if (result?.error) {
-          setError(result.error);
+          undo.error(result.error);
           setAppointments((prev) => {
             if (prev.some((a) => a.id === apptId)) return prev;
             return [...prev, removed].sort((a, b) => a.time.localeCompare(b.time));
@@ -1210,8 +1208,6 @@ export default function CalendarView({
           )}
         </div>
       </div>
-
-      {error && <p className="px-5 py-2.5 text-body-sm text-error-700 bg-red-50">{error}</p>}
 
       {/* ---- Calendar grid ---- */}
       <div ref={scrollContainerRef} className="flex-1 overflow-auto bg-[#FAFAFA]">
@@ -1595,9 +1591,8 @@ export default function CalendarView({
           prefillTime={prefillTime}
           prefillStaffId={prefillStaffId}
           onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-            setError(null);
-            const result = await createAppointment(clientId, date, time, notes, entries, adjustments);
-            if (result.error) { setError(result.error); return; }
+                    const result = await createAppointment(clientId, date, time, notes, entries, adjustments);
+            if (result.error) { undo.error(result.error); return; }
             setAddModalOpen(false);
             setPrefillTime(null);
             setPrefillStaffId(null);
@@ -1606,7 +1601,7 @@ export default function CalendarView({
           }}
           onNewClient={async (name, phone, address, mapLink, notes) => {
             const result = await addClientQuick(name, phone, address, mapLink, notes);
-            if (result.error) { setError(result.error); return null; }
+            if (result.error) { undo.error(result.error); return null; }
             // Patch the new client into local state so the next form
             // open sees them — saves a round-trip vs reloadClients().
             setClients((prev) => [...prev, result.client!]);
@@ -1677,16 +1672,15 @@ export default function CalendarView({
             bundles={bundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-              setError(null);
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
-              if (result.error) { setError(result.error); return; }
+                        const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
               reloadAppointments();
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);
-              if (result.error) { setError(result.error); return null; }
+              if (result.error) { undo.error(result.error); return null; }
               setClients((prev) => [...prev, result.client!]);
               return result.client!;
             }}
@@ -1730,11 +1724,10 @@ export default function CalendarView({
           prefillStaffId={prefillStaffId}
           multiStaff
           onSubmit={async (staffIds, date, startTime, endTime, title, blockType) => {
-            setError(null);
-            const result = staffIds.length === 1
+                    const result = staffIds.length === 1
               ? await createCalendarBlock(staffIds[0], date, startTime, endTime, title, blockType)
               : await createCalendarBlocksForStaff(staffIds, date, startTime, endTime, title, blockType);
-            if (result.error) { setError(result.error); return; }
+            if (result.error) { undo.error(result.error); return; }
             setBlockModalOpen(false);
             setPrefillTime(null);
             setPrefillEndTime(null);
@@ -1805,9 +1798,8 @@ export default function CalendarView({
             defaultBlockType={selectedBlock.block_type}
             submitLabel="Save"
             onSubmit={async (staffIds, date, startTime, endTime, title, blockType) => {
-              setError(null);
-              const result = await updateCalendarBlock(selectedBlock.id, staffIds[0], startTime, endTime, title, blockType);
-              if (result.error) { setError(result.error); return; }
+                        const result = await updateCalendarBlock(selectedBlock.id, staffIds[0], startTime, endTime, title, blockType);
+              if (result.error) { undo.error(result.error); return; }
               setBlockEditOpen(false);
               setSelectedBlock(null);
               reloadBlocks();

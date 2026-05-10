@@ -5,6 +5,7 @@ import Modal from "@/components/modal";
 import { useSearchQuery } from "@/lib/search-context";
 import { createBrowserClient } from "@supabase/ssr";
 import { useCurrentUser } from "@/lib/user-context";
+import { useUndo } from "@/components/undo-toast";
 import {
   getExpenses,
   createExpense,
@@ -132,7 +133,7 @@ export default function ExpensesView({
   initialUserRole,
 }: ExpensesViewProps) {
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
-  const [error, setError] = useState<string | null>(null);
+  const undo = useUndo();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selected, setSelected] = useState<Expense | null>(null);
@@ -193,7 +194,7 @@ export default function ExpensesView({
       setPettyCashBalance(balance);
       setUserRole(role);
     } catch {
-      setError("Failed to load expenses");
+      undo.error("Failed to load expenses");
     }
   }, []);
 
@@ -351,7 +352,6 @@ export default function ExpensesView({
         </div>
       )}
 
-      {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-body-sm text-error-700">{error}</p>}
 
       {/* Petty Cash Card */}
       <div className="mb-6 rounded-2xl ring-1 ring-border bg-white p-4 sm:p-6">
@@ -509,9 +509,8 @@ export default function ExpensesView({
         <ExpenseForm
           isOwner={isOwner}
           onSubmit={async (desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash) => {
-            setError(null);
             const result = await createExpense(desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash);
-            if (result.error) { setError(result.error); return; }
+            if (result.error) { undo.error(result.error); return; }
             setAddModalOpen(false);
             loadData();
           }}
@@ -527,9 +526,8 @@ export default function ExpensesView({
             isOwner={isOwner}
             defaultValues={selected}
             onSubmit={async (desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash) => {
-              setError(null);
-              const result = await updateExpense(selected.id, desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash);
-              if (result.error) { setError(result.error); return; }
+                const result = await updateExpense(selected.id, desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash);
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelected(null);
               loadData();
@@ -538,7 +536,7 @@ export default function ExpensesView({
             onDelete={async () => {
               if (!confirm("Delete this expense?")) return;
               const result = await deleteExpense(selected.id);
-              if (result.error) { setError(result.error); return; }
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelected(null);
               loadData();
@@ -552,9 +550,8 @@ export default function ExpensesView({
       <Modal open={depositModalOpen} onClose={() => setDepositModalOpen(false)} title="Add Funds to Petty Cash">
         <DepositForm
           onSubmit={async (amount, description) => {
-            setError(null);
             const result = await addPettyCashDeposit(amount, description);
-            if (result.error) { setError(result.error); return; }
+            if (result.error) { undo.error(result.error); return; }
             setDepositModalOpen(false);
             loadData();
           }}

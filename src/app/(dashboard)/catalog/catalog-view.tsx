@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Modal from "@/components/modal";
 import { useCurrentUser } from "@/lib/user-context";
+import { useUndo } from "@/components/undo-toast";
 import {
   getCategories,
   addCategory,
@@ -146,7 +147,7 @@ export default function CatalogView({
   const [categories, setCategories] = useState<ServiceCategory[]>(initialCategories);
   const [services, setServices] = useState<Service[]>(initialServices);
   const [bundles, setBundles] = useState<ServiceBundle[]>(initialBundles);
-  const [error, setError] = useState<string | null>(null);
+  const undo = useUndo();
 
   // "+ Add" dropdown
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
@@ -179,7 +180,7 @@ export default function CatalogView({
       setServices(svcs);
       setBundles(bdls);
     } catch {
-      setError("Failed to load catalog");
+      undo.error("Failed to load catalog");
     }
   }
 
@@ -232,13 +233,12 @@ export default function CatalogView({
   }
 
   async function handleCategorySubmit(formData: FormData) {
-    setError(null);
     const result = editingCategory
       ? await updateCategory(editingCategory.id, formData)
       : await addCategory(formData);
 
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     setCategoryModalOpen(false);
@@ -250,7 +250,7 @@ export default function CatalogView({
     if (!confirm("Delete this category? Services in it will become uncategorized.")) return;
     const result = await deleteCategory(id);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     if (activeTab === id) setActiveTab("all");
@@ -269,13 +269,12 @@ export default function CatalogView({
   }
 
   async function handleServiceSubmit(formData: FormData) {
-    setError(null);
     const result = editingService
       ? await updateService(editingService.id, formData)
       : await addService(formData);
 
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     setServiceModalOpen(false);
@@ -287,7 +286,7 @@ export default function CatalogView({
     if (!confirm("Delete this service?")) return;
     const result = await deleteService(id);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     loadData();
@@ -308,7 +307,7 @@ export default function CatalogView({
     if (!confirm("Delete this bundle?")) return;
     const result = await deleteBundle(id);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     loadData();
@@ -332,7 +331,7 @@ export default function CatalogView({
     const result = await reorderCategories(next.map((c) => c.id));
     if (result.error) {
       setCategories(previous);
-      setError(result.error);
+      undo.error(result.error);
     }
   }
 
@@ -362,7 +361,7 @@ export default function CatalogView({
     const result = await reorderServices(newOrder);
     if (result.error) {
       setServices(previous);
-      setError(result.error);
+      undo.error(result.error);
     }
   }
 
@@ -389,7 +388,7 @@ export default function CatalogView({
     const result = await reorderBundles(newOrder);
     if (result.error) {
       setBundles(previous);
-      setError(result.error);
+      undo.error(result.error);
     }
   }
 
@@ -663,8 +662,6 @@ export default function CatalogView({
         </div>
         )}
       </div>
-
-      {error && <p className="mt-4 text-body-sm text-error-700">{error}</p>}
 
       {/* ======= CATALOG (services + bundles, merged) ======= */}
       {/* Category tabs — single horizontal line, left-aligned (scrolls if overflow).
@@ -1005,8 +1002,7 @@ export default function CatalogView({
           categories={categories}
           editingBundle={editingBundle}
           onSubmit={async (data) => {
-            setError(null);
-            const result = editingBundle
+                    const result = editingBundle
               ? await updateBundle(
                   editingBundle.id,
                   data.name,
@@ -1028,7 +1024,7 @@ export default function CatalogView({
                   data.serviceIds
                 );
             if (result.error) {
-              setError(result.error);
+              undo.error(result.error);
               return;
             }
             setBundleModalOpen(false);

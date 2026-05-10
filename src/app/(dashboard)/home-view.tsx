@@ -130,7 +130,6 @@ export default function HomeView({
   const [bundles] = useState<BundleForBooking[]>(initialBundles);
   const [staffScheduleMap] = useState(initialStaffScheduleMap);
   const [currentUser] = useState(initialCurrentUser);
-  const [error, setError] = useState<string | null>(null);
   const [activityRange, setActivityRange] = useState<ActivityRange>("today");
   const [didMount, setDidMount] = useState(false);
 
@@ -213,7 +212,6 @@ export default function HomeView({
 
   function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
-    setError(null);
     // Intercept the transition to "paid" — collect method + receipt first.
     if (status === "paid") {
       setMarkPaidOpen(true);
@@ -224,7 +222,7 @@ export default function HomeView({
     patchAppointment(apptId, { status });
     void updateAppointmentStatus(apptId, status).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
       } else {
         refreshActivitiesInBackground();
@@ -245,7 +243,7 @@ export default function HomeView({
     setSelectedAppointment(null);
     void updateAppointmentStatus(apptId, "paid").then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
       } else {
         // Refetch this one appointment so the freshly-minted
@@ -269,7 +267,7 @@ export default function HomeView({
     setSelectedAppointment(null);
     void cancelAppointment(apptId).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
         return;
       }
@@ -296,7 +294,7 @@ export default function HomeView({
     setSelectedAppointment(null);
     void markNoShow(apptId).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchAppointment(apptId, { status: prevStatus });
         return;
       }
@@ -326,7 +324,7 @@ export default function HomeView({
       if (undone) return;
       void deleteAppointment(apptId).then((result) => {
         if (result?.error) {
-          setError(result.error);
+          undo.error(result.error);
           // Server rejected — restore in the list.
           setAppointments((prev) => {
             if (prev.some((a) => a.id === apptId)) return prev;
@@ -361,8 +359,6 @@ export default function HomeView({
 
   return (
     <div>
-      {error && <p className="mb-5 rounded-xl bg-error-50 px-4 py-3 text-body-sm text-error-700">{error}</p>}
-
       {/* Two-column layout */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-7">
 
@@ -558,16 +554,15 @@ export default function HomeView({
             bundles={bundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-              setError(null);
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
-              if (result.error) { setError(result.error); return; }
+                        const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
               reloadAppointments();
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);
-              if (result.error) { setError(result.error); return null; }
+              if (result.error) { undo.error(result.error); return null; }
               // Patch the new client into local state so subsequent
               // form opens see them — saves the round-trip.
               setClients((prev) => [...prev, result.client!]);

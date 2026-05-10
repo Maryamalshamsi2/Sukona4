@@ -18,19 +18,29 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
  * useUndo().show(...) and get the snackbar at the bottom of the screen.
  */
 
-type UndoState = {
+type ToastVariant = "default" | "error";
+
+type ToastState = {
   message: string;
-  onUndo: () => void;
+  variant: ToastVariant;
+  onUndo?: () => void;
 };
 
 type UndoCtxValue = {
   /**
-   * Show the snackbar. Auto-dismisses after `durationMs` (default 6 s).
-   * If a previous toast is still on screen its timer is cleared so the
-   * new one isn't dismissed early; the previous undo is silently
-   * abandoned (its action stays committed).
+   * Show the snackbar with an Undo affordance. Auto-dismisses after
+   * `durationMs` (default 6 s). If a previous toast is still on
+   * screen its timer is cleared so the new one isn't dismissed
+   * early; the previous undo is silently abandoned (its action
+   * stays committed).
    */
   show: (message: string, onUndo: () => void, durationMs?: number) => void;
+  /**
+   * Show a plain error toast (red-tinted, no Undo). Used in place of
+   * the inline `<p className="text-error-700">{error}</p>` banners
+   * that used to push page content around.
+   */
+  error: (message: string, durationMs?: number) => void;
   /** Manually hide whatever's showing. */
   hide: () => void;
 };
@@ -38,7 +48,7 @@ type UndoCtxValue = {
 const UndoCtx = createContext<UndoCtxValue | null>(null);
 
 export function UndoToastProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<UndoState | null>(null);
+  const [state, setState] = useState<ToastState | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -56,7 +66,19 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const show = useCallback(
     (message: string, onUndo: () => void, durationMs = 6000) => {
       clearTimer();
-      setState({ message, onUndo });
+      setState({ message, variant: "default", onUndo });
+      timerRef.current = setTimeout(() => {
+        setState(null);
+        timerRef.current = null;
+      }, durationMs);
+    },
+    [clearTimer],
+  );
+
+  const error = useCallback(
+    (message: string, durationMs = 5000) => {
+      clearTimer();
+      setState({ message, variant: "error" });
       timerRef.current = setTimeout(() => {
         setState(null);
         timerRef.current = null;
@@ -68,8 +90,19 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   // Tidy up if the provider unmounts mid-toast.
   useEffect(() => () => clearTimer(), [clearTimer]);
 
+  // Style varies by variant. Default = neutral-900 (success / undo);
+  // error = red-tinted so the user immediately reads it as a problem.
+  const toneClasses =
+    state?.variant === "error"
+      ? "bg-error-700 text-white"
+      : "bg-neutral-900 text-text-inverse";
+  const dismissClasses =
+    state?.variant === "error"
+      ? "text-white/70 hover:text-white"
+      : "text-white/60 hover:text-white";
+
   return (
-    <UndoCtx.Provider value={{ show, hide }}>
+    <UndoCtx.Provider value={{ show, error, hide }}>
       {children}
       {state && (
         <div
@@ -77,26 +110,28 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
           // on desktop the tab bar is hidden but the offset is still
           // safe. Centered horizontally with a viewport-clamp so long
           // messages don't push the toast off-screen.
-          className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl bg-neutral-900 px-4 py-3 text-body-sm text-text-inverse shadow-lg lg:bottom-6"
-          role="status"
-          aria-live="polite"
+          className={`fixed bottom-[calc(100px+env(safe-area-inset-bottom))] left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl px-4 py-3 text-body-sm shadow-lg lg:bottom-6 ${toneClasses}`}
+          role={state.variant === "error" ? "alert" : "status"}
+          aria-live={state.variant === "error" ? "assertive" : "polite"}
         >
           <span className="truncate">{state.message}</span>
-          <button
-            type="button"
-            onClick={() => {
-              state.onUndo();
-              hide();
-            }}
-            className="shrink-0 font-semibold text-white underline-offset-2 hover:underline"
-          >
-            Undo
-          </button>
+          {state.onUndo && (
+            <button
+              type="button"
+              onClick={() => {
+                state.onUndo!();
+                hide();
+              }}
+              className="shrink-0 font-semibold text-white underline-offset-2 hover:underline"
+            >
+              Undo
+            </button>
+          )}
           <button
             type="button"
             onClick={hide}
             aria-label="Dismiss"
-            className="shrink-0 rounded p-1 text-white/60 hover:text-white"
+            className={`shrink-0 rounded p-1 ${dismissClasses}`}
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

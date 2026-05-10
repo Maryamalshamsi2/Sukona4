@@ -60,7 +60,6 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [phoneValue, setPhoneValue] = useState("");
   // Free-text filter applied to name / phone / address. Case-insensitive,
   // matches against normalized phone (digits only) so "0501234567" finds
@@ -93,7 +92,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       const data = await getClients();
       setClients(data);
     } catch {
-      setError("Failed to load clients");
+      undo.error("Failed to load clients");
     }
   }
 
@@ -212,7 +211,6 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
 
   function handleStatusUpdate(status: string) {
     if (!selectedAppointment) return;
-    setError(null);
     if (status === "paid") {
       setMarkPaidOpen(true);
       return;
@@ -222,7 +220,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     patchClientAppt(apptId, { status });
     void updateAppointmentStatus(apptId, status).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchClientAppt(apptId, { status: prevStatus });
       }
     });
@@ -238,7 +236,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     setSelectedAppointment(null);
     void updateAppointmentStatus(apptId, "paid").then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchClientAppt(apptId, { status: prevStatus });
       } else {
         // Targeted refetch to pull in the freshly-minted receipt fields.
@@ -257,7 +255,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     setSelectedAppointment(null);
     void cancelAppointment(apptId).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchClientAppt(apptId, { status: prevStatus });
         return;
       }
@@ -278,7 +276,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     setSelectedAppointment(null);
     void markNoShow(apptId).then((result) => {
       if (result?.error) {
-        setError(result.error);
+        undo.error(result.error);
         patchClientAppt(apptId, { status: prevStatus });
         return;
       }
@@ -302,7 +300,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       if (undone) return;
       void deleteAppointment(apptId).then((result) => {
         if (result?.error) {
-          setError(result.error);
+          undo.error(result.error);
           setClientAppointments((prev) => {
             if (prev.some((a) => a.id === apptId)) return prev;
             return [...prev, removed];
@@ -325,13 +323,12 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   }
 
   async function handleSubmit(formData: FormData) {
-    setError(null);
     const result = editing
       ? await updateClient(editing.id, formData)
       : await addClient(formData);
 
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
 
@@ -344,7 +341,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     if (!confirm("Delete this client?")) return;
     const result = await deleteClient(id);
     if (result.error) {
-      setError(result.error);
+      undo.error(result.error);
       return;
     }
     loadClients();
@@ -422,10 +419,6 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             </button>
           )}
         </div>
-      )}
-
-      {error && (
-        <p className="mt-4 text-body-sm text-error-700">{error}</p>
       )}
 
       {clients.length === 0 ? (
@@ -788,16 +781,15 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             bundles={allBundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-              setError(null);
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
-              if (result.error) { setError(result.error); return; }
+                        const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
+              if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
               refreshClientAppointments();
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);
-              if (result.error) { setError(result.error); return null; }
+              if (result.error) { undo.error(result.error); return null; }
               return result.client!;
             }}
             onCancel={() => { setEditModalOpen(false); setSelectedAppointment(null); }}
