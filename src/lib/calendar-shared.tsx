@@ -557,29 +557,27 @@ export function DetailView({
                         )}
                       </div>
                     )}
-                    <div className="px-4 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className={`min-w-0 truncate text-body-sm ${inBundle ? "text-text-secondary" : "font-semibold text-text-primary"}`}>
+                    {/* Single line per service: name (+ price for non-
+                        bundle items) on the left, staff on the right.
+                        Duration + (parallel) indicator dropped — the
+                        appointment's total duration shows in the
+                        when-block above; per-service timing was visual
+                        clutter for the daily-use case. */}
+                    <div className="flex items-center justify-between gap-3 px-4 py-3">
+                      <p className="min-w-0 flex-1 truncate text-body-sm">
+                        <span className={inBundle ? "text-text-secondary" : "font-semibold text-text-primary"}>
                           {inBundle && <span className="text-text-tertiary mr-1.5">·</span>}
                           {t.svc.services?.name || "Unknown"}
-                        </p>
-                        {!inBundle && (
-                          <span className="shrink-0 text-body-sm font-semibold text-text-primary">
-                            AED {t.svc.services?.price || 0}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center justify-between gap-3 text-caption text-text-secondary">
-                        <span>
-                          {formatDuration(t.endMin - t.startMin)}
-                          {t.svc.is_parallel && <span className="ml-1">(parallel)</span>}
                         </span>
-                        {staffMember && (
-                          <span className="shrink-0 truncate text-text-primary font-medium">
-                            {staffMember.full_name}
-                          </span>
+                        {!inBundle && (
+                          <span className="ml-2 text-text-tertiary">· AED {t.svc.services?.price || 0}</span>
                         )}
-                      </div>
+                      </p>
+                      {staffMember && (
+                        <span className="shrink-0 truncate text-body-sm text-text-primary font-medium">
+                          {staffMember.full_name}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
