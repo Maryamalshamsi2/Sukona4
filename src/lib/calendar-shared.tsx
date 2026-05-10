@@ -537,8 +537,13 @@ export function DetailView({
           <h3 className="text-caption font-semibold uppercase tracking-wide text-text-tertiary mb-2">
             Services
           </h3>
+          {/* Inter-row dividers removed in favor of vertical breathing
+              (py-3.5 per row). The bundle header keeps a subtle bg
+              that visually groups it with its indented children, and
+              the only line in the card is the single divider before
+              the totals strip — one emphasis strategy, not three. */}
           <div className="rounded-2xl ring-1 ring-border bg-white overflow-hidden">
-            <div className="divide-y divide-border">
+            <div className="py-1">
               {timings.map((t, i) => {
                 const staffMember = staff.find((s) => s.id === t.svc.staff_id);
                 // Bundle grouping (migration 025). When a row carries a
@@ -601,7 +606,7 @@ export function DetailView({
                 visual weight as the client name in the hero, since
                 "how much" is the second-most-asked question after
                 "who". */}
-            <div className="border-t border-border bg-surface-hover/40 px-4 pt-3 pb-4 space-y-1.5 text-body-sm">
+            <div className="border-t border-border px-4 pt-3 pb-4 space-y-1.5 text-body-sm">
               {hasAppointmentAdjustments(appointment) && (
                 <div className="flex items-center justify-between text-text-secondary">
                   <span>Subtotal</span>
