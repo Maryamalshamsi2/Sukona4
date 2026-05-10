@@ -73,8 +73,11 @@ export default function Modal({
       >
         {/* Header. items-start (not center) so the close button anchors
             to the top of multi-line titles (e.g. date + time subtitle)
-            instead of floating between the lines. */}
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-6 py-4">
+            instead of floating between the lines.
+            py-5 (was py-4) gives a touch more breath above + below the
+            heading — most noticeable on the appointment detail drawer
+            where the title is two lines. */}
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-6 py-5">
           <h2 className="min-w-0 text-title-section font-semibold tracking-tight text-text-primary">{title}</h2>
           <button
             onClick={onClose}

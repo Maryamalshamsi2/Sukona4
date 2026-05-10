@@ -247,7 +247,10 @@ export function formatAppointmentHeading(appt: AppointmentData): React.ReactNode
   return (
     <>
       <span>{formatDateLong(appt.date)}</span>
-      <span className="block mt-0.5 text-body-sm font-normal text-text-secondary">
+      {/* mt-1.5 (6px) — enough air between the date and time that
+          they don't read as one line, but tight enough that the eye
+          still groups them as the modal's heading. */}
+      <span className="block mt-1.5 text-body-sm font-normal text-text-secondary">
         {formatTime12(appt.time)} – {formatTime12(endTime)} ({formatDuration(duration)})
         {appt.duration_override != null && (
           <span className="ml-1.5 text-text-tertiary">· adjusted</span>
