@@ -430,6 +430,41 @@ export function DetailView({
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
   const [receiptPreviewIdx, setReceiptPreviewIdx] = useState(0);
 
+  // Bundles collapse by default — top-level rows show "Signature
+  // Mani & Pedi" without the children spilling into the list. Tap
+  // the chevron (or anywhere on the row) to expand and see the
+  // sub-services with their individual staff. Tracked by
+  // bundle_instance_id so two copies of the same bundle expand
+  // independently.
+  const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
+  function toggleBundle(instanceId: string) {
+    setExpandedBundles((prev) => {
+      const next = new Set(prev);
+      if (next.has(instanceId)) next.delete(instanceId);
+      else next.add(instanceId);
+      return next;
+    });
+  }
+
+  // Aggregate staff per bundle instance: dedup, comma-join.
+  // Used in the collapsed bundle row so the user sees who's
+  // assigned across the bundle ("Aica, Maripel" or just "Aica"
+  // if one staff handles every sub-service).
+  const bundleStaffByInstance = (() => {
+    const groups = new Map<string, Set<string>>();
+    for (const t of timings) {
+      const id = t.svc.bundle_instance_id;
+      if (!id) continue;
+      const sm = staff.find((s) => s.id === t.svc.staff_id);
+      if (!sm) continue;
+      if (!groups.has(id)) groups.set(id, new Set());
+      groups.get(id)!.add(sm.full_name);
+    }
+    const out = new Map<string, string>();
+    for (const [id, names] of groups) out.set(id, Array.from(names).join(", "));
+    return out;
+  })();
+
   // Hierarchy of the redesigned drawer:
   //   1. HERO        — client name (largest) + status pill (right). Phone +
   //                    paperclip/edit-payment on the second row. The
@@ -537,62 +572,109 @@ export function DetailView({
           <h3 className="text-caption font-semibold uppercase tracking-wide text-text-tertiary mb-2">
             Services
           </h3>
-          {/* Inter-row dividers removed in favor of vertical breathing
-              (py-3.5 per row). The bundle header keeps a subtle bg
-              that visually groups it with its indented children, and
-              the only line in the card is the single divider before
-              the totals strip — one emphasis strategy, not three. */}
+          {/* Three row formats share a 3-column layout: name (left,
+              flex), price (middle, tertiary tabular), staff (right).
+              The columns line up across the whole list so the eye
+              can scan straight down each.
+                - Bundle header  — clickable button, chevron next
+                                   to name; rotated when expanded.
+                                   Bundle children are hidden until
+                                   the user expands.
+                - Bundle child   — visible only when expanded;
+                                   indented (pl-8); name + staff
+                                   only (no price; the bundle
+                                   header carries the price).
+                - Non-bundle row — name + per-service price + staff.
+              Same font weight and position for price and staff
+              everywhere, per request. */}
           <div className="rounded-2xl ring-1 ring-border bg-white overflow-hidden">
             <div className="py-1">
               {timings.map((t, i) => {
                 const staffMember = staff.find((s) => s.id === t.svc.staff_id);
-                // Bundle grouping (migration 025). When a row carries a
-                // bundle_instance_id and the previous row does not share
-                // it, we're at the start of a bundle group — render a
-                // header with the bundle name + its total price and
-                // suppress per-service prices for rows in the group
-                // (the bundle price replaces them).
                 const inBundle = !!t.svc.bundle_instance_id;
                 const prevInstance = i > 0 ? timings[i - 1].svc.bundle_instance_id : null;
                 const isFirstInBundle = inBundle && prevInstance !== t.svc.bundle_instance_id;
-                return (
-                  <div key={t.svc.id || i}>
-                    {isFirstInBundle && (
-                      // Bundle header: bundle name + total price. The
-                      // separate "Bundle" pill was over-labeling — the
-                      // subtle background plus indented children below
-                      // already say "this is a bundle".
-                      <div className="flex items-center justify-between gap-3 bg-neutral-50 px-4 py-3">
-                        <span className="min-w-0 truncate text-body-sm font-semibold text-text-primary">
+                const instanceId = t.svc.bundle_instance_id;
+                const isExpanded = !!instanceId && expandedBundles.has(instanceId);
+
+                // Hidden bundle child — collapsed state.
+                if (inBundle && !isFirstInBundle && !isExpanded) {
+                  return null;
+                }
+
+                // Bundle header — top-level row, clickable.
+                if (isFirstInBundle && instanceId) {
+                  const bundleStaff = bundleStaffByInstance.get(instanceId);
+                  return (
+                    <button
+                      key={t.svc.id || i}
+                      type="button"
+                      onClick={() => toggleBundle(instanceId)}
+                      aria-expanded={isExpanded}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+                    >
+                      <span className="min-w-0 flex flex-1 items-center gap-1.5">
+                        <span className="truncate text-body-sm font-semibold text-text-primary">
                           {t.svc.bundle_name || "Bundle"}
                         </span>
-                        {t.svc.bundle_total_price != null && (
-                          <span className="shrink-0 text-body-sm font-semibold text-text-primary tabular-nums">
-                            AED {Math.round(Number(t.svc.bundle_total_price))}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {/* Single line per service: name (+ price for non-
-                        bundle items) on the left, staff on the right.
-                        Bundle children get extra left padding so they
-                        read as nested under the bundle header above
-                        (replacing the previous "·" prefix). */}
-                    <div className={`flex items-center justify-between gap-3 py-3.5 pr-4 ${inBundle ? "pl-8" : "pl-4"}`}>
-                      <p className="min-w-0 flex-1 truncate text-body-sm">
-                        <span className={inBundle ? "text-text-secondary" : "font-semibold text-text-primary"}>
-                          {t.svc.services?.name || "Unknown"}
+                        <svg
+                          className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                        </svg>
+                      </span>
+                      {t.svc.bundle_total_price != null && (
+                        <span className="shrink-0 text-body-sm text-text-tertiary tabular-nums">
+                          AED {Math.round(Number(t.svc.bundle_total_price))}
                         </span>
-                        {!inBundle && (
-                          <span className="ml-2 text-text-tertiary tabular-nums">AED {t.svc.services?.price || 0}</span>
-                        )}
+                      )}
+                      {bundleStaff && (
+                        <span className="shrink-0 truncate text-body-sm font-medium text-text-primary max-w-[40%]">
+                          {bundleStaff}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+
+                // Bundle child — visible only when expanded. Indented;
+                // name + staff (no price column; the bundle has it).
+                if (inBundle) {
+                  return (
+                    <div
+                      key={t.svc.id || i}
+                      className="flex items-center justify-between gap-3 py-3 pl-8 pr-4"
+                    >
+                      <p className="min-w-0 flex-1 truncate text-body-sm text-text-secondary">
+                        {t.svc.services?.name || "Unknown"}
                       </p>
                       {staffMember && (
-                        <span className="shrink-0 truncate text-body-sm text-text-primary font-medium">
+                        <span className="shrink-0 truncate text-body-sm font-medium text-text-primary max-w-[40%]">
                           {staffMember.full_name}
                         </span>
                       )}
                     </div>
+                  );
+                }
+
+                // Non-bundle row — name, price, staff.
+                return (
+                  <div
+                    key={t.svc.id || i}
+                    className="flex items-center justify-between gap-3 px-4 py-3.5"
+                  >
+                    <p className="min-w-0 flex-1 truncate text-body-sm font-semibold text-text-primary">
+                      {t.svc.services?.name || "Unknown"}
+                    </p>
+                    <span className="shrink-0 text-body-sm text-text-tertiary tabular-nums">
+                      AED {t.svc.services?.price || 0}
+                    </span>
+                    {staffMember && (
+                      <span className="shrink-0 truncate text-body-sm font-medium text-text-primary max-w-[40%]">
+                        {staffMember.full_name}
+                      </span>
+                    )}
                   </div>
                 );
               })}
