@@ -479,26 +479,21 @@ export function DetailView({
       </div>
 
       {/* ---- When + where ---- */}
-      {/* Two visually-separate sub-blocks: when (date + time/duration)
-          on top, where (address + map link on its own line) below.
-          Each piece of info gets its own line so nothing reads packed
-          together. The date is rendered in long form ("May 10, 2026")
-          rather than the ISO yyyy-mm-dd that's stored on the row. */}
+      {/* Date is now in the modal's title bar (passed by the caller),
+          so this body section drops it and just shows the from–to time
+          + duration on one line, then address + map link below. */}
       <div className="space-y-3 text-body-sm">
-        <div className="space-y-0.5">
-          <p className="text-text-primary font-medium">{formatDateLong(appointment.date)}</p>
-          <p className="flex items-center gap-1.5 text-text-secondary">
-            <span>
-              {formatTime12(appointment.time)} – {formatTime12(endTime)}
-              {" "}({formatDuration(totalDuration)})
+        <p className="flex items-center gap-1.5 text-text-primary font-medium">
+          <span>
+            {formatTime12(appointment.time)} – {formatTime12(endTime)}
+            {" "}({formatDuration(totalDuration)})
+          </span>
+          {appointment.duration_override != null && (
+            <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
+              adjusted
             </span>
-            {appointment.duration_override != null && (
-              <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
-                adjusted
-              </span>
-            )}
-          </p>
-        </div>
+          )}
+        </p>
         {appointment.clients?.address && (
           <div className="space-y-0.5">
             <p className="text-text-secondary">{appointment.clients.address}</p>
@@ -657,68 +652,78 @@ export function DetailView({
             progression (scheduled → on_the_way → arrived → paid)
             and jumps straight to the Mark Paid modal. Hidden when
             the next step is already "paid". */}
-      {canEdit && isActive && (onNoShow || (nextStatus && nextStatus.value !== "paid")) && (
-        // Spacing: the row used to have -mb-1 (negative) which pushed
-        // it almost flush with the action button row below. Replaced
-        // with mb-3 so the two rows read as distinct — secondary
-        // shortcuts on top, primary actions on the bottom.
-        <div className="mb-3 flex items-center justify-between gap-2 text-caption font-semibold">
-          {onNoShow ? (
-            <button
-              onClick={onNoShow}
-              className="text-text-secondary hover:text-text-primary"
-            >
-              ← No-show
+      {/* Sticky action footer (mobile + desktop drawer).
+          Wraps the secondary-links row + the main button row into a
+          single fixed-to-bottom strip so the user doesn't have to
+          scroll past notes / share / receipts to advance status.
+
+          - sticky bottom-0          stays visible while body scrolls
+          - -mx-6 -mb-6 + px-6        cancels the modal body's padding
+                                      so the strip extends to the
+                                      drawer's edges
+          - bg-white + border-t       hides scrolling content above
+          - mobile pb uses safe-area  lifts above iOS home indicator
+          - sm: keeps border-t/pt-4   same visual treatment on desktop */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 border-t border-border bg-white px-6 pt-4 pb-[max(1.5rem,calc(1rem+env(safe-area-inset-bottom)))] sm:-mx-6 sm:-mb-6 sm:pb-6">
+        {canEdit && isActive && (onNoShow || (nextStatus && nextStatus.value !== "paid")) && (
+          <div className="mb-3 flex items-center justify-between gap-2 text-caption font-semibold">
+            {onNoShow ? (
+              <button
+                onClick={onNoShow}
+                className="text-text-secondary hover:text-text-primary"
+              >
+                ← No-show
+              </button>
+            ) : (
+              <span />
+            )}
+            {nextStatus && nextStatus.value !== "paid" ? (
+              <button
+                onClick={() => onStatusUpdate("paid")}
+                className="text-text-secondary hover:text-text-primary"
+              >
+                Mark Paid →
+              </button>
+            ) : (
+              <span />
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {nextStatus && (
+            <button onClick={() => onStatusUpdate(nextStatus.value)}
+              className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-body-sm font-semibold transition-colors ${nextStatus.color} hover:opacity-80`}>
+              {nextStatus.label}
             </button>
-          ) : (
-            <span />
           )}
-          {nextStatus && nextStatus.value !== "paid" ? (
-            <button
-              onClick={() => onStatusUpdate("paid")}
-              className="text-text-secondary hover:text-text-primary"
-            >
-              Mark Paid →
+          {canEdit && isActive && (
+            // Auto-sized (no flex-1) so the primary status button gets the
+            // extra horizontal room — was making "On the Way" cramped on
+            // mobile when both buttons split the width 50/50.
+            <button onClick={onCancel}
+              className="shrink-0 whitespace-nowrap rounded-xl border border-red-200 px-3 py-2.5 text-body-sm font-semibold text-error-700 hover:bg-red-50 transition-colors">
+              Cancel
             </button>
-          ) : (
-            <span />
+          )}
+          {canEdit && (
+            <button onClick={onEdit}
+              className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-surface-active text-text-secondary hover:bg-neutral-100 hover:text-text-primary transition-colors"
+              title="Edit appointment">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+            </button>
+          )}
+          {canEdit && onDelete && (
+            <button onClick={onDelete}
+              className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-surface-active text-text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"
+              title="Delete appointment (removes from records)">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
           )}
         </div>
-      )}
-      <div className="flex items-center gap-2 border-t border-border pt-4 sm:gap-3">
-        {nextStatus && (
-          <button onClick={() => onStatusUpdate(nextStatus.value)}
-            className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-body-sm font-semibold transition-colors ${nextStatus.color} hover:opacity-80`}>
-            {nextStatus.label}
-          </button>
-        )}
-        {canEdit && isActive && (
-          // Auto-sized (no flex-1) so the primary status button gets the
-          // extra horizontal room — was making "On the Way" cramped on
-          // mobile when both buttons split the width 50/50.
-          <button onClick={onCancel}
-            className="shrink-0 whitespace-nowrap rounded-xl border border-red-200 px-3 py-2.5 text-body-sm font-semibold text-error-700 hover:bg-red-50 transition-colors">
-            Cancel
-          </button>
-        )}
-        {canEdit && (
-          <button onClick={onEdit}
-            className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-surface-active text-text-secondary hover:bg-neutral-100 hover:text-text-primary transition-colors"
-            title="Edit appointment">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-            </svg>
-          </button>
-        )}
-        {canEdit && onDelete && (
-          <button onClick={onDelete}
-            className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-surface-active text-text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"
-            title="Delete appointment (removes from records)">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {/* Receipt-image lightbox — opened by tapping the paperclip near

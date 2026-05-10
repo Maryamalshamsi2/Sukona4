@@ -13,6 +13,7 @@ import {
   BundleForBooking,
   STATUS_LABELS,
   formatTime12Short,
+  formatDateLong,
   getApptTotalDuration,
   getApptTotal,
   getApptEndTime,
@@ -495,7 +496,7 @@ export default function HomeView({
       </div>
 
       {/* ==== DETAIL MODAL (same as calendar) ==== */}
-      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title="Appointment Details" variant="drawer">
+      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title={selectedAppointment ? formatDateLong(selectedAppointment.date) : "Appointment"} variant="drawer">
         {selectedAppointment && (
           <DetailView
             appointment={selectedAppointment}

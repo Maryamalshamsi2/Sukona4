@@ -14,6 +14,7 @@ import {
   STATUS_FLOW,
   formatTime12,
   formatTime12Short,
+  formatDateLong,
   timeToMinutes,
   minutesToTime,
   formatDuration,
@@ -1613,7 +1614,7 @@ export default function CalendarView({
       </Modal>
 
       {/* ==== DETAIL MODAL ==== */}
-      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title="Appointment Details" variant="drawer">
+      <Modal open={detailModalOpen} onClose={() => { setDetailModalOpen(false); }} title={selectedAppointment ? formatDateLong(selectedAppointment.date) : "Appointment"} variant="drawer">
         {selectedAppointment && (
           <DetailView
             appointment={selectedAppointment}

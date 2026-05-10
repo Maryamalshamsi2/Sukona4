@@ -28,6 +28,7 @@ import {
   BundleForBooking,
   STATUS_LABELS,
   formatTime12Short,
+  formatDateLong,
   getApptTotalDuration,
   getApptEndTime,
   getApptTotal,
@@ -721,7 +722,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       <Modal
         open={detailModalOpen}
         onClose={() => { setDetailModalOpen(false); }}
-        title="Appointment Details"
+        title={selectedAppointment ? formatDateLong(selectedAppointment.date) : "Appointment"}
         variant="drawer"
       >
         {selectedAppointment && (
