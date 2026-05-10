@@ -36,28 +36,48 @@ export default function DashboardLayout({
         setUserInitials(authParts[0][0].toUpperCase());
       }
 
-      // Fetch the profile row + the salon's currency so every descendant
-      // has access to role, group_id, salon_id, and currency.
+      // Profile loads first — it gates the entire sidebar (role-based
+      // nav). Don't couple it to the currency fetch: if the salons
+      // join fails for any reason (migration 030 not applied, RLS
+      // hiccup, syntax variance) the whole layout would render with
+      // currentUser=null and the sidebar would fall back to its
+      // role-unknown safe state (Home + Calendar only). Keep this
+      // query minimal and fast.
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, role, full_name, group_id, salon_id, salon:salon_id ( currency )")
+        .select("id, role, full_name, group_id, salon_id")
         .eq("id", user.id)
         .single();
 
       if (profile) {
-        // PostgREST nests the joined salon as either an object or
-        // a single-element array depending on inference.
-        const salonRow = Array.isArray(profile.salon)
-          ? profile.salon[0]
-          : (profile.salon as { currency?: string } | null);
+        // Set currentUser immediately so the sidebar can render
+        // role-based nav. Currency defaults to AED and gets patched
+        // by the background fetch below if the salon row supplies
+        // something else.
         setCurrentUser({
           id: profile.id,
           role: profile.role,
           full_name: profile.full_name,
           group_id: profile.group_id ?? null,
           salon_id: profile.salon_id,
-          currency: salonRow?.currency || "AED",
+          currency: "AED",
         });
+
+        // Background currency fetch — never throws, never blocks the
+        // sidebar from rendering. Tolerant of missing column (pre-
+        // migration-030 deploys) and RLS denials.
+        supabase
+          .from("salons")
+          .select("currency")
+          .eq("id", profile.salon_id)
+          .maybeSingle()
+          .then(({ data: salonData }) => {
+            if (salonData?.currency) {
+              setCurrentUser((prev) =>
+                prev ? { ...prev, currency: salonData.currency as string } : prev,
+              );
+            }
+          });
         // Prefer the profile's full_name for initials if it's richer than auth metadata.
         if (profile.full_name) {
           const parts = profile.full_name.trim().split(" ");
