@@ -1198,7 +1198,7 @@ export default function CalendarView({
               <button
                 onClick={() => setAddDropdownOpen(!addDropdownOpen)}
                 aria-label="Add"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -1915,7 +1915,7 @@ function BlockTimeForm({
           </>
         ) : (
           <select name="staff_id" required defaultValue={prefillStaffId || ""}
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
             <option value="">Select staff</option>
             {staff.map((s) => (
               <option key={s.id} value={s.id}>{s.full_name}</option>
@@ -1927,13 +1927,13 @@ function BlockTimeForm({
       <div>
         <label className="block text-body-sm font-semibold text-text-primary">Title *</label>
         <input type="text" name="title" required defaultValue={defaultTitle || "Lunch Break"} placeholder="e.g. Lunch Break, Travel"
-          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
       </div>
 
       <div>
         <label className="block text-body-sm font-semibold text-text-primary">Type</label>
         <select name="block_type" defaultValue={defaultBlockType || "break"}
-          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
+          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
           <option value="break">Break</option>
           <option value="travel">Travel / Route</option>
           <option value="personal">Personal</option>
@@ -1947,12 +1947,12 @@ function BlockTimeForm({
         <div>
           <label className="block text-body-sm font-semibold text-text-primary">Start Time *</label>
           <input type="time" name="start_time" required defaultValue={defaultStart}
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
         <div>
           <label className="block text-body-sm font-semibold text-text-primary">End Time *</label>
           <input type="time" name="end_time" required defaultValue={defaultEnd}
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
       </div>
 

@@ -285,7 +285,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
           <button
             onClick={() => setAddDropdownOpen((o) => !o)}
             aria-label="Add"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -388,7 +388,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               <button
                 type="button"
                 onClick={openAddMember}
-                className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+                className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -468,7 +468,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               type="text"
               required
               defaultValue={editingGroup?.name ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             />
           </div>
           <div className="flex justify-end gap-3 pt-3">
@@ -481,7 +481,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
             >
               {editingGroup ? "Save" : "Add Group"}
             </button>
@@ -508,7 +508,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               type="text"
               required
               defaultValue={editingMember?.full_name ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             />
           </div>
 
@@ -546,7 +546,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                   type="email"
                   defaultValue={editingMember?.email ?? ""}
                   placeholder="name@example.com"
-                  className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                  className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
                 />
                 <p className="mt-1.5 text-caption text-text-tertiary">
                   If provided, they can sign in with phone OR email.
@@ -565,7 +565,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                     required={isAddingMember}
                     minLength={isAddingMember ? 6 : undefined}
                     placeholder={isAddingMember ? "Min 6 characters" : "Leave blank to keep current"}
-                    className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 pr-11 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                    className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 pr-11 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
                   />
                   <button
                     type="button"
@@ -606,7 +606,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               type="text"
               placeholder="e.g. Nail Technician"
               defaultValue={editingMember?.job_title ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             />
           </div>
 
@@ -620,7 +620,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               name="role"
               value={memberRole}
               onChange={(e) => setMemberRole(e.target.value)}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
             >
               <option value="owner">Owner</option>
               <option value="admin">Admin</option>
@@ -668,7 +668,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                 id="mem-group"
                 name="group_id"
                 defaultValue={editingMember?.group_id ?? ""}
-                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
               >
                 <option value="">No group</option>
                 {groups.map((g) => (
@@ -689,7 +689,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                 step="0.01"
                 min="0"
                 defaultValue={editingMember?.salary || ""}
-                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
               />
             </div>
           </div>
@@ -810,7 +810,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
             >
               {isAddingMember ? "Add Member" : "Save"}
             </button>

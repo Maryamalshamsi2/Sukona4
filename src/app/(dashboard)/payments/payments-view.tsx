@@ -115,7 +115,7 @@ export default function PaymentsView({ initialPayments }: { initialPayments: Pay
                     {p.receipt_url && (
                       <button
                         onClick={() => setPreviewUrl(p.receipt_url)}
-                        className="block h-14 w-14 overflow-hidden rounded-lg ring-1 ring-border hover:ring-neutral-400 transition-all"
+                        className="block h-14 w-14 overflow-hidden rounded-lg ring-1 ring-border hover:ring-neutral-400 transition"
                         title="View receipt"
                       >
                         <img

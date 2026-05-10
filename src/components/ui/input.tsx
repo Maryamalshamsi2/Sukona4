@@ -12,7 +12,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const base =
-  "block w-full rounded-xl border-[1.5px] bg-white px-4 text-body text-text-primary placeholder:text-text-disabled transition-all focus:outline-none focus:ring-2 disabled:bg-neutral-50 disabled:text-text-disabled disabled:cursor-not-allowed";
+  "block w-full rounded-xl border-[1.5px] bg-white px-4 text-body text-text-primary placeholder:text-text-disabled transition focus:outline-none focus:ring-2 disabled:bg-neutral-50 disabled:text-text-disabled disabled:cursor-not-allowed";
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ error = false, className = "", ...props }, ref) => {

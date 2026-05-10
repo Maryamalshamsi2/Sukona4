@@ -12,7 +12,7 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 const base =
-  "block w-full appearance-none rounded-xl border-[1.5px] bg-white px-4 pr-9 text-body text-text-primary transition-all focus:outline-none focus:ring-2 disabled:bg-neutral-50 disabled:text-text-disabled disabled:cursor-not-allowed";
+  "block w-full appearance-none rounded-xl border-[1.5px] bg-white px-4 pr-9 text-body text-text-primary transition focus:outline-none focus:ring-2 disabled:bg-neutral-50 disabled:text-text-disabled disabled:cursor-not-allowed";
 
 /*
  * Custom caret — inline SVG as background-image so we

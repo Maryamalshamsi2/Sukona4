@@ -96,7 +96,7 @@ export default function DashboardLayout({
               </svg>
               <HeaderSearchInput
                 placeholder="Search..."
-                className="w-56 rounded-xl border-0 bg-surface-active py-2 pl-9 pr-4 text-body-sm text-text-primary placeholder-text-tertiary transition-all focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-200 lg:w-72"
+                className="w-56 rounded-xl border-0 bg-surface-active py-2 pl-9 pr-4 text-body-sm text-text-primary placeholder-text-tertiary transition focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-200 lg:w-72"
               />
             </div>
 

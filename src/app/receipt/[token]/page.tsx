@@ -70,7 +70,7 @@ export default function ReceiptPage({
         <button
           type="button"
           onClick={() => window.print()}
-          className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 active:scale-[0.98] transition-all"
+          className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90 active:scale-[0.98] transition"
           style={{ backgroundColor: brand }}
         >
           Print / Save as PDF

@@ -17,7 +17,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /* Shared base classes applied to every button */
 const base =
-  "inline-flex items-center justify-center font-semibold rounded-xl transition-all active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:pointer-events-none";
+  "inline-flex items-center justify-center font-semibold rounded-xl transition active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:pointer-events-none";
 
 /* Variant-specific classes */
 const variantClasses: Record<Variant, string> = {

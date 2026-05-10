@@ -187,7 +187,7 @@ export default function ReviewPage({
                   ? "Tell us what went wrong — we want to make it right."
                   : "Share what you loved!"
               }
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
         )}

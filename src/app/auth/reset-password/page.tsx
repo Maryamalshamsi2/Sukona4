@@ -92,7 +92,7 @@ export default function ResetPasswordPage() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
                 placeholder="••••••••"
               />
             </div>
@@ -108,7 +108,7 @@ export default function ResetPasswordPage() {
                 minLength={6}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white/80 px-4 py-3 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 text-body sm:text-body-sm sm:py-2.5"
                 placeholder="••••••••"
               />
             </div>
@@ -118,7 +118,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-text-inverse font-semibold tracking-tight hover:bg-neutral-800 active:scale-[0.98] transition-all focus:outline-none focus:ring-2 focus:ring-neutral-300 focus:ring-offset-2 disabled:opacity-50 sm:py-2.5"
+              className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-text-inverse font-semibold tracking-tight hover:bg-neutral-800 active:scale-[0.98] transition focus:outline-none focus:ring-2 focus:ring-neutral-300 focus:ring-offset-2 disabled:opacity-50 sm:py-2.5"
             >
               {loading ? "Updating..." : "Update password"}
             </button>

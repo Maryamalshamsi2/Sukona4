@@ -176,10 +176,10 @@ export default function PhoneInput({
   // can sit flush inside a parent rounded grey container.
   const buttonClass = isIos
     ? `flex items-center gap-1 bg-transparent text-body text-text-primary focus:outline-none ${isSmall ? "min-w-[80px]" : "min-w-[72px]"}`
-    : `flex items-center gap-1 rounded-xl border-[1.5px] border-neutral-200 bg-white transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls} ${isSmall ? "min-w-[80px]" : "min-w-[88px]"}`;
+    : `flex items-center gap-1 rounded-xl border-[1.5px] border-neutral-200 bg-white transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls} ${isSmall ? "min-w-[80px]" : "min-w-[88px]"}`;
   const inputClass = isIos
     ? "block flex-1 bg-transparent text-body text-text-primary focus:outline-none sm:text-body-sm"
-    : `block flex-1 rounded-xl border-[1.5px] border-neutral-200 transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls}`;
+    : `block flex-1 rounded-xl border-[1.5px] border-neutral-200 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${inputCls}`;
   const wrapperClass = isIos
     ? `flex items-center gap-2 ${className || ""}`
     : `flex gap-2 ${className || ""}`;

@@ -376,7 +376,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
           <button
             onClick={openAdd}
             aria-label="Add client"
-            className="hidden shrink-0 sm:flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+            className="hidden shrink-0 sm:flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -404,7 +404,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, phone, or location"
-            className="w-full rounded-xl border-[1.5px] border-neutral-200 bg-white pl-10 pr-4 py-2.5 text-body-sm transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="w-full rounded-xl border-[1.5px] border-neutral-200 bg-white pl-10 pr-4 py-2.5 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
           {searchQuery && (
             <button
@@ -437,7 +437,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             <button
               type="button"
               onClick={openAdd}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -575,7 +575,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
           <div>
             <label htmlFor="name" className="block text-body-sm font-semibold text-text-primary">Name *</label>
             <input id="name" name="name" type="text" required defaultValue={editing?.name ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5" />
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5" />
           </div>
           <div>
             <label className="block text-body-sm font-semibold text-text-primary">Phone *</label>
@@ -604,13 +604,13 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
           <div>
             <label htmlFor="notes" className="block text-body-sm font-semibold text-text-primary">Notes</label>
             <textarea id="notes" name="notes" rows={2} defaultValue={editing?.notes ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition-all focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5" />
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5" />
           </div>
           <div className="flex justify-end gap-3 pt-3">
             <button type="button" onClick={() => { setModalOpen(false); setEditing(null); }}
               className="rounded-xl bg-surface-active px-5 py-2.5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100">Cancel</button>
             <button type="submit"
-              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all">
+              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition">
               {editing ? "Save" : "Add Client"}
             </button>
           </div>

@@ -121,7 +121,7 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
         <form action={signOut} className="mt-4">
           <button
             type="submit"
-            className="rounded-xl border border-red-200 px-4 py-2 text-body-sm font-semibold text-red-600 hover:bg-red-50 active:scale-[0.98] transition-all"
+            className="rounded-xl border border-red-200 px-4 py-2 text-body-sm font-semibold text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
           >
             Sign out
           </button>
@@ -175,7 +175,7 @@ function ProfileSection({ profile, onUpdate, isStaff }: { profile: Profile; onUp
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             required
           />
         </div>
@@ -200,7 +200,7 @@ function ProfileSection({ profile, onUpdate, isStaff }: { profile: Profile; onUp
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+971 XX XXX XXXX"
               disabled={isStaff}
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-neutral-50 disabled:text-text-secondary disabled:cursor-not-allowed"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-neutral-50 disabled:text-text-secondary disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -211,7 +211,7 @@ function ProfileSection({ profile, onUpdate, isStaff }: { profile: Profile; onUp
               onChange={(e) => setJobTitle(e.target.value)}
               placeholder="e.g. Nail Technician"
               disabled={isStaff}
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-neutral-50 disabled:text-text-secondary disabled:cursor-not-allowed"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-neutral-50 disabled:text-text-secondary disabled:cursor-not-allowed"
             />
           </div>
         </div>
@@ -238,7 +238,7 @@ function ProfileSection({ profile, onUpdate, isStaff }: { profile: Profile; onUp
           <button
             type="submit"
             disabled={saving || !hasChanges}
-            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>
@@ -301,7 +301,7 @@ function SecuritySection() {
               minLength={6}
               required
               placeholder="••••••••"
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 pr-10 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 pr-10 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
             <button
               type="button"
@@ -331,7 +331,7 @@ function SecuritySection() {
             minLength={6}
             required
             placeholder="••••••••"
-            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
         </div>
 
@@ -345,7 +345,7 @@ function SecuritySection() {
           <button
             type="submit"
             disabled={saving || !newPassword || !confirmPassword}
-            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
           >
             {saving ? "Updating..." : "Update Password"}
           </button>
@@ -464,7 +464,7 @@ function SalonSection({
             onChange={(e) => setName(e.target.value)}
             maxLength={80}
             required
-            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             placeholder="e.g. Ateeq Spa"
           />
         </div>
@@ -503,7 +503,7 @@ function SalonSection({
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             >
               {LANGUAGES.map((l) => (
                 <option key={l.value} value={l.value}>
@@ -535,7 +535,7 @@ function SalonSection({
             type="url"
             value={reviewUrl}
             onChange={(e) => setReviewUrl(e.target.value)}
-            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             placeholder="https://g.page/your-salon/review"
           />
           <p className="mt-1 text-caption text-text-tertiary">
@@ -552,7 +552,7 @@ function SalonSection({
             value={signoff}
             onChange={(e) => setSignoff(e.target.value)}
             maxLength={120}
-            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             placeholder={`— ${name || "Ateeq Spa"} team`}
           />
           <p className="mt-1 text-caption text-text-tertiary">
@@ -582,7 +582,7 @@ function SalonSection({
                   step="0.01"
                   value={vatPercent}
                   onChange={(e) => setVatPercent(e.target.value)}
-                  className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 pr-9 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 pr-9 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                   placeholder="0"
                 />
                 <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-body-sm text-text-tertiary">
@@ -601,7 +601,7 @@ function SalonSection({
                   value={vatTrn}
                   onChange={(e) => setVatTrn(e.target.value)}
                   maxLength={32}
-                  className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                   placeholder="100123456700003"
                 />
                 <p className="mt-1 text-caption text-text-tertiary">
@@ -622,7 +622,7 @@ function SalonSection({
           <button
             type="submit"
             disabled={saving || !hasChanges}
-            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>
@@ -777,7 +777,7 @@ function WhatsAppSection() {
               value={phoneNumberId}
               onChange={(e) => setPhoneNumberId(e.target.value)}
               placeholder="e.g. 1234567890"
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
             <p className="mt-1 text-caption text-text-tertiary">
               From Meta Business → WhatsApp → API Setup.
@@ -793,7 +793,7 @@ function WhatsAppSection() {
               value={businessAccountId}
               onChange={(e) => setBusinessAccountId(e.target.value)}
               placeholder="e.g. 9876543210"
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
 
@@ -810,7 +810,7 @@ function WhatsAppSection() {
                   ? `Token saved (${creds.accessTokenMask}). Leave blank to keep.`
                   : "Paste permanent system-user token"
               }
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm font-mono transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
             <p className="mt-1 text-caption text-text-tertiary">
               Use a permanent system-user token (not the temporary 24-hour one).
@@ -832,7 +832,7 @@ function WhatsAppSection() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save Credentials"}
             </button>
@@ -874,7 +874,7 @@ function WhatsAppSection() {
             <button
               type="submit"
               disabled={testing || !testPhone}
-              className="rounded-xl bg-emerald-600 px-4 py-2 text-body-sm font-semibold text-white hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-50"
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-body-sm font-semibold text-white hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50"
             >
               {testing ? "Sending..." : "Send Test"}
             </button>

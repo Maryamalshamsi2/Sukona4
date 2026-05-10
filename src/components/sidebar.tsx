@@ -125,7 +125,7 @@ export default function Sidebar({
                 href={item.href}
                 onClick={onClose}
                 title={item.label}
-                className={`relative flex h-11 items-center gap-3 rounded-xl px-3 transition-all duration-200 group lg:h-10 lg:w-10 lg:justify-center lg:px-0 lg:rounded-xl ${
+                className={`relative flex h-11 items-center gap-3 rounded-xl px-3 transition duration-200 group lg:h-10 lg:w-10 lg:justify-center lg:px-0 lg:rounded-xl ${
                   isActive
                     ? "bg-black/[0.06] text-text-primary"
                     : "text-text-tertiary hover:text-text-secondary"

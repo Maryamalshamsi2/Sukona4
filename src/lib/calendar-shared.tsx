@@ -1269,7 +1269,7 @@ export function AppointmentForm({
 
         {clientMode === "existing" ? (
           <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} required
-            className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
+            className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
             <option value="">Select a client</option>
             {allClients.map((c) => (
               <option key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ""}</option>
@@ -1281,7 +1281,7 @@ export function AppointmentForm({
               <label className="block text-body-sm font-semibold text-text-primary">Name *</label>
               <input type="text" value={newClientName}
                 onChange={(e) => setNewClientName(e.target.value)} required
-                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
             </div>
             <div>
               <label className="block text-body-sm font-semibold text-text-primary">Phone *</label>
@@ -1314,11 +1314,11 @@ export function AppointmentForm({
               <label className="block text-body-sm font-semibold text-text-primary">Notes</label>
               <textarea rows={2} value={newClientNotes}
                 onChange={(e) => setNewClientNotes(e.target.value)}
-                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
             </div>
             <button type="button" onClick={handleSaveClient}
               disabled={savingClient || !newClientName.trim() || !newClientPhone.trim()}
-              className="w-full rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 disabled:opacity-50 transition-all">
+              className="w-full rounded-xl bg-neutral-900 px-4 py-2 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 disabled:opacity-50 transition">
               {savingClient ? "Saving..." : "Save Client"}
             </button>
           </div>
@@ -1329,12 +1329,12 @@ export function AppointmentForm({
         <div>
           <label className="block text-body-sm font-semibold text-text-primary">Date *</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
         <div>
           <label className="block text-body-sm font-semibold text-text-primary">Start Time *</label>
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
       </div>
 
@@ -1423,7 +1423,7 @@ export function AppointmentForm({
                       ) : (
                         <select value={entry.service_id} onChange={(e) => handleServiceSelect(idx, e.target.value)}
                           required
-                          className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
+                          className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
                           <option value="">Select service</option>
                           {services.map((s) => (
                             <option key={s.id} value={s.id}>
@@ -1454,7 +1454,7 @@ export function AppointmentForm({
 
                       <select value={entry.staff_id} onChange={(e) => updateEntry(idx, "staff_id", e.target.value)}
                         required
-                        className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
+                        className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
                         <option value="">Assign staff *</option>
                         {staff.map((s) => (
                           <option key={s.id} value={s.id}>
@@ -1589,7 +1589,7 @@ export function AppointmentForm({
                     value={transportCharge}
                     onChange={(e) => setTransportCharge(e.target.value)}
                     placeholder="0"
-                    className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                    className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                   />
                 </div>
 
@@ -1623,7 +1623,7 @@ export function AppointmentForm({
                       value={discountValue}
                       onChange={(e) => setDiscountValue(e.target.value)}
                       placeholder="0"
-                      className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                      className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                     />
                   </div>
                 </div>
@@ -1641,7 +1641,7 @@ export function AppointmentForm({
                 value={totalOverride}
                 onChange={(e) => setTotalOverride(e.target.value)}
                 placeholder="Leave blank to auto-calculate"
-                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
               <p className="mt-1.5 text-caption text-text-tertiary">
                 When set, this replaces the calculated total — transportation and discount are ignored.
@@ -1654,7 +1654,7 @@ export function AppointmentForm({
       <div>
         <label className="block text-body-sm font-semibold text-text-primary">Notes</label>
         <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
       </div>
 
       <div className="flex justify-end gap-3 pt-2">

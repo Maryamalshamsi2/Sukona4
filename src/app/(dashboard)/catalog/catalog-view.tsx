@@ -622,7 +622,7 @@ export default function CatalogView({
           <button
             onClick={() => setAddDropdownOpen(!addDropdownOpen)}
             aria-label="Add"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -867,7 +867,7 @@ export default function CatalogView({
               type="text"
               required
               defaultValue={editingCategory?.name ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -880,7 +880,7 @@ export default function CatalogView({
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
             >
               {editingCategory ? "Save" : "Add Category"}
             </button>
@@ -905,7 +905,7 @@ export default function CatalogView({
               type="text"
               required
               defaultValue={editingService?.name ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
 
@@ -917,7 +917,7 @@ export default function CatalogView({
               id="svc-category"
               name="category_id"
               defaultValue={editingService?.category_id ?? ""}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             >
               <option value="">No category</option>
               {categories.map((cat) => (
@@ -941,7 +941,7 @@ export default function CatalogView({
                 min="0"
                 required
                 defaultValue={editingService?.price ?? ""}
-                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
             </div>
             <div>
@@ -956,7 +956,7 @@ export default function CatalogView({
                 step="5"
                 required
                 defaultValue={editingService?.duration_minutes ?? 60}
-                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
             </div>
           </div>
@@ -988,7 +988,7 @@ export default function CatalogView({
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all"
+              className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
             >
               {editingService ? "Save" : "Add Service"}
             </button>
@@ -1204,7 +1204,7 @@ function BundleForm({
           onChange={(e) => setName(e.target.value)}
           required
           placeholder="e.g. Mani & Pedi Combo"
-          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
         />
       </div>
 
@@ -1213,7 +1213,7 @@ function BundleForm({
         <select
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
-          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
         >
           <option value="">No category</option>
           {categories.map((cat) => (
@@ -1298,7 +1298,7 @@ function BundleForm({
                   value={fixedPrice}
                   onChange={(e) => setFixedPrice(e.target.value)}
                   placeholder={originalPrice.toFixed(2)}
-                  className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                 />
               </div>
             ) : (
@@ -1314,7 +1314,7 @@ function BundleForm({
                   value={discountPercentage}
                   onChange={(e) => setDiscountPercentage(e.target.value)}
                   placeholder="e.g. 10"
-                  className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                 />
               </div>
             )}
@@ -1332,7 +1332,7 @@ function BundleForm({
               value={customDuration}
               onChange={(e) => setCustomDuration(e.target.value)}
               placeholder={`${totalDuration} (auto from services)`}
-              className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition-all focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              className="block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
             <p className="mt-1 text-caption text-text-tertiary">Leave empty to auto-calculate from services</p>
           </div>
@@ -1380,7 +1380,7 @@ function BundleForm({
         <button
           type="submit"
           disabled={submitting || selectedServiceIds.length < 2}
-          className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition-all disabled:opacity-50"
+          className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
         >
           {submitting ? "Saving..." : editingBundle ? "Save" : "Create Bundle"}
         </button>

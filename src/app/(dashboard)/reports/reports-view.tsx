@@ -548,7 +548,7 @@ export default function ReportsView({
                               <td className="px-3 py-3 text-right">
                                 <button
                                   onClick={() => handleDeleteAppointment(appt.id)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary opacity-0 transition-all group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
                                   title="Delete appointment (removes from records)"
                                   aria-label="Delete appointment"
                                 >
