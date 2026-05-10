@@ -218,9 +218,9 @@ function Hero() {
     <section className="bg-white">
       <div className="mx-auto max-w-5xl px-5 pt-20 text-center sm:px-8 sm:pt-28 lg:pt-36">
         <h1 className="mx-auto max-w-4xl text-[2.5rem] font-medium tracking-tight text-text-primary leading-[1.05] sm:text-6xl sm:leading-[1.02] lg:text-7xl xl:text-[5.5rem]">
-          Home beauty,
+          Less juggling.
           <br />
-          all in one place.
+          More appointments.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
           For mobile beauty and wellness businesses — solo or team.
@@ -409,9 +409,9 @@ function Manifesto() {
           Why Sukona
         </p>
         <h2 className="mx-auto mt-4 max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
-          Less juggling.
+          Home beauty,
           <br />
-          <span className="text-text-secondary">More appointments.</span>
+          <span className="text-text-secondary">all in one place.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary sm:text-xl">
           Sukona replaces WhatsApp threads, paper notes, and memory, with
@@ -956,9 +956,7 @@ function FinalCTA() {
     <section className="bg-white py-24 text-center sm:py-32 lg:py-40">
       <div className="mx-auto max-w-3xl px-5 sm:px-8">
         <h2 className="text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.02] lg:text-6xl">
-          Try Sukona free for
-          <br />
-          <span className="text-primary-600">seven days.</span>
+          Try Sukona for free.
         </h2>
         <Link
           href="/signup"
@@ -982,9 +980,10 @@ function Footer() {
         <div className="flex flex-col gap-10 sm:flex-row sm:justify-between">
           <div>
             {/* Footer uses the icon-only mark (the wordmark already
-                anchors the nav at the top). Smaller + square. */}
+                anchors the nav at the top). Sized to read as a real
+                brand presence, not a tucked-away byline. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/symbol-dark.png" alt="Sukona" className="h-9 w-auto sm:h-10" />
+            <img src="/symbol-dark.png" alt="Sukona" className="h-[72px] w-auto sm:h-[80px]" />
             <p className="mt-4 max-w-xs text-body-sm text-text-secondary">
               The operational system for home-service beauty and wellness.
             </p>
