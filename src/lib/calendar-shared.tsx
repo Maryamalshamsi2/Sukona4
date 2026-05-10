@@ -252,9 +252,6 @@ export function formatAppointmentHeading(appt: AppointmentData): React.ReactNode
           still groups them as the modal's heading. */}
       <span className="block mt-1.5 text-body-sm font-normal text-text-secondary">
         {formatTime12(appt.time)} – {formatTime12(endTime)} ({formatDuration(duration)})
-        {appt.duration_override != null && (
-          <span className="ml-1.5 text-text-tertiary">· adjusted</span>
-        )}
       </span>
     </>
   );
