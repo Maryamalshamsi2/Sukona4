@@ -12,7 +12,12 @@ export default function Modal({
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  /**
+   * Modal heading. Accepts a ReactNode so callers can pass a
+   * multi-line composite (e.g. date on top + time as subtitle)
+   * and not just a single string.
+   */
+  title: React.ReactNode;
   children: React.ReactNode;
   size?: "md" | "lg";
   /**
@@ -66,12 +71,14 @@ export default function Modal({
           variant === "drawer" ? "sm:h-full sm:max-h-none" : "sm:h-auto sm:max-h-[90vh]"
         }`}
       >
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-title-section font-semibold tracking-tight text-text-primary">{title}</h2>
+        {/* Header. items-start (not center) so the close button anchors
+            to the top of multi-line titles (e.g. date + time subtitle)
+            instead of floating between the lines. */}
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-6 py-4">
+          <h2 className="min-w-0 text-title-section font-semibold tracking-tight text-text-primary">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-text-tertiary hover:bg-surface-active hover:text-text-secondary -mr-1"
+            className="shrink-0 rounded-lg p-2 text-text-tertiary hover:bg-surface-active hover:text-text-secondary -mr-1 -mt-1"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

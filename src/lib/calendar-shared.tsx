@@ -234,6 +234,29 @@ export function formatDateLong(dateStr: string) {
   });
 }
 
+/**
+ * Modal-title content for the appointment detail drawer. Two lines:
+ *   - the date in long form ("May 10, 2026")
+ *   - the time range with duration as a smaller subtitle
+ * Used by every caller of <Modal title=...> for that drawer so the
+ * header carries both the "what day" and "what time" context.
+ */
+export function formatAppointmentHeading(appt: AppointmentData): React.ReactNode {
+  const endTime = getApptEndTime(appt);
+  const duration = getApptTotalDuration(appt);
+  return (
+    <>
+      <span>{formatDateLong(appt.date)}</span>
+      <span className="block mt-0.5 text-body-sm font-normal text-text-secondary">
+        {formatTime12(appt.time)} – {formatTime12(endTime)} ({formatDuration(duration)})
+        {appt.duration_override != null && (
+          <span className="ml-1.5 text-text-tertiary">· adjusted</span>
+        )}
+      </span>
+    </>
+  );
+}
+
 export function getServiceTimings(appt: AppointmentData) {
   const startMin = timeToMinutes(appt.time);
   const sorted = [...appt.appointment_services].sort((a, b) => a.sort_order - b.sort_order);
@@ -424,7 +447,12 @@ export function DetailView({
 
   return (
     <div className="space-y-7">
-      {/* ---- Hero: client name + status + phone + paid-receipt controls ---- */}
+      {/* ---- Client block ---- */}
+      {/* Date + time live in the modal's title bar (passed by the
+          caller), so this single block now consolidates everything
+          about the CLIENT: name + status, phone, address, map link,
+          and any paid-receipt actions. One coherent group instead of
+          a hero-then-when-then-where stack. */}
       <div>
         <div className="flex items-start justify-between gap-3">
           <h2 className="min-w-0 text-title-section font-semibold tracking-tight text-text-primary truncate">
@@ -434,84 +462,66 @@ export function DetailView({
             {STATUS_LABELS[appointment.status]?.label || appointment.status}
           </span>
         </div>
-        {(appointment.clients?.phone || uploadedReceiptUrls.length > 0 || hasPaidReceiptControls) && (
-          <div className="mt-1.5 flex items-center justify-between gap-3">
-            {appointment.clients?.phone ? (
-              <a
-                href={`tel:${appointment.clients.phone}`}
-                className="min-w-0 truncate text-body-sm text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
-              >
-                {appointment.clients.phone}
-              </a>
-            ) : (
-              <span />
-            )}
-            {(uploadedReceiptUrls.length > 0 || hasPaidReceiptControls) && (
-              <div className="flex shrink-0 items-center gap-2">
-                {uploadedReceiptUrls.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setReceiptPreviewIdx(0); setReceiptPreviewOpen(true); }}
-                    aria-label={`View ${uploadedReceiptUrls.length} uploaded receipt${uploadedReceiptUrls.length > 1 ? "s" : ""}`}
-                    className="flex h-7 items-center justify-center gap-1 rounded-lg px-1.5 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                    </svg>
-                    {uploadedReceiptUrls.length > 1 && (
-                      <span className="text-caption font-semibold tabular-nums">{uploadedReceiptUrls.length}</span>
-                    )}
-                  </button>
-                )}
-                {hasPaidReceiptControls && (
-                  <button
-                    type="button"
-                    onClick={onEditPayment}
-                    className="text-caption font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
-                  >
-                    Edit payment
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ---- When + where ---- */}
-      {/* Date is now in the modal's title bar (passed by the caller),
-          so this body section drops it and just shows the from–to time
-          + duration on one line, then address + map link below. */}
-      <div className="space-y-3 text-body-sm">
-        <p className="flex items-center gap-1.5 text-text-primary font-medium">
-          <span>
-            {formatTime12(appointment.time)} – {formatTime12(endTime)}
-            {" "}({formatDuration(totalDuration)})
-          </span>
-          {appointment.duration_override != null && (
-            <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-caption font-medium text-text-tertiary">
-              adjusted
-            </span>
+        <div className="mt-1.5 space-y-1 text-body-sm">
+          {(appointment.clients?.phone || uploadedReceiptUrls.length > 0 || hasPaidReceiptControls) && (
+            <div className="flex items-center justify-between gap-3">
+              {appointment.clients?.phone ? (
+                <a
+                  href={`tel:${appointment.clients.phone}`}
+                  className="min-w-0 truncate text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+                >
+                  {appointment.clients.phone}
+                </a>
+              ) : (
+                <span />
+              )}
+              {(uploadedReceiptUrls.length > 0 || hasPaidReceiptControls) && (
+                <div className="flex shrink-0 items-center gap-2">
+                  {uploadedReceiptUrls.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setReceiptPreviewIdx(0); setReceiptPreviewOpen(true); }}
+                      aria-label={`View ${uploadedReceiptUrls.length} uploaded receipt${uploadedReceiptUrls.length > 1 ? "s" : ""}`}
+                      className="flex h-7 items-center justify-center gap-1 rounded-lg px-1.5 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                      </svg>
+                      {uploadedReceiptUrls.length > 1 && (
+                        <span className="text-caption font-semibold tabular-nums">{uploadedReceiptUrls.length}</span>
+                      )}
+                    </button>
+                  )}
+                  {hasPaidReceiptControls && (
+                    <button
+                      type="button"
+                      onClick={onEditPayment}
+                      className="text-caption font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                    >
+                      Edit payment
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
-        </p>
-        {appointment.clients?.address && (
-          <div className="space-y-0.5">
+          {appointment.clients?.address && (
             <p className="text-text-secondary">{appointment.clients.address}</p>
-            {appointment.clients.map_link && (
-              <a
-                href={appointment.clients.map_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
-              >
-                Open in Maps
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                </svg>
-              </a>
-            )}
-          </div>
-        )}
+          )}
+          {appointment.clients?.map_link && (
+            <a
+              href={appointment.clients.map_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+            >
+              Open in Maps
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          )}
+        </div>
       </div>
 
       {/* ---- Services: single card with total inside ---- */}
