@@ -434,13 +434,12 @@ function MobileSection() {
     <section id="about" className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
-          Manage your business
+          Your schedule,
           <br />
-          <span className="text-text-secondary">from anywhere.</span>
+          <span className="text-text-secondary">at a glance.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Between appointments, on the way to the next, in a client&rsquo;s
-          location.
+          See your full day, every appointment, every location.
         </p>
       </div>
 
@@ -673,12 +672,12 @@ function PaymentsSection() {
     <section className="bg-white py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
-          Get paid.
+          Happy clients,
           <br />
-          <span className="text-text-secondary">Send the receipt.</span>
+          <span className="text-text-secondary">every time.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Share receipts. Record payments automatically.
+          Notify them, share receipts, collect reviews, remember every detail.
         </p>
       </div>
 
@@ -760,9 +759,9 @@ function ReportsSection() {
           <span className="text-text-secondary">actually working.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          The numbers that run your business.
+          The numbers that grow your business.
           <br />
-          Revenue, expenses, profit.
+          Revenue, expenses, inventory, team.
         </p>
       </div>
 
