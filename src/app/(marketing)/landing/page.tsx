@@ -257,31 +257,36 @@ function Hero() {
 // ============================================================
 
 function CalendarMock() {
-  const staff = ["Layla", "Aisha", "Maya"];
-  const hours = ["9", "10", "11", "12", "1", "2", "3", "4"];
-  const HOUR_PX = 56;
+  // Staff names and header layout mirror the real dashboard
+  // calendar (see (dashboard)/calendar/calendar-view.tsx). The
+  // Today pill / arrows / date / filter / + button row matches
+  // the desktop reference layout. Appointment blocks carry the
+  // four-line content the real app shows: client name, location,
+  // time range, service.
+  const staff = ["Aica", "Maripel", "Richelly"];
+  const hours = ["11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM"];
+  const HOUR_PX = 60;
   const HEAD_PX = 48;
-  // Narrower gutter than the desktop dashboard uses (the real app has
-  // w-16 = 64px). At 48px we give phones more room for the staff
-  // columns; appointment chips still read at the smaller width.
-  const TIME_COL_PX = 48;
+  const TIME_COL_PX = 56;
 
-  // Status tones lifted from the real app — see calendar-shared.tsx.
   type Status = "scheduled" | "arrived" | "paid" | "on_the_way";
   const apps: Array<{
     col: number;
     top: number;
     dur: number;
     name: string;
+    loc: string;
+    time: string;
     svc: string;
     status: Status;
   }> = [
-    { col: 0, top: 0,    dur: 1.5, name: "Sara M.",  svc: "Highlights", status: "paid" },
-    { col: 0, top: 2.5,  dur: 1,   name: "Noor K.",  svc: "Cut & blow", status: "scheduled" },
-    { col: 1, top: 0.5,  dur: 2,   name: "Layla S.", svc: "Color",      status: "arrived" },
-    { col: 1, top: 3.5,  dur: 1,   name: "Reem A.",  svc: "Manicure",   status: "scheduled" },
-    { col: 2, top: 1,    dur: 1,   name: "Lina H.",  svc: "Brows",      status: "on_the_way" },
-    { col: 2, top: 2.5,  dur: 2,   name: "Mariam Z.", svc: "Treatment", status: "scheduled" },
+    { col: 0, top: 0.5, dur: 1.5, name: "Aisha",   loc: "Al Khawaneej 2",    time: "11:30 AM – 1 PM",  svc: "Signature Manicure", status: "scheduled" },
+    { col: 0, top: 3,   dur: 1,   name: "Fatma",   loc: "Dubai Hills",       time: "2 PM – 3 PM",      svc: "Hair color",         status: "arrived" },
+    { col: 0, top: 4.5, dur: 1,   name: "Noor",    loc: "JBR Marina",        time: "3:30 – 4:30 PM",   svc: "Cut & blow",         status: "paid" },
+    { col: 1, top: 0,   dur: 2,   name: "Layla",   loc: "Sharjah, Al Majaz", time: "11 AM – 1 PM",     svc: "Color treatment",    status: "scheduled" },
+    { col: 1, top: 3,   dur: 1.5, name: "Reem",    loc: "Marina, Dubai",     time: "2 PM – 3:30 PM",   svc: "Manicure",           status: "on_the_way" },
+    { col: 2, top: 1,   dur: 1,   name: "Lina",    loc: "Khalifa City",      time: "12 PM – 1 PM",     svc: "Brows tint",         status: "scheduled" },
+    { col: 2, top: 2.5, dur: 2,   name: "Mariam",  loc: "Yas Island",        time: "1:30 PM – 3:30 PM", svc: "Aromatherapy",      status: "scheduled" },
   ];
 
   const statusStyles: Record<Status, string> = {
@@ -293,25 +298,41 @@ function CalendarMock() {
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white shadow-[0_40px_100px_-40px_rgba(0,0,0,0.28)]">
-      {/* Top bar — matches the real calendar-view top bar */}
-      <div className="flex items-center justify-between border-b border-[#EAEAEA] px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="text-body font-semibold text-text-primary sm:text-title-section">
-            Friday, May 10
-          </div>
-          <div className="rounded-full bg-neutral-900 px-3 py-1 text-caption font-semibold text-text-inverse">
+      {/* Top bar — Today pill, prev/next arrows, date label, filter
+          icon, + FAB. Matches the real calendar-view top bar. */}
+      <div className="flex items-center justify-between border-b border-[#EAEAEA] px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="rounded-full bg-surface-active px-3 py-1.5 text-caption font-medium text-text-primary sm:text-body-sm">
             Today
           </div>
-        </div>
-        <div className="flex items-center gap-1">
           <button className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
           </button>
+          <div className="text-body-sm font-semibold text-text-primary sm:text-title-section">
+            Tue 12 May
+          </div>
           <button className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Filter (sliders) */}
+          <button className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6.5h12M19 6.5h2M3 12h2M9 12h12M3 17.5h12M19 17.5h2" />
+              <circle cx="17" cy="6.5" r="1.75" fill="currentColor" stroke="none" />
+              <circle cx="7" cy="12" r="1.75" fill="currentColor" stroke="none" />
+              <circle cx="17" cy="17.5" r="1.75" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+          {/* + FAB */}
+          <button className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900 text-text-inverse transition active:scale-95">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
             </svg>
           </button>
         </div>
@@ -352,7 +373,7 @@ function CalendarMock() {
             {hours.map((h) => (
               <Fragment key={h}>
                 <div
-                  className="border-b border-r border-[#EAEAEA] px-2 pt-1 text-right text-caption text-text-tertiary"
+                  className="border-b border-r border-[#EAEAEA] px-2 pt-1 text-right text-[10px] text-text-tertiary"
                   style={{ height: HOUR_PX }}
                 >
                   {h}
@@ -372,7 +393,7 @@ function CalendarMock() {
             {apps.map((a, i) => (
               <div
                 key={i}
-                className={`absolute overflow-hidden rounded-lg border px-2 py-1 ${statusStyles[a.status]}`}
+                className={`absolute overflow-hidden rounded-lg border px-2 py-1.5 ${statusStyles[a.status]}`}
                 style={{
                   left: `calc(${TIME_COL_PX}px + ${a.col} * ((100% - ${TIME_COL_PX}px) / 3) + 4px)`,
                   width: `calc((100% - ${TIME_COL_PX}px) / 3 - 8px)`,
@@ -383,7 +404,13 @@ function CalendarMock() {
                 <div className="text-[11px] font-semibold leading-tight">
                   {a.name}
                 </div>
-                <div className="text-[10px] opacity-80 leading-tight">
+                <div className="mt-0.5 truncate text-[10px] leading-tight opacity-75">
+                  {a.loc}
+                </div>
+                <div className="mt-0.5 text-[10px] font-semibold leading-tight">
+                  {a.time}
+                </div>
+                <div className="truncate text-[10px] leading-tight opacity-75">
                   {a.svc}
                 </div>
               </div>
@@ -425,19 +452,24 @@ function MobileSection() {
 }
 
 function PhoneMock() {
-  // Mirrors the real "Today" appointment list from
-  // (dashboard)/home-view.tsx. Phone proportions match an actual
-  // iPhone (1:2.05 aspect ratio) so the device reads as a real
-  // device, not a stubby card. Includes the iOS Dynamic Island,
-  // status bar, page header, today list, a "this week" stat card,
-  // bottom tab bar, and the home-indicator pill.
+  // Mirrors the real mobile home view from
+  // (dashboard)/home-view.tsx: app top bar (Sukona wordmark + bell +
+  // avatar), "Today" appointments card, "Activity" feed card with
+  // Today/30-days toggle, and the four-tab bottom nav (Home,
+  // Calendar, Expenses, More). Proportions are a real iPhone
+  // 1:2.05 aspect ratio.
   type Status = "scheduled" | "on_the_way" | "arrived" | "paid";
-  const items: Array<{ time: string; name: string; svc: string; status: Status; label: string }> = [
-    { time: "9:00",  name: "Sara M.",  svc: "Highlights",  status: "paid",       label: "Paid" },
-    { time: "11:30", name: "Layla S.", svc: "Color",       status: "arrived",    label: "Arrived" },
-    { time: "14:00", name: "Reem A.",  svc: "Manicure",    status: "scheduled",  label: "Scheduled" },
-    { time: "16:30", name: "Lina H.",  svc: "Brows",       status: "on_the_way", label: "On the way" },
-    { time: "18:00", name: "Maya N.",  svc: "Treatment",   status: "scheduled",  label: "Scheduled" },
+  const today: Array<{ time: string; dur: string; name: string; loc: string; status: Status; label: string }> = [
+    { time: "3 PM – 3:15 PM",   dur: "15 min",  name: "Aisha",         loc: "Al Khawaneej 2, Villa", status: "scheduled",  label: "Scheduled" },
+    { time: "4 PM – 5 PM",      dur: "1 hour",  name: "Fatma Almulla", loc: "Dubai Hills",            status: "arrived",    label: "Arrived" },
+    { time: "5:30 PM – 6:30 PM", dur: "1 hour", name: "Layla Salem",   loc: "Sharjah, Al Majaz",      status: "on_the_way", label: "On the way" },
+  ];
+
+  const activity: Array<{ dot: string; title: string; sub?: string; time: string }> = [
+    { dot: "bg-emerald-500", title: "New appointment · Aisha",            sub: "Maryam Alshamsi", time: "just now" },
+    { dot: "bg-sky-500",     title: "Status · Fatma Almulla → paid",      sub: "Aica",            time: "17h ago" },
+    { dot: "bg-sky-500",     title: "Status · Fatma Almulla → arrived",   sub: "Maryam Alshamsi", time: "18h ago" },
+    { dot: "bg-amber-500",   title: "Updated · Fatma's appointment",      sub: "Maryam Alshamsi", time: "19h ago" },
   ];
 
   const statusStyles: Record<Status, string> = {
@@ -449,35 +481,31 @@ function PhoneMock() {
 
   return (
     <div className="relative">
-      {/* iPhone-style bezel — slim 3px frame, proper 1:2.05 ratio */}
+      {/* iPhone bezel — slim 3px frame, 1:2.05 aspect */}
       <div
         className="relative w-[300px] rounded-[2.75rem] bg-neutral-900 p-[3px] shadow-[0_50px_120px_-30px_rgba(0,0,0,0.5)] sm:w-[340px]"
         style={{ aspectRatio: "300 / 615" }}
       >
         <div className="relative flex h-full flex-col overflow-hidden rounded-[2.625rem] bg-[#F5F5F7]">
-          {/* Dynamic Island — sits over the status bar at top center */}
+          {/* Dynamic Island */}
           <div
             className="absolute left-1/2 top-2 z-10 h-[26px] w-[100px] -translate-x-1/2 rounded-full bg-neutral-900"
             aria-hidden
           />
 
-          {/* Status bar — 9:41 left, signal/battery right, all hugging
-              the dynamic island */}
+          {/* iOS status bar */}
           <div className="relative flex shrink-0 items-center justify-between px-6 pt-2.5 pb-1 text-[11px] font-semibold text-text-primary">
             <span className="z-20">9:41</span>
             <span className="z-20 flex items-center gap-1">
-              {/* Signal */}
               <svg className="h-2.5 w-3.5" viewBox="0 0 18 12" fill="currentColor">
                 <rect x="0"  y="9" width="2.5" height="3" rx="0.4" />
                 <rect x="4"  y="6" width="2.5" height="6" rx="0.4" />
                 <rect x="8"  y="3" width="2.5" height="9" rx="0.4" />
                 <rect x="12" y="0" width="2.5" height="12" rx="0.4" />
               </svg>
-              {/* Wi-Fi */}
               <svg className="h-2.5 w-3.5" viewBox="0 0 16 12" fill="currentColor">
                 <path d="M8 11.5c.7 0 1.3-.6 1.3-1.3 0-.7-.6-1.3-1.3-1.3-.7 0-1.3.6-1.3 1.3 0 .7.6 1.3 1.3 1.3zm-3.5-3.5l1 1A3.5 3.5 0 018 7.5c.95 0 1.85.4 2.5 1l1-1A5 5 0 008 6.5a5 5 0 00-3.5 1.5zM2 5.5l1 1A6.5 6.5 0 018 4.5c1.75 0 3.4.7 4.6 1.85l1-1A8 8 0 008 3a8 8 0 00-6 2.5z" />
               </svg>
-              {/* Battery */}
               <span className="ml-0.5 inline-flex items-center">
                 <span className="relative h-3 w-6 rounded-[3px] border border-text-primary/80">
                   <span className="absolute inset-y-0.5 left-0.5 right-1 rounded-[1.5px] bg-text-primary" />
@@ -487,13 +515,19 @@ function PhoneMock() {
             </span>
           </div>
 
-          {/* Page header — date + big "Today" title */}
-          <div className="shrink-0 px-5 pt-4 pb-3">
-            <div className="text-[11px] font-medium text-text-tertiary">
-              Friday, May 10
-            </div>
-            <div className="mt-0.5 text-[26px] font-semibold tracking-tight text-text-primary leading-tight">
-              Today
+          {/* App top bar — Sukona wordmark, bell, avatar */}
+          <div className="shrink-0 flex items-center justify-between px-4 pt-2 pb-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-dark.png" alt="Sukona" className="h-6 w-auto" />
+            <div className="flex items-center gap-2">
+              <button className="flex h-7 w-7 items-center justify-center text-text-secondary">
+                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                </svg>
+              </button>
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-900 text-[9px] font-semibold text-text-inverse">
+                MA
+              </div>
             </div>
           </div>
 
@@ -501,33 +535,31 @@ function PhoneMock() {
           <div className="shrink-0 px-3">
             <div className="overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white">
               <div className="flex items-center justify-between px-4 py-2.5">
-                <div className="text-[13px] font-semibold text-text-primary">
-                  Today
-                </div>
+                <div className="text-[14px] font-bold text-text-primary">Today</div>
                 <div className="rounded-full bg-[#F5F5F7] px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
-                  {items.length}
+                  {today.length}
                 </div>
               </div>
               <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
-                {items.map((it) => (
-                  <div
-                    key={it.time}
-                    className={`flex items-center gap-2.5 px-4 py-2.5 ${
-                      it.status === "paid" ? "opacity-50" : ""
-                    }`}
-                  >
-                    <div className="w-10 shrink-0 text-[11px] font-semibold text-text-primary">
-                      {it.time}
+                {today.map((it) => (
+                  <div key={it.name} className="flex items-start gap-2 px-3 py-2">
+                    <div className="w-[58px] shrink-0">
+                      <div className="text-[9px] font-semibold leading-tight text-text-primary">
+                        {it.time}
+                      </div>
+                      <div className="text-[9px] leading-tight text-text-tertiary">
+                        {it.dur}
+                      </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] font-semibold leading-tight text-text-primary">
+                      <div className="truncate text-[11px] font-semibold leading-tight text-text-primary">
                         {it.name}
                       </div>
-                      <div className="truncate text-[10px] leading-tight text-text-tertiary">
-                        {it.svc}
+                      <div className="mt-0.5 truncate text-[9px] leading-tight text-text-tertiary">
+                        {it.loc}
                       </div>
                     </div>
-                    <div className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${statusStyles[it.status]}`}>
+                    <div className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8.5px] font-medium ${statusStyles[it.status]}`}>
                       {it.label}
                     </div>
                   </div>
@@ -536,19 +568,35 @@ function PhoneMock() {
             </div>
           </div>
 
-          {/* This week stat card */}
+          {/* Activity card */}
           <div className="shrink-0 px-3 pt-3">
-            <div className="rounded-2xl border border-[#EAEAEA] bg-white px-4 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                This week
+            <div className="overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white">
+              <div className="flex items-center justify-between px-4 py-2">
+                <div className="text-[13px] font-bold text-text-primary">Activity</div>
+                <div className="flex items-center rounded-full bg-[#F5F5F7] p-[2px]">
+                  <span className="px-2 py-0.5 text-[9px] font-medium text-text-secondary">Today</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-semibold text-text-primary shadow-sm">
+                    30 Days
+                  </span>
+                </div>
               </div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-[20px] font-semibold tracking-tight text-text-primary">
-                  AED 5,400
-                </span>
-                <span className="text-[10px] font-semibold text-green-700">
-                  ↑ 12%
-                </span>
+              <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
+                {activity.map((ev, i) => (
+                  <div key={i} className="flex items-start gap-2 px-4 py-1.5">
+                    <div className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${ev.dot}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[10px] font-medium leading-tight text-text-primary">
+                        {ev.title}
+                      </div>
+                      {ev.sub && (
+                        <div className="truncate text-[9px] leading-tight text-text-tertiary">
+                          {ev.sub}
+                        </div>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-[9px] text-text-tertiary">{ev.time}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -556,32 +604,34 @@ function PhoneMock() {
           {/* Spacer pushes the tab bar to the bottom */}
           <div className="flex-1" />
 
-          {/* Bottom tab bar */}
+          {/* Bottom tab bar — Home (active), Calendar, Expenses, More */}
           <div className="shrink-0 border-t border-[#EAEAEA] bg-white">
             <div className="flex items-center justify-around px-2 pt-1.5 pb-1">
               <div className="flex flex-col items-center gap-0.5 text-text-primary">
-                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
+                <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
                 </svg>
-                <span className="text-[9px] font-medium">Home</span>
+                <span className="text-[9px] font-semibold">Home</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-primary-600">
+              <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
                 <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
                 </svg>
-                <span className="text-[9px] font-semibold">Calendar</span>
+                <span className="text-[9px] font-medium">Calendar</span>
               </div>
               <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
                 <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 6h.008v.008h-.008V15zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
-                <span className="text-[9px] font-medium">Payments</span>
+                <span className="text-[9px] font-medium">Expenses</span>
               </div>
               <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
                 <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                  <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="19" cy="12" r="1.5" fill="currentColor" />
                 </svg>
-                <span className="text-[9px] font-medium">Reports</span>
+                <span className="text-[9px] font-medium">More</span>
               </div>
             </div>
 
@@ -706,81 +756,95 @@ function ReportsSection() {
 }
 
 function RevenueMock() {
-  // Mirrors the StatCard layout from
-  // (dashboard)/reports/reports-view.tsx — `rounded-2xl bg-white
-  // ring-1 ring-border p-6` with a uppercase-tracked label and a
-  // big numeric value. Revenue green-700, Expenses red-600, Profit
-  // green when positive.
-  const cards = [
-    { label: "Revenue",   value: "AED 28,400", sub: "vs AED 24,200",   color: "text-green-700",   accent: "↑ 17%" },
-    { label: "Expenses",  value: "AED 6,820",  sub: "vs AED 7,140",    color: "text-red-600",     accent: "↓ 4%" },
-    { label: "Profit",    value: "AED 21,580", sub: "vs AED 17,060",   color: "text-green-700",   accent: "↑ 27%" },
+  // Mirrors the real reports view from
+  // (dashboard)/reports/reports-view.tsx: page title with filter
+  // button, 2x2 tab pills (Finance active), Summary card with
+  // Revenue/Expenses/Profit rows, and a partial Expenses list.
+  const expenses = [
+    { name: "Petrol",  date: "9 May 2026", amount: "AED 100.00", cat: "Transportation" },
+    { name: "Laundry", date: "8 May 2026", amount: "AED 34.25",  cat: "Supplies" },
+    { name: "Petrol",  date: "7 May 2026", amount: "AED 100.00", cat: "Transportation" },
   ];
 
-  // Sparkline values shaped to climb at the end.
-  const points = [40, 38, 45, 42, 50, 48, 56, 54, 62, 58, 68, 72];
-  const max = Math.max(...points);
-  const min = Math.min(...points);
-  const W = 600;
-  const H = 90;
-  const path = points
-    .map((v, i) => {
-      const x = (i / (points.length - 1)) * W;
-      const y = H - ((v - min) / (max - min)) * H;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const areaPath = `${path} L${W},${H} L0,${H} Z`;
-
   return (
-    <div className="w-full max-w-3xl space-y-4 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
-      {/* Three stat cards — same layout as the reports page */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {cards.map((c) => (
-          <div
-            key={c.label}
-            className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6"
-          >
-            <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
-              {c.label}
-            </div>
-            <div className={`mt-2 text-xl font-bold sm:text-2xl ${c.color}`}>
-              {c.value}
-            </div>
-            <div className="mt-1 flex items-center gap-1.5 text-caption text-text-tertiary">
-              <span className={c.color}>{c.accent}</span>
-              <span>{c.sub}</span>
-            </div>
-          </div>
-        ))}
+    <div className="w-full max-w-md space-y-3 rounded-3xl bg-white p-4 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-5">
+      {/* Page header — title + filter button */}
+      <div className="flex items-center justify-between px-1 pt-1">
+        <div className="text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
+          Reports
+        </div>
+        <button className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 6.5h12M19 6.5h2M3 12h2M9 12h12M3 17.5h12M19 17.5h2" />
+            <circle cx="17" cy="6.5" r="1.75" fill="currentColor" stroke="none" />
+            <circle cx="7" cy="12" r="1.75" fill="currentColor" stroke="none" />
+            <circle cx="17" cy="17.5" r="1.75" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
       </div>
 
-      {/* Trend chart card — pairs the stat row with the visual */}
-      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6">
-        <div className="flex items-center justify-between">
-          <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
-            Last 30 days
-          </div>
-          <div className="text-caption text-text-tertiary">142 bookings</div>
+      {/* Tab pills — 2x2, Finance active */}
+      <div className="grid grid-cols-2 gap-2">
+        <button className="rounded-xl bg-neutral-900 px-3 py-3 text-body-sm font-semibold text-text-inverse">
+          Finance
+        </button>
+        <button className="rounded-xl bg-surface-active px-3 py-3 text-body-sm font-semibold text-text-secondary">
+          Payments
+        </button>
+        <button className="rounded-xl bg-surface-active px-3 py-3 text-body-sm font-semibold text-text-secondary">
+          Appointments
+        </button>
+        <button className="rounded-xl bg-surface-active px-3 py-3 text-body-sm font-semibold text-text-secondary">
+          Reviews
+        </button>
+      </div>
+
+      {/* Summary card */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA]">
+        <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+          Summary
         </div>
-        <div className="mt-4">
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#F08C2D" stopOpacity="0.2" />
-                <stop offset="100%" stopColor="#F08C2D" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path d={areaPath} fill="url(#sparkfill)" />
-            <path
-              d={path}
-              fill="none"
-              stroke="#F08C2D"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+        <div className="mt-3 divide-y divide-[#EAEAEA]">
+          <div className="flex items-center justify-between py-3">
+            <span className="text-body-sm text-text-secondary">Revenue</span>
+            <span className="text-body font-bold text-green-700">AED 13,305.00</span>
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <span className="text-body-sm text-text-secondary">Expenses</span>
+            <span className="text-body font-bold text-red-600">AED 3,240.61</span>
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <span className="text-body-sm font-semibold text-text-primary">Profit</span>
+            <span className="text-body font-bold text-green-700">AED 10,064.39</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Expenses list — partial */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA]">
+        <div className="flex items-center gap-2">
+          <span className="text-body font-bold text-text-primary">Expenses</span>
+          <span className="rounded-full bg-[#F5F5F7] px-2 py-0.5 text-caption font-medium text-text-secondary">
+            16
+          </span>
+        </div>
+        <div className="mt-2 divide-y divide-[#EAEAEA]">
+          {expenses.map((e, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <div className="text-body-sm font-semibold text-text-primary">
+                  {e.name}
+                </div>
+                <div className="text-caption text-text-tertiary">{e.date}</div>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <div className="text-body-sm font-bold text-red-600">{e.amount}</div>
+                <div className="rounded-full bg-surface-active px-2 py-0.5 text-[10px] font-medium text-text-secondary">
+                  {e.cat}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
