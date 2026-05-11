@@ -518,8 +518,10 @@ function PhoneMock() {
             </span>
           </div>
 
-          {/* App top bar — Sukona wordmark, bell, avatar */}
-          <div className="shrink-0 flex items-center justify-between px-4 pt-2.5 pb-2.5">
+          {/* App top bar — Sukona wordmark, bell, avatar. Slightly
+              more top padding so the chrome above the logo/bell/
+              avatar reads as deliberate breathing room. */}
+          <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-dark.png" alt="Sukona" className="h-8 w-auto" />
             <div className="flex items-center gap-2.5">
@@ -549,29 +551,39 @@ function PhoneMock() {
                 </div>
               </div>
               <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
-                {today.map((it) => (
-                  <div key={it.name} className="flex items-start gap-2.5 px-4 py-2.5">
-                    <div className="w-[68px] shrink-0">
-                      <div className="text-[11px] font-semibold leading-tight text-text-primary">
-                        {it.time}
+                {today.map((it) => {
+                  // Split the time range so start and end stack on
+                  // their own lines — the full range ("5:30 PM – 6:30
+                  // PM") is too wide for a single line at this scale
+                  // without pushing the name/location column too far.
+                  const [startTime, endTime] = it.time.split(" – ");
+                  return (
+                    <div key={it.name} className="flex items-start gap-3 px-4 py-2.5">
+                      <div className="w-[68px] shrink-0">
+                        <div className="text-[11px] font-semibold leading-tight text-text-primary">
+                          {startTime} –
+                        </div>
+                        <div className="text-[11px] font-semibold leading-tight text-text-primary">
+                          {endTime}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-tight text-text-tertiary">
+                          {it.dur}
+                        </div>
                       </div>
-                      <div className="mt-0.5 text-[11px] leading-tight text-text-tertiary">
-                        {it.dur}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-semibold leading-tight text-text-primary">
+                          {it.name}
+                        </div>
+                        <div className="mt-1 truncate text-[11px] leading-tight text-text-tertiary">
+                          {it.loc}
+                        </div>
+                      </div>
+                      <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusStyles[it.status]}`}>
+                        {it.label}
                       </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-semibold leading-tight text-text-primary">
-                        {it.name}
-                      </div>
-                      <div className="mt-1 truncate text-[11px] leading-tight text-text-tertiary">
-                        {it.loc}
-                      </div>
-                    </div>
-                    <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusStyles[it.status]}`}>
-                      {it.label}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -612,34 +624,32 @@ function PhoneMock() {
           {/* Spacer pushes the tab bar to the bottom */}
           <div className="flex-1" />
 
-          {/* Bottom tab bar — Home (active), Calendar, Expenses, More */}
+          {/* Bottom tab bar — icons only (Home active, Calendar,
+              Expenses, More). Labels removed and icons centered
+              vertically in the white tab area for a cleaner look. */}
           <div className="shrink-0 border-t border-[#EAEAEA] bg-white">
-            <div className="flex items-center justify-around px-2 pt-2 pb-1.5">
-              <div className="flex flex-col items-center gap-1 text-text-primary">
-                <svg className="h-[22px] w-[22px]" fill="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center justify-around px-2 py-4">
+              <div className="text-text-primary">
+                <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
                 </svg>
-                <span className="text-[11px] font-semibold">Home</span>
               </div>
-              <div className="flex flex-col items-center gap-1 text-text-tertiary">
-                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <div className="text-text-tertiary">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
                 </svg>
-                <span className="text-[11px] font-medium">Calendar</span>
               </div>
-              <div className="flex flex-col items-center gap-1 text-text-tertiary">
-                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <div className="text-text-tertiary">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 6h.008v.008h-.008V15zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
-                <span className="text-[11px] font-medium">Expenses</span>
               </div>
-              <div className="flex flex-col items-center gap-1 text-text-tertiary">
-                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <div className="text-text-tertiary">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <circle cx="5" cy="12" r="1.5" fill="currentColor" />
                   <circle cx="12" cy="12" r="1.5" fill="currentColor" />
                   <circle cx="19" cy="12" r="1.5" fill="currentColor" />
                 </svg>
-                <span className="text-[11px] font-medium">More</span>
               </div>
             </div>
 
