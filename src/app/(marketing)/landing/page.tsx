@@ -223,7 +223,7 @@ function Hero() {
           More appointments.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
-          Manage your mobile beauty and wellness business from one place.
+          Run your home service business in one place.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
@@ -433,8 +433,8 @@ function MobileSection() {
           <span className="text-text-secondary">from anywhere.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          between appointments, on the way to the next, on a client&rsquo;s
-          couch.
+          Between appointments, on the way to the next, in client&rsquo;s
+          location.
         </p>
       </div>
 
@@ -713,7 +713,9 @@ function ReportsSection() {
           <span className="text-text-secondary">actually working.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          The numbers that run your business. Revenue, expenses, profit.
+          The numbers that run your business.
+          <br />
+          Revenue, expenses, profit.
         </p>
       </div>
 
