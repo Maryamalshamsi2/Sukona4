@@ -812,16 +812,28 @@ function ReportsSection() {
 }
 
 function RevenueMock() {
-  // Stat-card-trio + 30-day trend chart layout — restored after
-  // a brief detour to the reports-page-faithful variant. This
-  // version reads better in marketing context: three glance-able
-  // numbers + one sparkline. Uses the same StatCard styling tokens
-  // as (dashboard)/reports/reports-view.tsx (rounded-2xl, ring-
-  // ring-[#EAEAEA], uppercase-tracked caption label, big number).
-  const cards = [
+  // Three financial KPIs (top row), two operational snapshots
+  // (middle row: inventory + team performance), and a 30-day
+  // trend chart at the bottom. Together they cover the section's
+  // promise — "Revenue, expenses, inventory, team" — in a single
+  // dashboard surface. Uses the same StatCard styling tokens as
+  // (dashboard)/reports/reports-view.tsx.
+  const kpis = [
     { label: "Revenue",  value: "AED 12,500", sub: "vs AED 10,600", color: "text-green-700", accent: "↑ 18%" },
     { label: "Expenses", value: "AED 3,200",  sub: "vs AED 3,400",  color: "text-red-600",   accent: "↓ 6%" },
     { label: "Profit",   value: "AED 9,300",  sub: "vs AED 7,200",  color: "text-green-700", accent: "↑ 29%" },
+  ];
+
+  const lowStock = [
+    { name: "Hair color, level 6", left: 2 },
+    { name: "Argan shampoo",       left: 1 },
+    { name: "Hand lotion",         left: 3 },
+  ];
+
+  const team = [
+    { name: "Sara", appts: 42 },
+    { name: "Mia",  appts: 38 },
+    { name: "Yara", appts: 31 },
   ];
 
   // Sparkline values shaped to climb toward the end.
@@ -841,9 +853,9 @@ function RevenueMock() {
 
   return (
     <div className="w-full max-w-3xl space-y-4 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
-      {/* Three stat cards */}
+      {/* Row 1 — three financial KPIs */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {cards.map((c) => (
+        {kpis.map((c) => (
           <div
             key={c.label}
             className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6"
@@ -862,7 +874,63 @@ function RevenueMock() {
         ))}
       </div>
 
-      {/* Trend chart card */}
+      {/* Row 2 — inventory + team snapshots */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* Inventory — low stock list */}
+        <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6">
+          <div className="flex items-center justify-between">
+            <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+              Inventory
+            </div>
+            <div className="rounded-full bg-amber-50 px-2 py-0.5 text-caption font-semibold text-amber-700">
+              Low stock · 3
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {lowStock.map((item) => (
+              <div key={item.name} className="flex items-center justify-between text-body-sm">
+                <span className="truncate text-text-primary">{item.name}</span>
+                <span className="shrink-0 font-semibold text-amber-700">
+                  {item.left} left
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Team — appointments per staff this month */}
+        <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6">
+          <div className="flex items-center justify-between">
+            <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+              Team
+            </div>
+            <div className="text-caption text-text-tertiary">This month</div>
+          </div>
+          <div className="mt-4 space-y-2.5">
+            {team.map((member, i) => (
+              <div key={member.name} className="flex items-center gap-3">
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-caption font-semibold ${
+                    i === 0
+                      ? "bg-primary-100 text-primary-700"
+                      : "bg-surface-active text-text-secondary"
+                  }`}
+                >
+                  {member.name[0]}
+                </span>
+                <span className="flex-1 text-body-sm text-text-primary">
+                  {member.name}
+                </span>
+                <span className="text-caption font-semibold text-text-secondary">
+                  {member.appts} appts
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3 — 30-day trend chart */}
       <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6">
         <div className="flex items-center justify-between">
           <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
