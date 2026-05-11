@@ -1020,18 +1020,25 @@ function Pricing() {
           </p>
         </div>
 
-        <div className="mt-16 grid gap-5 sm:mt-20 lg:grid-cols-3 lg:gap-6">
+        {/* Extra top margin on lg+ so the featured card's lg:-mt-4
+            lift doesn't pull it tight against the section header. */}
+        <div className="mt-16 grid gap-5 sm:mt-20 lg:mt-24 lg:grid-cols-3 lg:gap-6">
           {plans.map((p) => (
             <div
               key={p.name}
-              className={`relative flex flex-col rounded-3xl bg-white p-7 sm:p-8 ${
+              className={`relative flex flex-col rounded-3xl p-7 sm:p-8 ${
                 p.featured
-                  ? "ring-2 ring-primary-500 shadow-[0_30px_60px_-30px_rgba(240,140,45,0.35)]"
-                  : "ring-1 ring-black/[0.06]"
+                  ? // Three subtle moves stacked on the featured card to
+                    // earn a real "lift": soft peach gradient at the
+                    // top, an explicit -16px lift on desktop so it
+                    // floats above its siblings, and a wider, warmer
+                    // peach shadow underneath.
+                    "bg-gradient-to-b from-primary-50/70 to-white ring-2 ring-primary-500 shadow-[0_40px_80px_-30px_rgba(240,140,45,0.5)] lg:-mt-4"
+                  : "bg-white ring-1 ring-black/[0.06]"
               }`}
             >
               {p.featured && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary-500 px-3 py-1 text-caption font-semibold text-text-inverse">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary-500 px-3.5 py-1 text-caption font-semibold text-text-inverse shadow-[0_8px_20px_-4px_rgba(240,140,45,0.5)]">
                   Most popular
                 </span>
               )}
