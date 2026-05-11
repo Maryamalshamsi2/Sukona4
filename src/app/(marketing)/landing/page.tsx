@@ -664,7 +664,10 @@ function PhoneMock() {
 }
 
 // ============================================================
-// Payments — confirmation card
+// Clients — single composite card showing the full client lifecycle:
+// profile header → notification → receipt → review.
+// One unified surface (not a stack of feature cards) so the visual
+// itself reinforces "everything about this client, in one place."
 // ============================================================
 
 function PaymentsSection() {
@@ -682,65 +685,101 @@ function PaymentsSection() {
       </div>
 
       <div className="mx-auto mt-16 flex max-w-3xl justify-center px-5 sm:mt-20 sm:px-8">
-        <PaymentMock />
+        <ClientLifecycleMock />
       </div>
     </section>
   );
 }
 
-function PaymentMock() {
-  // Mirrors a real payment row card from
-  // (dashboard)/payments/payments-view.tsx — same outer ring, same
-  // method badge color (cash green, card blue), same right-side amount
-  // + receipt thumbnail layout.
-  type Method = "Cash" | "Card";
-  const rows: Array<{ name: string; svc: string; method: Method; amount: string; when: string; thumb: string }> = [
-    { name: "Sara M.",  svc: "Highlights · Color",     method: "Card", amount: "AED 240",  when: "Today, 10:30",   thumb: "#FEEAD2" },
-    { name: "Reem A.",  svc: "Manicure",                method: "Cash", amount: "AED 120",  when: "Today, 14:05",   thumb: "#F0FAF2" },
-    { name: "Layla S.", svc: "Treatment · Blow-dry",    method: "Card", amount: "AED 380",  when: "Today, 16:50",   thumb: "#F0F7FF" },
-  ];
-
-  const methodStyles: Record<Method, string> = {
-    Cash: "bg-[#F0FAF2] text-[#1B8736]",
-    Card: "bg-[#F0F7FF] text-[#0062CC]",
-  };
+function ClientLifecycleMock() {
+  // Star icon path (Heroicons solid star) — reused for the reviewer row.
+  const star = (
+    <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+  );
 
   return (
-    <div className="w-full max-w-xl space-y-3 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
-      {rows.map((r) => (
-        <div
-          key={r.name}
-          className="flex items-start justify-between gap-4 rounded-2xl border border-[#EAEAEA] bg-white p-5"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <div className="truncate text-body font-semibold text-text-primary">
-                {r.name}
-              </div>
-              <div className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-medium ${methodStyles[r.method]}`}>
-                {r.method}
-              </div>
-            </div>
-            <div className="mt-1 text-body-sm text-text-secondary">{r.when}</div>
-            <div className="mt-0.5 truncate text-body-sm text-text-secondary">
-              {r.svc}
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="text-right">
-              <div className="text-lg font-semibold text-text-primary">
-                {r.amount}
-              </div>
-            </div>
-            <div
-              className="h-14 w-14 shrink-0 rounded-lg ring-1 ring-[#EAEAEA]"
-              style={{ background: r.thumb }}
-              aria-hidden
-            />
+    <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-[#EAEAEA]">
+      {/* Client header */}
+      <div className="flex items-center gap-3 border-b border-[#EAEAEA] px-5 py-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-100 text-base font-semibold text-primary-700">
+          HS
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-body font-semibold text-text-primary">Hala Saeed</div>
+          <div className="text-caption text-text-tertiary">
+            12 visits · last seen 2 weeks ago
           </div>
         </div>
-      ))}
+        <button className="hidden rounded-full bg-surface-active px-3 py-1.5 text-caption font-medium text-text-secondary sm:inline-flex">
+          View profile
+        </button>
+      </div>
+
+      <div className="divide-y divide-[#EAEAEA]">
+        {/* WhatsApp / status notification */}
+        <div className="flex items-start gap-3 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E7F8EE] text-[#1B8736]">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="truncate text-body-sm font-semibold text-text-primary">
+                Sara is on the way
+              </div>
+              <div className="shrink-0 text-caption text-text-tertiary">just now</div>
+            </div>
+            <div className="mt-0.5 text-caption text-text-secondary">
+              WhatsApp sent automatically
+            </div>
+          </div>
+        </div>
+
+        {/* Receipt */}
+        <div className="flex items-start gap-3 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-body-sm font-semibold text-text-primary">
+                Receipt sent
+              </div>
+              <div className="shrink-0 text-caption text-text-tertiary">17h ago</div>
+            </div>
+            <div className="mt-0.5 text-caption text-text-secondary">
+              AED 240 · Card ending 4242
+            </div>
+          </div>
+        </div>
+
+        {/* Review */}
+        <div className="flex items-start gap-3 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-500">
+            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              {star}
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-0.5 text-amber-500">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <svg key={i} className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                    {star}
+                  </svg>
+                ))}
+              </div>
+              <div className="shrink-0 text-caption text-text-tertiary">today</div>
+            </div>
+            <div className="mt-1 text-body-sm italic leading-snug text-text-primary">
+              &ldquo;Sara is amazing — best manicure I&rsquo;ve had in years.&rdquo;
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -759,7 +798,7 @@ function ReportsSection() {
           <span className="text-text-secondary">actually working.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          The numbers that grow your business.
+          Track what grows your business.
           <br />
           Revenue, expenses, inventory, team.
         </p>
