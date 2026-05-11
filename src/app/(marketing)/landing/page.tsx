@@ -439,7 +439,7 @@ function MobileSection() {
           <span className="text-text-secondary">from anywhere.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Between appointments, on the way to the next, in client&rsquo;s
+          Between appointments, on the way to the next, in a client&rsquo;s
           location.
         </p>
       </div>
@@ -481,10 +481,13 @@ function PhoneMock() {
 
   return (
     <div className="relative">
-      {/* iPhone bezel — slim 3px frame, 1:2.05 aspect */}
+      {/* iPhone bezel — slim 3px frame, 1:2.05 aspect. Bumped up
+          from 300/340 to 320/360 to give the inner content more
+          room to breathe and the type a more legible scale than
+          a strict scale-to-real-iPhone would dictate. */}
       <div
-        className="relative w-[300px] rounded-[2.75rem] bg-neutral-900 p-[3px] shadow-[0_50px_120px_-30px_rgba(0,0,0,0.5)] sm:w-[340px]"
-        style={{ aspectRatio: "300 / 615" }}
+        className="relative w-[320px] rounded-[2.75rem] bg-neutral-900 p-[3px] shadow-[0_50px_120px_-30px_rgba(0,0,0,0.5)] sm:w-[360px]"
+        style={{ aspectRatio: "320 / 656" }}
       >
         <div className="relative flex h-full flex-col overflow-hidden rounded-[2.625rem] bg-[#F5F5F7]">
           {/* Dynamic Island */}
@@ -516,21 +519,21 @@ function PhoneMock() {
           </div>
 
           {/* App top bar — Sukona wordmark, bell, avatar */}
-          <div className="shrink-0 flex items-center justify-between px-4 pt-2 pb-2">
+          <div className="shrink-0 flex items-center justify-between px-4 pt-2.5 pb-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-dark.png" alt="Sukona" className="h-6 w-auto" />
-            <div className="flex items-center gap-2">
+            <img src="/logo-dark.png" alt="Sukona" className="h-8 w-auto" />
+            <div className="flex items-center gap-2.5">
               {/* Bell with red "4" unread badge — matches the real
                   NotificationBell component in the dashboard. */}
-              <button className="relative flex h-7 w-7 items-center justify-center text-text-secondary">
-                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <button className="relative flex h-9 w-9 items-center justify-center text-text-secondary">
+                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                 </svg>
-                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white ring-2 ring-[#F5F5F7]">
+                <span className="absolute right-0.5 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-[#F5F5F7]">
                   4
                 </span>
               </button>
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-900 text-[9px] font-semibold text-text-inverse">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-semibold text-text-inverse">
                 MA
               </div>
             </div>
@@ -539,32 +542,32 @@ function PhoneMock() {
           {/* Today card */}
           <div className="shrink-0 px-3">
             <div className="overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white">
-              <div className="flex items-center justify-between px-4 py-2.5">
-                <div className="text-[14px] font-bold text-text-primary">Today</div>
-                <div className="rounded-full bg-[#F5F5F7] px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="text-[17px] font-bold text-text-primary">Today</div>
+                <div className="rounded-full bg-[#F5F5F7] px-2 py-0.5 text-[12px] font-medium text-text-secondary">
                   {today.length}
                 </div>
               </div>
               <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
                 {today.map((it) => (
-                  <div key={it.name} className="flex items-start gap-2 px-3 py-2">
-                    <div className="w-[58px] shrink-0">
-                      <div className="text-[9px] font-semibold leading-tight text-text-primary">
+                  <div key={it.name} className="flex items-start gap-2.5 px-4 py-2.5">
+                    <div className="w-[68px] shrink-0">
+                      <div className="text-[11px] font-semibold leading-tight text-text-primary">
                         {it.time}
                       </div>
-                      <div className="text-[9px] leading-tight text-text-tertiary">
+                      <div className="mt-0.5 text-[11px] leading-tight text-text-tertiary">
                         {it.dur}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[11px] font-semibold leading-tight text-text-primary">
+                      <div className="truncate text-[13px] font-semibold leading-tight text-text-primary">
                         {it.name}
                       </div>
-                      <div className="mt-0.5 truncate text-[9px] leading-tight text-text-tertiary">
+                      <div className="mt-1 truncate text-[11px] leading-tight text-text-tertiary">
                         {it.loc}
                       </div>
                     </div>
-                    <div className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8.5px] font-medium ${statusStyles[it.status]}`}>
+                    <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusStyles[it.status]}`}>
                       {it.label}
                     </div>
                   </div>
@@ -576,30 +579,30 @@ function PhoneMock() {
           {/* Activity card */}
           <div className="shrink-0 px-3 pt-3">
             <div className="overflow-hidden rounded-2xl border border-[#EAEAEA] bg-white">
-              <div className="flex items-center justify-between px-4 py-2">
-                <div className="text-[13px] font-bold text-text-primary">Activity</div>
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <div className="text-[15px] font-bold text-text-primary">Activity</div>
                 <div className="flex items-center rounded-full bg-[#F5F5F7] p-[2px]">
-                  <span className="px-2 py-0.5 text-[9px] font-medium text-text-secondary">Today</span>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-semibold text-text-primary shadow-sm">
+                  <span className="px-2.5 py-1 text-[11px] font-medium text-text-secondary">Today</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-text-primary shadow-sm">
                     30 Days
                   </span>
                 </div>
               </div>
               <div className="divide-y divide-gray-100/80 border-t border-gray-100/80">
                 {activity.map((ev, i) => (
-                  <div key={i} className="flex items-start gap-2 px-4 py-1.5">
-                    <div className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${ev.dot}`} />
+                  <div key={i} className="flex items-start gap-2.5 px-4 py-2">
+                    <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ev.dot}`} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[10px] font-medium leading-tight text-text-primary">
+                      <div className="truncate text-[12px] font-medium leading-tight text-text-primary">
                         {ev.title}
                       </div>
                       {ev.sub && (
-                        <div className="truncate text-[9px] leading-tight text-text-tertiary">
+                        <div className="mt-0.5 truncate text-[11px] leading-tight text-text-tertiary">
                           {ev.sub}
                         </div>
                       )}
                     </div>
-                    <div className="shrink-0 text-[9px] text-text-tertiary">{ev.time}</div>
+                    <div className="shrink-0 text-[11px] text-text-tertiary">{ev.time}</div>
                   </div>
                 ))}
               </div>
@@ -611,38 +614,38 @@ function PhoneMock() {
 
           {/* Bottom tab bar — Home (active), Calendar, Expenses, More */}
           <div className="shrink-0 border-t border-[#EAEAEA] bg-white">
-            <div className="flex items-center justify-around px-2 pt-1.5 pb-1">
-              <div className="flex flex-col items-center gap-0.5 text-text-primary">
-                <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center justify-around px-2 pt-2 pb-1.5">
+              <div className="flex flex-col items-center gap-1 text-text-primary">
+                <svg className="h-[22px] w-[22px]" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M2.25 12L11.2 3.05a1.13 1.13 0 011.6 0L21.75 12M4.5 9.75v9.75a1.5 1.5 0 001.5 1.5h3.75v-6h4.5v6h3.75a1.5 1.5 0 001.5-1.5V9.75" />
                 </svg>
-                <span className="text-[9px] font-semibold">Home</span>
+                <span className="text-[11px] font-semibold">Home</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <div className="flex flex-col items-center gap-1 text-text-tertiary">
+                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
                 </svg>
-                <span className="text-[9px] font-medium">Calendar</span>
+                <span className="text-[11px] font-medium">Calendar</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <div className="flex flex-col items-center gap-1 text-text-tertiary">
+                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 6h.008v.008h-.008V15zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
-                <span className="text-[9px] font-medium">Expenses</span>
+                <span className="text-[11px] font-medium">Expenses</span>
               </div>
-              <div className="flex flex-col items-center gap-0.5 text-text-tertiary">
-                <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <div className="flex flex-col items-center gap-1 text-text-tertiary">
+                <svg className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <circle cx="5" cy="12" r="1.5" fill="currentColor" />
                   <circle cx="12" cy="12" r="1.5" fill="currentColor" />
                   <circle cx="19" cy="12" r="1.5" fill="currentColor" />
                 </svg>
-                <span className="text-[9px] font-medium">More</span>
+                <span className="text-[11px] font-medium">More</span>
               </div>
             </div>
 
             {/* iOS home indicator pill */}
             <div className="pb-2">
-              <div className="mx-auto h-[5px] w-[110px] rounded-full bg-text-primary" />
+              <div className="mx-auto h-[5px] w-[120px] rounded-full bg-text-primary" />
             </div>
           </div>
         </div>
