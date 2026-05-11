@@ -28,7 +28,6 @@ export default function LandingPage() {
       <Nav />
       <main>
         <Hero />
-        <Manifesto />
         <MobileSection />
         <PaymentsSection />
         <ReportsSection />
@@ -397,35 +396,15 @@ function CalendarMock() {
 }
 
 // ============================================================
-// Manifesto — the "why we built this" interlude. Pure typography,
-// no visual. Anchors the #about nav link.
-// ============================================================
-
-function Manifesto() {
-  return (
-    <section id="about" className="bg-white pb-12 sm:pb-16 lg:pb-20">
-      <div className="mx-auto max-w-4xl px-5 text-center sm:px-8">
-        <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
-          Home beauty,
-          <br />
-          <span className="text-text-secondary">all in one place.</span>
-        </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary sm:text-xl">
-          Sukona replaces WhatsApp threads, paper notes, and memory, with
-          one operational system.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ============================================================
-// MobileSection — phone-in-hand value prop with a phone mock
+// MobileSection — phone-in-hand value prop with a phone mock.
+// Anchors the #about nav link now that the standalone manifesto
+// section is gone; "About" jumps the visitor to the first product
+// section below the fold.
 // ============================================================
 
 function MobileSection() {
   return (
-    <section className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
+    <section id="about" className="bg-[#F5F5F7] py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
           Manage your business
@@ -937,6 +916,10 @@ function Pricing() {
 
 function FAQ() {
   const faqs = [
+    {
+      q: "Why do I need Sukona?",
+      a: "Home-service businesses run on WhatsApp threads, paper notes, and memory. Sukona replaces all of it with one operational system — built specifically for the way you work.",
+    },
     {
       q: "Is Sukona only for home-service businesses?",
       a: "Yes. Sukona is built specifically for mobile beauty and wellness — freelancers and small teams who travel to clients. Everything from the booking flow to the team coordination is shaped around how home-service actually works.",
