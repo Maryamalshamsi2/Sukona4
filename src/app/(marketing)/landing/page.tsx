@@ -967,10 +967,17 @@ function RevenueMock() {
 // ============================================================
 
 function Pricing() {
+  // Monthly / annual toggle. Annual is billed up-front at ~17% off
+  // (the classic "pay for 10 months, get 12" framing) — the per-
+  // month price displayed when annual is selected reflects that
+  // discount, with "Billed annually" called out below.
+  const [annual, setAnnual] = useState(false);
+
   const plans = [
     {
       name: "Solo",
-      price: 95,
+      monthlyPrice: 95,
+      annualPrice: 79,
       tagline: "For freelancers.",
       features: [
         "Unlimited appointments & clients",
@@ -978,13 +985,13 @@ function Pricing() {
         "Payments, receipts, WhatsApp notifications",
         "Expenses & inventory tracking",
         "Revenue, expenses, profit reports",
-        "Multi-currency support",
       ],
       featured: false,
     },
     {
       name: "Team",
-      price: 149,
+      monthlyPrice: 149,
+      annualPrice: 124,
       tagline: "For small teams.",
       features: [
         "Everything in Solo",
@@ -997,7 +1004,8 @@ function Pricing() {
     },
     {
       name: "Multi-Team",
-      price: 299,
+      monthlyPrice: 299,
+      annualPrice: 249,
       tagline: "For multi-team businesses.",
       features: [
         "Everything in Team",
@@ -1022,11 +1030,48 @@ function Pricing() {
           <p className="mx-auto mt-6 max-w-md text-lg text-text-secondary sm:text-xl">
             7-day free trial. No card required.
           </p>
+
+          {/* Monthly / Annual toggle */}
+          <div className="mt-8 flex justify-center">
+            <div
+              role="tablist"
+              aria-label="Billing period"
+              className="inline-flex items-center rounded-full bg-[#F5F5F7] p-1"
+            >
+              <button
+                role="tab"
+                aria-selected={!annual}
+                onClick={() => setAnnual(false)}
+                className={`rounded-full px-5 py-2 text-body-sm font-medium transition ${
+                  !annual
+                    ? "bg-white text-text-primary shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                role="tab"
+                aria-selected={annual}
+                onClick={() => setAnnual(true)}
+                className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-body-sm font-medium transition ${
+                  annual
+                    ? "bg-white text-text-primary shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                Annual
+                <span className="rounded-full bg-primary-100 px-1.5 py-0.5 text-[10px] font-semibold text-primary-700">
+                  Save 17%
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Extra top margin on lg+ so the featured card's lg:-mt-4
             lift doesn't pull it tight against the section header. */}
-        <div className="mt-16 grid gap-5 sm:mt-20 lg:mt-24 lg:grid-cols-3 lg:gap-6">
+        <div className="mt-12 grid gap-5 sm:mt-16 lg:mt-20 lg:grid-cols-3 lg:gap-6">
           {plans.map((p) => (
             <div
               key={p.name}
@@ -1054,15 +1099,20 @@ function Pricing() {
               </div>
               <div className="mt-7 flex items-baseline">
                 <span className="text-5xl font-medium tracking-tight text-text-primary">
-                  {p.price}
+                  {annual ? p.annualPrice : p.monthlyPrice}
                 </span>
                 <span className="ml-2 text-body-sm text-text-secondary">
                   AED / month
                 </span>
               </div>
+              {/* Billing-period subtitle — always rendered (in both
+                  modes) so the card height doesn't jump when toggling. */}
+              <div className="mt-1 text-caption text-text-tertiary">
+                {annual ? "Billed annually" : "Billed monthly"}
+              </div>
               <Link
                 href="/signup"
-                className={`mt-7 inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-body-sm font-medium transition active:scale-[0.98] ${
+                className={`mt-6 inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-body-sm font-medium transition active:scale-[0.98] ${
                   p.featured
                     ? "bg-primary-500 text-text-inverse hover:bg-primary-600"
                     : "bg-text-primary text-text-inverse hover:opacity-90"
@@ -1091,6 +1141,12 @@ function Pricing() {
             </div>
           ))}
         </div>
+
+        {/* Universal footer note — applies to every tier, so cleaner
+            here than as a bullet inside Solo. */}
+        <p className="mx-auto mt-10 max-w-md text-center text-caption text-text-tertiary sm:mt-12">
+          All plans support multi-currency, for salons across the GCC and beyond.
+        </p>
       </div>
     </section>
   );
