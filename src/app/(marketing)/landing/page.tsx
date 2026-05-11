@@ -263,7 +263,7 @@ function CalendarMock() {
   // the desktop reference layout. Appointment blocks carry the
   // four-line content the real app shows: client name, location,
   // time range, service.
-  const staff = ["Aica", "Maripel", "Richelly"];
+  const staff = ["Sara", "Mia", "Yara"];
   const hours = ["11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM"];
   const HOUR_PX = 60;
   const HEAD_PX = 48;
@@ -280,13 +280,13 @@ function CalendarMock() {
     svc: string;
     status: Status;
   }> = [
-    { col: 0, top: 0.5, dur: 1.5, name: "Aisha",   loc: "Al Khawaneej 2",    time: "11:30 AM – 1 PM",  svc: "Signature Manicure", status: "scheduled" },
-    { col: 0, top: 3,   dur: 1,   name: "Fatma",   loc: "Dubai Hills",       time: "2 PM – 3 PM",      svc: "Hair color",         status: "arrived" },
-    { col: 0, top: 4.5, dur: 1,   name: "Noor",    loc: "JBR Marina",        time: "3:30 – 4:30 PM",   svc: "Cut & blow",         status: "paid" },
-    { col: 1, top: 0,   dur: 2,   name: "Layla",   loc: "Sharjah, Al Majaz", time: "11 AM – 1 PM",     svc: "Color treatment",    status: "scheduled" },
-    { col: 1, top: 3,   dur: 1.5, name: "Reem",    loc: "Marina, Dubai",     time: "2 PM – 3:30 PM",   svc: "Manicure",           status: "on_the_way" },
-    { col: 2, top: 1,   dur: 1,   name: "Lina",    loc: "Khalifa City",      time: "12 PM – 1 PM",     svc: "Brows tint",         status: "scheduled" },
-    { col: 2, top: 2.5, dur: 2,   name: "Mariam",  loc: "Yas Island",        time: "1:30 PM – 3:30 PM", svc: "Aromatherapy",      status: "scheduled" },
+    { col: 0, top: 0.5, dur: 1.5, name: "Hala",   loc: "Al Khawaneej 2",    time: "11:30 AM – 1 PM",  svc: "Signature Manicure", status: "scheduled" },
+    { col: 0, top: 3,   dur: 1,   name: "Nadia",  loc: "Dubai Hills",       time: "2 PM – 3 PM",      svc: "Hair color",         status: "arrived" },
+    { col: 0, top: 4.5, dur: 1,   name: "Rana",   loc: "JBR Marina",        time: "3:30 – 4:30 PM",   svc: "Cut & blow",         status: "paid" },
+    { col: 1, top: 0,   dur: 2,   name: "Dana",   loc: "Sharjah, Al Majaz", time: "11 AM – 1 PM",     svc: "Color treatment",    status: "scheduled" },
+    { col: 1, top: 3,   dur: 1.5, name: "Salma",  loc: "Marina, Dubai",     time: "2 PM – 3:30 PM",   svc: "Manicure",           status: "on_the_way" },
+    { col: 2, top: 1,   dur: 1,   name: "Lina",   loc: "Khalifa City",      time: "12 PM – 1 PM",     svc: "Brows tint",         status: "scheduled" },
+    { col: 2, top: 2.5, dur: 2,   name: "Maya",   loc: "Yas Island",        time: "1:30 PM – 3:30 PM", svc: "Aromatherapy",      status: "scheduled" },
   ];
 
   const statusStyles: Record<Status, string> = {
@@ -460,16 +460,16 @@ function PhoneMock() {
   // 1:2.05 aspect ratio.
   type Status = "scheduled" | "on_the_way" | "arrived" | "paid";
   const today: Array<{ time: string; dur: string; name: string; loc: string; status: Status; label: string }> = [
-    { time: "3 PM – 3:15 PM",   dur: "15 min",  name: "Aisha",         loc: "Al Khawaneej 2, Villa", status: "scheduled",  label: "Scheduled" },
-    { time: "4 PM – 5 PM",      dur: "1 hour",  name: "Fatma Almulla", loc: "Dubai Hills",            status: "arrived",    label: "Arrived" },
-    { time: "5:30 PM – 6:30 PM", dur: "1 hour", name: "Layla Salem",   loc: "Sharjah, Al Majaz",      status: "on_the_way", label: "On the way" },
+    { time: "3 PM – 3:15 PM",    dur: "15 min", name: "Hala",         loc: "Al Khawaneej 2, Villa", status: "scheduled",  label: "Scheduled" },
+    { time: "4 PM – 5 PM",       dur: "1 hour", name: "Nadia Khoury", loc: "Dubai Hills",           status: "arrived",    label: "Arrived" },
+    { time: "5:30 PM – 6:30 PM", dur: "1 hour", name: "Dana Saleh",   loc: "Sharjah, Al Majaz",     status: "on_the_way", label: "On the way" },
   ];
 
   const activity: Array<{ dot: string; title: string; sub?: string; time: string }> = [
-    { dot: "bg-emerald-500", title: "New appointment · Aisha",            sub: "Maryam Alshamsi", time: "just now" },
-    { dot: "bg-sky-500",     title: "Status · Fatma Almulla → paid",      sub: "Aica",            time: "17h ago" },
-    { dot: "bg-sky-500",     title: "Status · Fatma Almulla → arrived",   sub: "Maryam Alshamsi", time: "18h ago" },
-    { dot: "bg-amber-500",   title: "Updated · Fatma's appointment",      sub: "Maryam Alshamsi", time: "19h ago" },
+    { dot: "bg-emerald-500", title: "New appointment · Hala",           sub: "Sara",  time: "just now" },
+    { dot: "bg-sky-500",     title: "Status · Nadia Khoury → paid",     sub: "Yara",  time: "17h ago" },
+    { dot: "bg-sky-500",     title: "Status · Nadia Khoury → arrived",  sub: "Sara",  time: "18h ago" },
+    { dot: "bg-amber-500",   title: "Updated · Nadia's appointment",    sub: "Sara",  time: "19h ago" },
   ];
 
   const statusStyles: Record<Status, string> = {
@@ -520,10 +520,15 @@ function PhoneMock() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-dark.png" alt="Sukona" className="h-6 w-auto" />
             <div className="flex items-center gap-2">
-              <button className="flex h-7 w-7 items-center justify-center text-text-secondary">
+              {/* Bell with red "4" unread badge — matches the real
+                  NotificationBell component in the dashboard. */}
+              <button className="relative flex h-7 w-7 items-center justify-center text-text-secondary">
                 <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                 </svg>
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white ring-2 ring-[#F5F5F7]">
+                  4
+                </span>
               </button>
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-900 text-[9px] font-semibold text-text-inverse">
                 MA
@@ -756,95 +761,82 @@ function ReportsSection() {
 }
 
 function RevenueMock() {
-  // Mirrors the real reports view from
-  // (dashboard)/reports/reports-view.tsx: page title with filter
-  // button, 2x2 tab pills (Finance active), Summary card with
-  // Revenue/Expenses/Profit rows, and a partial Expenses list.
-  const expenses = [
-    { name: "Petrol",  date: "9 May 2026", amount: "AED 100.00", cat: "Transportation" },
-    { name: "Laundry", date: "8 May 2026", amount: "AED 34.25",  cat: "Supplies" },
-    { name: "Petrol",  date: "7 May 2026", amount: "AED 100.00", cat: "Transportation" },
+  // Stat-card-trio + 30-day trend chart layout — restored after
+  // a brief detour to the reports-page-faithful variant. This
+  // version reads better in marketing context: three glance-able
+  // numbers + one sparkline. Uses the same StatCard styling tokens
+  // as (dashboard)/reports/reports-view.tsx (rounded-2xl, ring-
+  // ring-[#EAEAEA], uppercase-tracked caption label, big number).
+  const cards = [
+    { label: "Revenue",  value: "AED 12,500", sub: "vs AED 10,600", color: "text-green-700", accent: "↑ 18%" },
+    { label: "Expenses", value: "AED 3,200",  sub: "vs AED 3,400",  color: "text-red-600",   accent: "↓ 6%" },
+    { label: "Profit",   value: "AED 9,300",  sub: "vs AED 7,200",  color: "text-green-700", accent: "↑ 29%" },
   ];
 
+  // Sparkline values shaped to climb toward the end.
+  const points = [40, 38, 45, 42, 50, 48, 56, 54, 62, 58, 68, 72];
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const W = 600;
+  const H = 90;
+  const path = points
+    .map((v, i) => {
+      const x = (i / (points.length - 1)) * W;
+      const y = H - ((v - min) / (max - min)) * H;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const areaPath = `${path} L${W},${H} L0,${H} Z`;
+
   return (
-    <div className="w-full max-w-md space-y-3 rounded-3xl bg-white p-4 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-5">
-      {/* Page header — title + filter button */}
-      <div className="flex items-center justify-between px-1 pt-1">
-        <div className="text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-          Reports
-        </div>
-        <button className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 6.5h12M19 6.5h2M3 12h2M9 12h12M3 17.5h12M19 17.5h2" />
-            <circle cx="17" cy="6.5" r="1.75" fill="currentColor" stroke="none" />
-            <circle cx="7" cy="12" r="1.75" fill="currentColor" stroke="none" />
-            <circle cx="17" cy="17.5" r="1.75" fill="currentColor" stroke="none" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Tab pills — 2x2, Finance active */}
-      <div className="grid grid-cols-2 gap-2">
-        <button className="rounded-xl bg-neutral-900 px-3 py-3 text-body-sm font-semibold text-text-inverse">
-          Finance
-        </button>
-        <button className="rounded-xl bg-surface-active px-3 py-3 text-body-sm font-semibold text-text-secondary">
-          Payments
-        </button>
-        <button className="rounded-xl bg-surface-active px-3 py-3 text-body-sm font-semibold text-text-secondary">
-          Appointments
-        </button>
-        <button className="rounded-xl bg-surface-active px-3 py-3 text-body-sm font-semibold text-text-secondary">
-          Reviews
-        </button>
-      </div>
-
-      {/* Summary card */}
-      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA]">
-        <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
-          Summary
-        </div>
-        <div className="mt-3 divide-y divide-[#EAEAEA]">
-          <div className="flex items-center justify-between py-3">
-            <span className="text-body-sm text-text-secondary">Revenue</span>
-            <span className="text-body font-bold text-green-700">AED 13,305.00</span>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-body-sm text-text-secondary">Expenses</span>
-            <span className="text-body font-bold text-red-600">AED 3,240.61</span>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-body-sm font-semibold text-text-primary">Profit</span>
-            <span className="text-body font-bold text-green-700">AED 10,064.39</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Expenses list — partial */}
-      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA]">
-        <div className="flex items-center gap-2">
-          <span className="text-body font-bold text-text-primary">Expenses</span>
-          <span className="rounded-full bg-[#F5F5F7] px-2 py-0.5 text-caption font-medium text-text-secondary">
-            16
-          </span>
-        </div>
-        <div className="mt-2 divide-y divide-[#EAEAEA]">
-          {expenses.map((e, i) => (
-            <div key={i} className="flex items-center justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <div className="text-body-sm font-semibold text-text-primary">
-                  {e.name}
-                </div>
-                <div className="text-caption text-text-tertiary">{e.date}</div>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <div className="text-body-sm font-bold text-red-600">{e.amount}</div>
-                <div className="rounded-full bg-surface-active px-2 py-0.5 text-[10px] font-medium text-text-secondary">
-                  {e.cat}
-                </div>
-              </div>
+    <div className="w-full max-w-3xl space-y-4 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
+      {/* Three stat cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {cards.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6"
+          >
+            <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+              {c.label}
             </div>
-          ))}
+            <div className={`mt-2 text-xl font-bold sm:text-2xl ${c.color}`}>
+              {c.value}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-caption text-text-tertiary">
+              <span className={c.color}>{c.accent}</span>
+              <span>{c.sub}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Trend chart card */}
+      <div className="rounded-2xl bg-white p-5 ring-1 ring-[#EAEAEA] sm:p-6">
+        <div className="flex items-center justify-between">
+          <div className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+            Last 30 days
+          </div>
+          <div className="text-caption text-text-tertiary">128 bookings</div>
+        </div>
+        <div className="mt-4">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#F08C2D" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#F08C2D" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={areaPath} fill="url(#sparkfill)" />
+            <path
+              d={path}
+              fill="none"
+              stroke="#F08C2D"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
       </div>
     </div>
@@ -1061,14 +1053,17 @@ function FinalCTA() {
     <section className="bg-white py-24 text-center sm:py-32 lg:py-40">
       <div className="mx-auto max-w-3xl px-5 sm:px-8">
         <h2 className="text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.02] lg:text-6xl">
-          Try Sukona for free.
+          Grow your business today.
         </h2>
-        <Link
-          href="/signup"
-          className="mt-10 inline-flex items-center justify-center rounded-full bg-text-primary px-7 py-3.5 text-body-sm font-medium text-text-inverse transition hover:opacity-90 active:scale-[0.98]"
-        >
-          Get started
-        </Link>
+        <div className="mt-10 flex flex-col items-center gap-2">
+          <Link
+            href="/signup"
+            className="inline-flex items-center justify-center rounded-full bg-text-primary px-7 py-3.5 text-body-sm font-medium text-text-inverse transition hover:opacity-90 active:scale-[0.98]"
+          >
+            Get started
+          </Link>
+          <p className="text-caption text-text-tertiary">7 days trial</p>
+        </div>
       </div>
     </section>
   );
