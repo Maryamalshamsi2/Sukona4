@@ -678,7 +678,7 @@ function PaymentsSection() {
           <span className="text-text-secondary">Send the receipt.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
-          Share receipts. Every payment tracked, automatically.
+          Share receipts. Record payments automatically.
         </p>
       </div>
 
