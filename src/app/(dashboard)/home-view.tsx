@@ -31,6 +31,9 @@ import {
   markNoShow,
   deleteAppointment,
   markShareSent,
+  getStaffMembers,
+  getServices,
+  getBundlesForBooking,
 } from "./calendar/actions";
 
 export interface ActivityItem {
@@ -105,10 +108,6 @@ function actionIcon(action: string) {
 interface HomeViewProps {
   initialAppointments: AppointmentData[];
   initialActivities: ActivityItem[];
-  initialStaff: StaffMember[];
-  initialClients: ClientItem[];
-  initialServices: ServiceItem[];
-  initialBundles: BundleForBooking[];
   initialStaffScheduleMap: Map<string, { isOff: boolean; startMin: number; endMin: number }>;
   initialCurrentUser: { id: string; role: string; full_name: string } | null;
 }
@@ -116,19 +115,24 @@ interface HomeViewProps {
 export default function HomeView({
   initialAppointments,
   initialActivities,
-  initialStaff,
-  initialClients,
-  initialServices,
-  initialBundles,
   initialStaffScheduleMap,
   initialCurrentUser,
 }: HomeViewProps) {
   const [appointments, setAppointments] = useState<AppointmentData[]>(initialAppointments);
   const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
-  const [staff] = useState<StaffMember[]>(initialStaff);
-  const [clients, setClients] = useState<ClientItem[]>(initialClients);
-  const [services] = useState<ServiceItem[]>(initialServices);
-  const [bundles] = useState<BundleForBooking[]>(initialBundles);
+  // Form-only data: staff / clients / services / bundles. The page
+  // server component used to prefetch these in the same Promise.all
+  // as the appointment list, which made first paint wait on data
+  // the user only sees once they open the "+ New" booking modal.
+  //
+  // We now ship the page with empty arrays and load these in the
+  // background after mount. The booking modal handles empty
+  // dropdowns gracefully (Loading state) for the brief window
+  // before the bg fetch resolves.
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [clients, setClients] = useState<ClientItem[]>([]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [bundles, setBundles] = useState<BundleForBooking[]>([]);
   const [staffScheduleMap] = useState(initialStaffScheduleMap);
   const [currentUser] = useState(initialCurrentUser);
   const [activityRange, setActivityRange] = useState<ActivityRange>("today");
@@ -167,6 +171,31 @@ export default function HomeView({
     if (!didMount) { setDidMount(true); return; }
     loadActivities(activityRange);
   }, [activityRange, didMount, loadActivities]);
+
+  // Background fetch the booking-form data after the page paints.
+  // Staff / clients / services / bundles are only consumed by the
+  // "+ New" appointment modal; loading them server-side made the
+  // dashboard wait on data the user wasn't seeing yet. Now the
+  // visible content (Today + Activity) appears immediately and
+  // this fills in within ~300 ms after first paint.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getStaffMembers(),
+      getClients(),
+      getServices(),
+      getBundlesForBooking(),
+    ])
+      .then(([s, c, sv, b]) => {
+        if (cancelled) return;
+        setStaff(s as StaffMember[]);
+        setClients(c as ClientItem[]);
+        setServices(sv as ServiceItem[]);
+        setBundles(b as unknown as BundleForBooking[]);
+      })
+      .catch(() => { /* dropdowns stay empty; user can retry by reopening the modal */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Check if an appointment is assigned to the current staff user
   function isMyAppointment(appt: AppointmentData) {

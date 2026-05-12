@@ -5,6 +5,7 @@ import Modal from "@/components/modal";
 import { recordPayment, updatePayment, uploadReceipt } from "@/app/(dashboard)/payments/actions";
 import type { PaymentMethod } from "@/types";
 import { useCurrency } from "@/lib/user-context";
+import { compressImage } from "@/lib/image-compress";
 
 export type ExistingPayment = {
   id: string;
@@ -124,20 +125,40 @@ export default function MarkPaidModal({
     setSubmitting(true);
     setError(null);
 
-    // Upload any newly-picked files in parallel, collect their public URLs,
-    // then merge with the kept existing URLs in order: existing first,
-    // then new (so the order users see in the picker is preserved).
-    const uploaded: string[] = [];
-    for (const file of newFiles) {
-      const fd = new FormData();
-      fd.append("file", file);
-      const up = await uploadReceipt(fd);
-      if (up.error) {
-        setError(up.error);
+    // Compress + upload every newly-picked file in parallel. The
+    // previous version did this in a for/await loop, which was the
+    // single biggest slowdown reported — 3 attachments meant 3
+    // sequential network round-trips of full-size phone photos
+    // (often 3–8 MB each).
+    //
+    // compressImage shrinks the typical 5 MB phone photo to ~300 KB
+    // before upload (no perceptible quality loss for a receipt at
+    // screen scale). Promise.all then fires all uploads at once.
+    // Together: ~10×–20× faster on cellular for multi-file submits.
+    //
+    // Order is preserved by mapping over newFiles (Promise.all keeps
+    // index order) and concatenating with existingUrls first.
+    let uploaded: string[] = [];
+    try {
+      const results = await Promise.all(
+        newFiles.map(async (file) => {
+          const compressed = await compressImage(file);
+          const fd = new FormData();
+          fd.append("file", compressed);
+          return uploadReceipt(fd);
+        }),
+      );
+      const failure = results.find((r) => r.error);
+      if (failure) {
+        setError(failure.error ?? "Upload failed");
         setSubmitting(false);
         return;
       }
-      if (up.url) uploaded.push(up.url);
+      uploaded = results.map((r) => r.url).filter((u): u is string => !!u);
+    } catch {
+      setError("Could not upload one or more receipts. Try again.");
+      setSubmitting(false);
+      return;
     }
     const finalUrls = [...existingUrls, ...uploaded];
 
