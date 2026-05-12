@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth-server";
 import {
   dispatchAppointmentConfirmation,
   dispatchAppointmentUpdated,
@@ -398,6 +399,18 @@ export async function updateAppointment(
 // ---- UPDATE STATUS ----
 
 export async function updateAppointmentStatus(id: string, status: string) {
+  // Staff can advance non-destructive statuses (on_the_way, arrived,
+  // paid) but cannot transition to cancelled or no_show — those are
+  // owner/admin actions. The UI hides those paths; this is the
+  // server-side fence against a direct API call.
+  const profile = await getCurrentProfile();
+  if (
+    profile?.role === "staff" &&
+    (status === "cancelled" || status === "no_show")
+  ) {
+    return { error: "Only the owner or admin can cancel or mark no-show." };
+  }
+
   const supabase = await createClient();
   // Get current status before updating
   const { data: current } = await supabase.from("appointments").select("status, client_id").eq("id", id).single();
@@ -437,6 +450,13 @@ export async function updateAppointmentStatus(id: string, status: string) {
 // ---- CANCEL ----
 
 export async function cancelAppointment(id: string) {
+  // Staff cannot cancel — owner/admin only. The UI hides the
+  // button for staff; this is the server-side fence.
+  const profile = await getCurrentProfile();
+  if (profile?.role === "staff") {
+    return { error: "Only the owner or admin can cancel an appointment." };
+  }
+
   const supabase = await createClient();
   const { data: current } = await supabase.from("appointments").select("client_id, status").eq("id", id).single();
   const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id);
@@ -469,6 +489,12 @@ export async function cancelAppointment(id: string) {
 // just track it for client reliability. Reports treat no-shows
 // separately from cancellations for that reason.
 export async function markNoShow(id: string) {
+  // Staff cannot mark no-show — owner/admin only.
+  const profile = await getCurrentProfile();
+  if (profile?.role === "staff") {
+    return { error: "Only the owner or admin can mark a no-show." };
+  }
+
   const supabase = await createClient();
   const { data: current } = await supabase
     .from("appointments")
@@ -505,6 +531,14 @@ export async function markNoShow(id: string) {
 // Use this when you want the appointment GONE from records and reports —
 // not just hidden as cancelled.
 export async function deleteAppointment(id: string) {
+  // Staff cannot delete — owner/admin only. Deletes are destructive
+  // (cascades to payments, activity_log entries, etc.) and should
+  // stay restricted regardless of RLS.
+  const profile = await getCurrentProfile();
+  if (profile?.role === "staff") {
+    return { error: "Only the owner or admin can delete an appointment." };
+  }
+
   const supabase = await createClient();
 
   // Read first so we can name the activity log entry (the appointment

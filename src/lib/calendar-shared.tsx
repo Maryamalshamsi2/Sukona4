@@ -384,7 +384,9 @@ export function DetailView({
   staff: StaffMember[];
   onStatusUpdate: (status: string) => void;
   onEdit: () => void;
-  onCancel: () => void;
+  /** Cancel callback. Optional — when undefined (staff role), the
+   *  Cancel button is hidden. */
+  onCancel?: () => void;
   /** Sibling of onCancel: marks the appointment as a no-show.
    *  Optional — caller pages decide whether to expose it. */
   onNoShow?: () => void;
@@ -401,7 +403,11 @@ export function DetailView({
    *  bump review_sent_at + receipt_sent_at and refresh. Optional — if
    *  absent, the section just opens wa.me without persisting send state. */
   onShareSent?: () => void;
-  /** When false, hide the Cancel/Edit/Delete buttons. Staff roles pass false. */
+  /** Controls visibility of the Edit (pencil) button. Defaults true.
+   *  Staff are allowed to edit (services, assigned staff, payment) so
+   *  this stays true for them — destructive actions (Cancel / No-show
+   *  / Delete) are gated separately by the presence of their
+   *  callbacks (onCancel / onNoShow / onDelete). */
   canEdit?: boolean;
 }) {
   const timings = getServiceTimings(appointment);
@@ -771,7 +777,7 @@ export function DetailView({
           - mobile pb uses safe-area  lifts above iOS home indicator
           - sm: keeps border-t/pt-4   same visual treatment on desktop */}
       <div className="sticky bottom-0 -mx-6 -mb-6 border-t border-border bg-white px-6 pt-4 pb-[max(1.5rem,calc(1rem+env(safe-area-inset-bottom)))] sm:-mx-6 sm:-mb-6 sm:pb-6">
-        {canEdit && isActive && (onNoShow || (nextStatus && nextStatus.value !== "paid")) && (
+        {isActive && (onNoShow || (nextStatus && nextStatus.value !== "paid")) && (
           <div className="mb-3 flex items-center justify-between gap-2 text-caption font-semibold">
             {onNoShow ? (
               <button
@@ -802,15 +808,16 @@ export function DetailView({
               {nextStatus.label}
             </button>
           )}
-          {canEdit && isActive && (
-            // Auto-sized (no flex-1) so the primary status button gets the
-            // extra horizontal room — was making "On the Way" cramped on
-            // mobile when both buttons split the width 50/50.
+          {/* Cancel — owner/admin only. Parent passes onCancel=undefined
+              for staff so the button stays hidden for them. */}
+          {onCancel && isActive && (
             <button onClick={onCancel}
               className="shrink-0 whitespace-nowrap rounded-xl border border-red-200 px-3 py-2.5 text-body-sm font-semibold text-error-700 hover:bg-red-50 transition-colors">
               Cancel
             </button>
           )}
+          {/* Edit — staff are allowed to edit services / assigned staff
+              / payment, so canEdit stays true for them. */}
           {canEdit && (
             <button onClick={onEdit}
               className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-surface-active text-text-secondary hover:bg-neutral-100 hover:text-text-primary transition-colors"
@@ -820,7 +827,8 @@ export function DetailView({
               </svg>
             </button>
           )}
-          {canEdit && onDelete && (
+          {/* Delete — owner/admin only. Same pattern as Cancel. */}
+          {onDelete && (
             <button onClick={onDelete}
               className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-surface-active text-text-secondary hover:bg-red-50 hover:text-red-600 transition-colors"
               title="Delete appointment (removes from records)">

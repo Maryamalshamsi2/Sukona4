@@ -532,16 +532,19 @@ export default function HomeView({
             staff={staff}
             onStatusUpdate={handleStatusUpdate}
             onEdit={openEdit}
-            onCancel={handleCancel}
+            // Destructive actions are gated by passing undefined for
+            // staff — the buttons disappear when their callback is
+            // absent. Edit stays open (canEdit=true default) so staff
+            // can update services / assigned staff / payment.
+            onCancel={!isStaff ? handleCancel : undefined}
             onNoShow={!isStaff ? handleNoShow : undefined}
-            onDelete={handleDelete}
+            onDelete={!isStaff ? handleDelete : undefined}
             onEditPayment={() => { setDetailModalOpen(false); setEditPaymentOpen(true); }}
             onShareSent={async () => {
               if (!selectedAppointment) return;
               await markShareSent(selectedAppointment.id);
               reloadAppointments();
             }}
-            canEdit={currentUser?.role !== "staff"}
           />
         )}
       </Modal>
