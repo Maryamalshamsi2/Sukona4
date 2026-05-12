@@ -60,10 +60,11 @@ WHERE p.role = 'staff'
   );
 
 -- 3. Flip the expense flag so the row's own paid_from_petty_cash
--- field matches reality.
+-- field matches reality. updated_at is intentionally not touched —
+-- not every deployed schema has the column, and the backfill works
+-- without bumping it.
 UPDATE expenses e
-SET paid_from_petty_cash = true,
-    updated_at = now()
+SET paid_from_petty_cash = true
 FROM profiles p
 WHERE p.id = e.created_by
   AND p.role = 'staff'
