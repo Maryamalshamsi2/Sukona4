@@ -63,6 +63,11 @@ export default function OnboardingPage() {
   const [bootLoading, setBootLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After the wizard's final submit succeeds, we don't redirect
+  // immediately — we show an interstitial offering to add a payment
+  // method now (the "hybrid" trial flow). The user can either start
+  // Stripe checkout from here or skip to the dashboard.
+  const [finished, setFinished] = useState(false);
 
   // Pre-fill the name if the signup trigger generated one (e.g.
   // "Mary's Salon"), and bounce out if the salon is already
@@ -164,6 +169,41 @@ export default function OnboardingPage() {
       setSubmitting(false);
       return;
     }
+    // Don't redirect yet — show the "add payment now?" interstitial.
+    setFinished(true);
+    setSubmitting(false);
+  }
+
+  // Hybrid-trial path: user clicks "Add payment method" on the
+  // success screen. Hits the checkout API, which creates a Stripe
+  // Checkout Session with trial_end = our salons.trial_ends_at, so
+  // they're not charged until day 7. Redirects to Stripe's hosted
+  // page; on success they come back to /settings/billing.
+  async function startCheckout() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: data.plan,
+          billing_period: data.billingPeriod,
+        }),
+      });
+      const body = await res.json();
+      if (body.url) {
+        window.location.href = body.url;
+        return;
+      }
+      setError(body.error || "Could not start checkout.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+    }
+    setSubmitting(false);
+  }
+
+  function skipToDashboard() {
     window.location.replace("/");
   }
 
@@ -171,6 +211,68 @@ export default function OnboardingPage() {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-gradient-to-br from-violet-50 via-white to-violet-100/60">
         <p className="text-body-sm text-text-secondary">Loading…</p>
+      </div>
+    );
+  }
+
+  // Post-submit interstitial — the "hybrid trial" choice point.
+  if (finished) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center px-4 py-8 bg-gradient-to-br from-violet-50 via-white to-violet-100/60">
+        <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white/70 px-6 py-8 shadow-xl backdrop-blur-xl sm:px-10 sm:py-12">
+          <div className="flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-dark.png" alt="Sukona" className="h-[40px] w-auto sm:h-[44px]" />
+          </div>
+
+          <div className="mt-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            </div>
+            <h1 className="mt-5 text-2xl font-bold tracking-tight text-text-primary">
+              Your trial has started
+            </h1>
+            <p className="mt-2 text-body-sm text-text-secondary">
+              Sukona is yours for the next 7 days, free.
+            </p>
+          </div>
+
+          {/* Optional payment-now path */}
+          <div className="mt-8 rounded-2xl bg-white/80 p-5 ring-1 ring-neutral-200">
+            <h2 className="text-body font-semibold text-text-primary">
+              Add a payment method now?
+            </h2>
+            <p className="mt-1.5 text-caption text-text-secondary">
+              Avoid interruption when your trial ends. You won&rsquo;t be charged
+              until day 7 — and you can cancel anytime before then.
+            </p>
+          </div>
+
+          {error && (
+            <p className="mt-4 text-body-sm text-error-700" role="alert">{error}</p>
+          )}
+
+          <div className="mt-6 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={startCheckout}
+              disabled={submitting}
+              className="w-full rounded-xl bg-neutral-900 px-4 py-3 font-semibold tracking-tight text-text-inverse transition hover:bg-neutral-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-neutral-300 focus:ring-offset-2 disabled:opacity-50"
+            >
+              {submitting ? "Opening checkout…" : "Add payment method"}
+            </button>
+            <button
+              type="button"
+              onClick={skipToDashboard}
+              disabled={submitting}
+              className="text-center text-body-sm text-text-tertiary transition hover:text-text-primary"
+            >
+              Skip for now — go to dashboard
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

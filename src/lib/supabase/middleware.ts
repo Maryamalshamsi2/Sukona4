@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isHardBlocked, type SubscriptionStatus } from "@/lib/plan";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -74,66 +75,95 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Onboarding + role guard. We fetch the profile (joined with the salon's
-  // is_onboarded flag) at most once per request, only when the user is
-  // authenticated and the path isn't an auth/onboarding/api route.
+  // Onboarding + subscription + role guard. We fetch the profile (joined
+  // with the salon's is_onboarded + billing fields) at most once per
+  // request, and only when the user is authenticated and the path isn't
+  // a fully-bypassed route (login / signup / auth / API).
   if (user) {
     const pathname = request.nextUrl.pathname;
 
-    // Paths that don't require onboarding to be complete (the onboarding
-    // page itself, auth flows, the API surface).
-    const skipOnboardingCheck =
-      pathname.startsWith("/onboarding") ||
+    // Bypass-everything paths: never block, never redirect from these.
+    // API routes are bypassed so the Stripe checkout/webhook/portal
+    // routes work even for a hard-blocked salon (otherwise the user
+    // can't pay to unblock themselves).
+    const isBypassed =
       pathname.startsWith("/login") ||
       pathname.startsWith("/signup") ||
       pathname.startsWith("/auth/") ||
       pathname.startsWith("/api/");
 
-    const ownerOnlyPrefixes = ["/team", "/reports"];
-    // Routes hidden from staff (admins + owners can still see them).
-    const nonStaffPrefixes = ["/clients"];
-    const needsOwner = ownerOnlyPrefixes.some(
-      (p) => pathname === p || pathname.startsWith(p + "/")
-    );
-    const blockStaff = nonStaffPrefixes.some(
-      (p) => pathname === p || pathname.startsWith(p + "/")
-    );
+    if (!isBypassed) {
+      const isOnboarding = pathname.startsWith("/onboarding");
+      // Paths the user is allowed to reach even when hard-blocked.
+      // /settings/billing so they can pay; /onboarding so a half-
+      // signed-up user can finish before billing kicks in.
+      const allowedWhileBlocked =
+        pathname.startsWith("/settings/billing") || isOnboarding;
 
-    if (!skipOnboardingCheck || needsOwner || blockStaff) {
-      // Single combined fetch — avoids two round-trips for the common case
-      // of an authenticated dashboard request.
+      const ownerOnlyPrefixes = ["/team", "/reports"];
+      const nonStaffPrefixes = ["/clients"];
+      const needsOwner = ownerOnlyPrefixes.some(
+        (p) => pathname === p || pathname.startsWith(p + "/")
+      );
+      const blockStaff = nonStaffPrefixes.some(
+        (p) => pathname === p || pathname.startsWith(p + "/")
+      );
+
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role, salons!inner(is_onboarded)")
+        .select(
+          "role, salons!inner(is_onboarded, subscription_status, trial_ends_at)"
+        )
         .eq("id", user.id)
         .single();
 
-      // Onboarding redirect: any authenticated user whose salon hasn't been
-      // onboarded yet gets pushed to /onboarding (the owner is the only one
-      // who can complete it; staff/admin will see a stub there).
-      if (
-        !skipOnboardingCheck &&
-        profile &&
-        // @ts-expect-error — supabase-js types this as an array but with !inner it's a single row
-        profile.salons?.is_onboarded === false
-      ) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/onboarding";
-        return NextResponse.redirect(url);
-      }
+      if (profile) {
+        // @ts-expect-error — supabase-js types salons!inner as an array
+        const salon = profile.salons as {
+          is_onboarded: boolean;
+          subscription_status: SubscriptionStatus;
+          trial_ends_at: string | null;
+        } | null;
 
-      // Owner-only URL guard.
-      if (needsOwner && profile?.role !== "owner") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/";
-        return NextResponse.redirect(url);
-      }
+        // Onboarding redirect: highest priority. If the salon isn't
+        // onboarded yet, push the user to /onboarding regardless of
+        // anything else.
+        if (!isOnboarding && salon?.is_onboarded === false) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/onboarding";
+          return NextResponse.redirect(url);
+        }
 
-      // Non-staff URL guard (e.g. /clients — staff don't see customer data).
-      if (blockStaff && profile?.role === "staff") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/";
-        return NextResponse.redirect(url);
+        // Hard-block: trial expired OR sub past_due/canceled/incomplete.
+        // The user can still reach /settings/billing (to add a card)
+        // and /onboarding (to finish setup), plus all API routes (so
+        // the checkout flow works). Everything else redirects to the
+        // billing page.
+        if (
+          salon &&
+          salon.is_onboarded &&
+          !allowedWhileBlocked &&
+          isHardBlocked(salon.subscription_status, salon.trial_ends_at)
+        ) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/settings/billing";
+          return NextResponse.redirect(url);
+        }
+
+        // Owner-only URL guard.
+        if (needsOwner && profile.role !== "owner") {
+          const url = request.nextUrl.clone();
+          url.pathname = "/";
+          return NextResponse.redirect(url);
+        }
+
+        // Non-staff URL guard (e.g. /clients — staff don't see
+        // customer data).
+        if (blockStaff && profile.role === "staff") {
+          const url = request.nextUrl.clone();
+          url.pathname = "/";
+          return NextResponse.redirect(url);
+        }
       }
     }
   }
