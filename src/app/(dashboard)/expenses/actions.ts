@@ -106,8 +106,13 @@ export async function createExpense(
   // is_private flag (migration 029) is carried forward so the read
   // path can redact the description for staff while keeping the
   // amount + balance accurate across roles.
+  //
+  // Note: this insert's error used to be discarded. Now we surface
+  // it — if it fails (e.g. RLS denies, or migration-029 hasn't run
+  // and the is_private column is missing), the caller sees the
+  // error instead of the balance silently not updating.
   if (paidFromPettyCash && data) {
-    await supabase.from("petty_cash_log").insert({
+    const { error: logError } = await supabase.from("petty_cash_log").insert({
       amount,
       type: "withdrawal",
       description: `Expense: ${description}`,
@@ -115,6 +120,11 @@ export async function createExpense(
       created_by: userId,
       is_private: isPrivate,
     });
+    if (logError) {
+      return {
+        error: `Expense saved but petty cash log update failed: ${logError.message}`,
+      };
+    }
   }
 
   // Notification: short, scannable. e.g. "Expense · AED 30 (Supplies)".
@@ -179,12 +189,15 @@ export async function updateExpense(
 
   if (error) return { error: error.message };
 
-  // Handle petty cash log changes
+  // Handle petty cash log changes. Errors surfaced (not swallowed)
+  // for the same reason as createExpense — silent failure here is
+  // how a missing column / RLS denial slips through and the balance
+  // never updates.
   const wasPettyCash = oldExpense?.paid_from_petty_cash;
 
   if (!wasPettyCash && paidFromPettyCash) {
     // Newly marked as petty cash — add withdrawal
-    await supabase.from("petty_cash_log").insert({
+    const { error: logError } = await supabase.from("petty_cash_log").insert({
       amount,
       type: "withdrawal",
       description: `Expense: ${description}`,
@@ -192,15 +205,24 @@ export async function updateExpense(
       created_by: userId,
       is_private: isPrivate,
     });
+    if (logError) {
+      return { error: `Expense saved but petty cash log update failed: ${logError.message}` };
+    }
   } else if (wasPettyCash && !paidFromPettyCash) {
     // Removed petty cash — delete the withdrawal log
-    await supabase.from("petty_cash_log").delete().eq("expense_id", id);
+    const { error: logError } = await supabase.from("petty_cash_log").delete().eq("expense_id", id);
+    if (logError) {
+      return { error: `Expense saved but petty cash log update failed: ${logError.message}` };
+    }
   } else if (wasPettyCash && paidFromPettyCash) {
     // Still petty cash — update amount/description + privacy flag
     // (the expense's privacy can flip on edit too).
-    await supabase.from("petty_cash_log")
+    const { error: logError } = await supabase.from("petty_cash_log")
       .update({ amount, description: `Expense: ${description}`, is_private: isPrivate })
       .eq("expense_id", id);
+    if (logError) {
+      return { error: `Expense saved but petty cash log update failed: ${logError.message}` };
+    }
   }
 
   revalidatePath("/expenses");

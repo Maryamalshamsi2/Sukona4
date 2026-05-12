@@ -41,14 +41,16 @@ ORDER BY e.date DESC, e.created_at DESC;
 -- 2. Insert the missing withdrawal log rows. salon_id auto-fills
 -- from the expense's salon via the column default — but we also
 -- write it explicitly to be safe regardless of session context.
-INSERT INTO petty_cash_log (amount, type, description, expense_id, created_by, is_private, salon_id)
+-- is_private is intentionally omitted so this script runs whether
+-- or not migration-029 has been applied (if the column exists, it
+-- defaults to false; if not, it isn't referenced).
+INSERT INTO petty_cash_log (amount, type, description, expense_id, created_by, salon_id)
 SELECT
   e.amount,
   'withdrawal',
   'Expense: ' || e.description,
   e.id,
   e.created_by,
-  false,
   e.salon_id
 FROM expenses e
 JOIN profiles p ON p.id = e.created_by
