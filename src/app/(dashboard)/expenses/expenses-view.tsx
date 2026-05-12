@@ -509,6 +509,7 @@ export default function ExpensesView({
       <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)} title="Add Expense">
         <ExpenseForm
           isOwner={isOwner}
+          isOwnerOrAdmin={isOwnerOrAdmin}
           onSubmit={async (desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash) => {
             const result = await createExpense(desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash);
             if (result.error) { undo.error(result.error); return; }
@@ -525,6 +526,7 @@ export default function ExpensesView({
         {selected && (
           <ExpenseForm
             isOwner={isOwner}
+            isOwnerOrAdmin={isOwnerOrAdmin}
             defaultValues={selected}
             onSubmit={async (desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash) => {
                 const result = await updateExpense(selected.id, desc, amount, type, date, time, notes, receiptUrl, isPrivate, paidFromPettyCash);
@@ -712,6 +714,7 @@ function DepositForm({
 function ExpenseForm({
   defaultValues,
   isOwner,
+  isOwnerOrAdmin,
   onSubmit,
   onCancel,
   onDelete,
@@ -719,6 +722,12 @@ function ExpenseForm({
 }: {
   defaultValues?: Expense;
   isOwner: boolean;
+  /** Owner OR admin. Controls the "Paid from petty cash" toggle —
+   *  hidden from staff because in practice staff always pay
+   *  out-of-pocket and reimburse from petty cash, so the toggle
+   *  was just a foot-gun (staff turning it off and the balance
+   *  never updating). */
+  isOwnerOrAdmin: boolean;
   onSubmit: (desc: string, amount: number, type: string, date: string, time: string | null, notes: string, receiptUrl: string | null, isPrivate: boolean, paidFromPettyCash: boolean) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
@@ -889,23 +898,31 @@ function ExpenseForm({
 
       {/* Toggles */}
       <div className="space-y-6">
-        {/* Paid from petty cash */}
-        <label className="flex items-center gap-3 cursor-pointer">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={paidFromPettyCash}
-            onClick={() => setPaidFromPettyCash(!paidFromPettyCash)}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              paidFromPettyCash ? "bg-neutral-900" : "bg-gray-200"
-            }`}
-          >
-            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-              paidFromPettyCash ? "translate-x-[18px]" : "translate-x-[3px]"
-            }`} />
-          </button>
-          <span className="text-body-sm text-text-primary">Paid from petty cash</span>
-        </label>
+        {/* Paid from petty cash — owner/admin only.
+            Staff don't see this toggle: in a home-service salon
+            they pay out-of-pocket and the only reimbursement path
+            is petty cash, so making them tick a box was just a
+            way for the toggle to get accidentally turned off and
+            the balance to silently not update. Staff submit always
+            carries paidFromPettyCash=true (the form's default). */}
+        {isOwnerOrAdmin && (
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={paidFromPettyCash}
+              onClick={() => setPaidFromPettyCash(!paidFromPettyCash)}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                paidFromPettyCash ? "bg-neutral-900" : "bg-gray-200"
+              }`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                paidFromPettyCash ? "translate-x-[18px]" : "translate-x-[3px]"
+              }`} />
+            </button>
+            <span className="text-body-sm text-text-primary">Paid from petty cash</span>
+          </label>
+        )}
 
         {/* Private expense (owner only) */}
         {isOwner && (

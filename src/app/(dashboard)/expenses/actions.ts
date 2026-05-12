@@ -74,7 +74,18 @@ export async function createExpense(
   isPrivate: boolean = false,
   paidFromPettyCash: boolean = false
 ) {
-  const { supabase, userId } = await getCurrentUserRole();
+  const { supabase, userId, role } = await getCurrentUserRole();
+
+  // Staff always pay expenses from petty cash — there's no other
+  // reimbursement path for them in a home-service salon. Forcing
+  // this server-side closes the loophole where a tampered client
+  // could submit paidFromPettyCash=false and silently skip the
+  // petty_cash_log withdrawal (which was happening even from the
+  // legitimate UI when staff toggled it off, before the toggle was
+  // hidden from them).
+  if (role === "staff") {
+    paidFromPettyCash = true;
+  }
 
   const { data, error } = await supabase.from("expenses").insert({
     description,
@@ -134,7 +145,14 @@ export async function updateExpense(
   isPrivate: boolean = false,
   paidFromPettyCash: boolean = false
 ) {
-  const { supabase, userId } = await getCurrentUserRole();
+  const { supabase, userId, role } = await getCurrentUserRole();
+
+  // Same staff-side enforcement as createExpense: staff can edit
+  // their own expense (per migration-028) but cannot toggle off
+  // petty cash. Forces the flag true when role is staff.
+  if (role === "staff") {
+    paidFromPettyCash = true;
+  }
 
   // Get old expense to check petty cash change
   const { data: oldExpense } = await supabase
