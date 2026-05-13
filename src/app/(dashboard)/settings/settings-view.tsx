@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { signOut } from "@/app/(dashboard)/actions";
 import {
   getProfile,
@@ -84,6 +85,31 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-title-page font-bold tracking-tight text-text-primary">Settings</h1>
+
+      {/* Billing entry — owner only. Surfaces /settings/billing
+          from the main Settings page so users find it through the
+          existing sidebar nav, not just the avatar menu. */}
+      {isOwner && (
+        <Link
+          href="/settings/billing"
+          className="flex items-center justify-between rounded-2xl bg-white p-5 ring-1 ring-border transition hover:bg-surface-hover"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 text-primary-600">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-body-sm font-semibold text-text-primary">Plan & Billing</div>
+              <div className="text-caption text-text-secondary">Manage your subscription, payment method, and invoices</div>
+            </div>
+          </div>
+          <svg className="h-5 w-5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </Link>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl bg-surface-active p-1">
