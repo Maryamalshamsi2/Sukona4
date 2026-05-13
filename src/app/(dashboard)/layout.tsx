@@ -147,13 +147,12 @@ export default function DashboardLayout({
                 {userInitials || "?"}
               </button>
 
-              {/* Dropdown menu — Plan + Billing both point to the
-                  billing page (intentionally same destination, two
-                  different search terms users have in mind: "upgrade
-                  my plan" vs. "update my card"). Settings reaches the
-                  general account settings; Support opens the contact
-                  email. Sign out is separated below a divider so it
-                  reads as the destructive action. */}
+              {/* Dropdown menu — Plan + Billing are gated to OWNER
+                  only (matches the Settings page card, the
+                  /settings/billing page render guard, and the
+                  /api/stripe/* route guards). Admin and staff don't
+                  see those items at all. Settings + Support + Sign
+                  out remain available to everyone. */}
               {showUserMenu && (
                 <>
                   <div
@@ -161,26 +160,30 @@ export default function DashboardLayout({
                     onClick={() => setShowUserMenu(false)}
                   />
                   <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
-                    <Link
-                      href="/settings/billing"
-                      onClick={() => setShowUserMenu(false)}
-                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
-                    >
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Plan
-                    </Link>
-                    <Link
-                      href="/settings/billing"
-                      onClick={() => setShowUserMenu(false)}
-                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
-                    >
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                      </svg>
-                      Billing
-                    </Link>
+                    {currentUser?.role === "owner" && (
+                      <>
+                        <Link
+                          href="/settings/billing"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Plan
+                        </Link>
+                        <Link
+                          href="/settings/billing"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                          </svg>
+                          Billing
+                        </Link>
+                      </>
+                    )}
                     <Link
                       href="/settings"
                       onClick={() => setShowUserMenu(false)}
