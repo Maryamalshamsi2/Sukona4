@@ -205,7 +205,19 @@ export default function SignupPage() {
             </button>
           </form>
 
-          <p className="mt-8 text-center text-body-sm text-text-secondary">
+          <p className="mt-6 text-center text-caption text-text-tertiary">
+            By signing up you agree to our{" "}
+            <Link href="/terms" className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+
+          <p className="mt-6 text-center text-body-sm text-text-secondary">
             Already have an account?{" "}
             <Link href="/login" className="text-primary-600 hover:text-primary-700 font-semibold">
               Sign in

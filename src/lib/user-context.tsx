@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { Plan } from "@/lib/plan";
 
 export type UserRole = "owner" | "admin" | "staff";
 
@@ -12,6 +13,10 @@ export interface CurrentUser {
   salon_id: string;
   /** ISO 4217 code from the salons row (migration 030). Default 'AED'. */
   currency: string;
+  /** Salon's subscription plan from migration 033. Loaded async by
+   *  the dashboard layout — may be undefined briefly during first
+   *  paint. Use `usePlan()` for a safe-default read. */
+  plan?: Plan;
 }
 
 /**
@@ -22,6 +27,17 @@ export interface CurrentUser {
 export function useCurrency(): string {
   const u = useContext(UserContext);
   return u?.currency || "AED";
+}
+
+/**
+ * Convenience hook for reading just the salon's plan. Falls back
+ * to 'solo' when the user isn't loaded yet — the strictest gating
+ * for any plan-aware UI (better to underestimate access during
+ * first paint than to flash full access then snap shut).
+ */
+export function usePlan(): Plan {
+  const u = useContext(UserContext);
+  return u?.plan || "solo";
 }
 
 /**

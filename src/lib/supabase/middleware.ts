@@ -59,7 +59,13 @@ export async function updateSession(request: NextRequest) {
       path.startsWith("/auth/") ||
       path.startsWith("/api/") ||
       path.startsWith("/r/") ||
-      path.startsWith("/receipt/");
+      path.startsWith("/receipt/") ||
+      // Legal pages — needed for anonymous visitors who arrived from
+      // the landing page footer or external links. They live in the
+      // (marketing) route group so they share the public canvas.
+      path.startsWith("/terms") ||
+      path.startsWith("/privacy") ||
+      path.startsWith("/refund");
     if (!isPublic) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";

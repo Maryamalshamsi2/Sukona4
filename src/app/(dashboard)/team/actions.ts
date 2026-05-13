@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import {
+  canAddStaff,
+  maxStaff,
+  PLAN_LABELS,
+  type Plan,
+} from "@/lib/plan";
 import type { StaffSchedule, StaffDayOff } from "@/types";
 
 // ---- TEAM GROUPS ----
@@ -106,6 +112,35 @@ export async function addTeamMember(formData: FormData) {
   const adminResult = await getAdminClient();
   if ("error" in adminResult) return { error: adminResult.error };
   const adminSupabase = adminResult.admin;
+
+  // Plan-limit enforcement. Solo = 1 member (just the owner),
+  // Team = 5, Multi-Team = unlimited. Reject before we hit Stripe
+  // / Supabase to keep the failure mode clean (just an error string
+  // the form surfaces). The UI gates this with an upgrade modal
+  // before submission too — this is the server-side fence.
+  const { data: salon } = await adminSupabase
+    .from("salons")
+    .select("plan")
+    .eq("id", inviter.salon_id)
+    .single();
+
+  if (salon?.plan) {
+    const plan = salon.plan as Plan;
+    const { count } = await adminSupabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", inviter.salon_id);
+    const current = count ?? 0;
+
+    if (!canAddStaff(plan, current)) {
+      const cap = maxStaff(plan);
+      const capStr = cap === Infinity ? "unlimited" : `${cap}`;
+      const memberWord = cap === 1 ? "member" : "members";
+      return {
+        error: `Your ${PLAN_LABELS[plan]} plan is limited to ${capStr} ${memberWord}. Upgrade your plan in Settings → Plan & Billing to add more.`,
+      };
+    }
+  }
 
   const email = ((formData.get("email") as string) || "").trim();
   const phone = ((formData.get("phone") as string) || "").trim();

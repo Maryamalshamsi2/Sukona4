@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import PhoneInput from "@/components/phone-input";
 import { useUndo } from "@/components/undo-toast";
-import { useCurrency } from "@/lib/user-context";
+import { useCurrency, usePlan } from "@/lib/user-context";
+import { canAddStaff, maxStaff, PLAN_LABELS } from "@/lib/plan";
 import {
   getGroups,
   addGroup,
@@ -139,8 +141,22 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     loadData();
   }
 
+  // ---- Plan-limit check ----
+  // Solo allows 1 member total (the owner). Team allows 5. Multi-Team
+  // unlimited. When the user clicks "Add Team Member" and we're at the
+  // cap, show an upgrade modal instead of opening the add form — the
+  // server enforces the same limit and would reject anyway, but
+  // catching it here is friendlier UX.
+  const plan = usePlan();
+  const atStaffLimit = !canAddStaff(plan, members.length);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+
   // ---- Member handlers ----
   function openAddMember() {
+    if (atStaffLimit) {
+      setUpgradeModalOpen(true);
+      return;
+    }
     setEditingMember(null);
     setIsAddingMember(true);
     setMemberPhone("");
@@ -859,6 +875,60 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
           </svg>
         </button>
       </div>
+
+      {/* ==== UPGRADE MODAL — plan-limit reached on add staff ==== */}
+      <Modal
+        open={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        title="Upgrade your plan"
+      >
+        <div className="space-y-5">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-body font-semibold text-text-primary">
+                You&rsquo;ve reached the{" "}
+                {PLAN_LABELS[plan]} plan&rsquo;s limit
+              </p>
+              <p className="mt-1.5 text-body-sm text-text-secondary">
+                {plan === "solo"
+                  ? "The Solo plan is for one person. Upgrade to Team to add up to 5 members, or Multi-Team for unlimited."
+                  : plan === "team"
+                    ? `Team plans include up to ${maxStaff(plan)} members. Upgrade to Multi-Team for unlimited.`
+                    : "Your current plan doesn't allow more members."}
+              </p>
+            </div>
+          </div>
+
+          {currentUser?.role === "owner" ? (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setUpgradeModalOpen(false)}
+                className="flex-1 rounded-xl bg-surface-active px-4 py-2.5 text-body-sm font-semibold text-text-primary transition hover:bg-neutral-100"
+              >
+                Not now
+              </button>
+              <Link
+                href="/settings/billing"
+                onClick={() => setUpgradeModalOpen(false)}
+                className="flex-1 rounded-xl bg-neutral-900 px-4 py-2.5 text-center text-body-sm font-semibold text-text-inverse transition hover:bg-neutral-800"
+              >
+                Upgrade plan
+              </Link>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-[#F5F5F7] p-4 text-body-sm text-text-secondary">
+              Only the salon owner can change the plan. Ask them to upgrade
+              and try again.
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

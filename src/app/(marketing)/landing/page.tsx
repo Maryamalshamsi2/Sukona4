@@ -1278,7 +1278,7 @@ function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 sm:gap-14">
+          <div className="grid grid-cols-2 gap-10 sm:grid-cols-3 sm:gap-14">
             <div>
               <h4 className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
                 Product
@@ -1309,6 +1309,16 @@ function Footer() {
                     @wearesukona
                   </a>
                 </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">
+                Legal
+              </h4>
+              <ul className="mt-4 space-y-2.5 text-body-sm">
+                <li><Link href="/terms" className="text-text-secondary transition hover:text-text-primary">Terms</Link></li>
+                <li><Link href="/privacy" className="text-text-secondary transition hover:text-text-primary">Privacy</Link></li>
+                <li><Link href="/refund" className="text-text-secondary transition hover:text-text-primary">Refund Policy</Link></li>
               </ul>
             </div>
           </div>

@@ -71,16 +71,23 @@ export default function DashboardLayout({
         // (migration 030) and trial_ends_at (migration 032).
         supabase
           .from("salons")
-          .select("currency, trial_ends_at")
+          .select("currency, trial_ends_at, plan")
           .eq("id", profile.salon_id)
           .maybeSingle()
           .then(({ data: salonData }) => {
             if (!salonData) return;
-            if (salonData.currency) {
-              setCurrentUser((prev) =>
-                prev ? { ...prev, currency: salonData.currency as string } : prev,
-              );
-            }
+            // Patch currency + plan into the context. Both are
+            // loaded async (the salon row isn't in JWT) and the
+            // sidebar falls back to a safe-default state until
+            // these arrive.
+            setCurrentUser((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                currency: (salonData.currency as string) || prev.currency,
+                plan: (salonData.plan as typeof prev.plan) || prev.plan,
+              };
+            });
             if (salonData.trial_ends_at) {
               setTrialEndsAt(salonData.trial_ends_at as string);
             }
