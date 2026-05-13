@@ -1,22 +1,30 @@
 "use client";
 
+import Link from "next/link";
+import { useCurrentUser } from "@/lib/user-context";
+
 /**
  * Trial banner — shown at the top of the dashboard for salons in (or
  * past) their 7-day free trial. Three states based on `trialEndsAt`:
  *
  *   null       — column not set (existing salons pre-migration-032 or
  *                future paid plans). No banner rendered.
- *   future     — active trial. "X days left in your trial" + soft CTA.
- *   past/now   — expired. "Trial ended — contact us at <email>" with
- *                a mailto link. Still non-blocking; user keeps access.
+ *   future     — active trial. "X days left in your free trial" + CTA
+ *                to /settings/billing (owner only — other roles see
+ *                the countdown without a link since they can't act).
+ *   past/now   — expired. "Your trial has ended" + same gated CTA.
+ *                In practice the middleware hard-blocks expired
+ *                trials, so the user is already on /settings/billing
+ *                when this state shows.
  */
 export default function TrialBanner({
   trialEndsAt,
-  contactEmail = "hellosukona@gmail.com",
 }: {
   trialEndsAt: string | null;
-  contactEmail?: string;
 }) {
+  const currentUser = useCurrentUser();
+  const isOwner = currentUser?.role === "owner";
+
   if (!trialEndsAt) return null;
 
   const ends = new Date(trialEndsAt);
@@ -33,12 +41,14 @@ export default function TrialBanner({
         className="flex flex-wrap items-center justify-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-caption text-amber-900 sm:text-body-sm"
       >
         <span>Your trial has ended.</span>
-        <a
-          href={`mailto:${contactEmail}`}
-          className="font-semibold underline-offset-2 hover:underline"
-        >
-          Contact us to keep going →
-        </a>
+        {isOwner && (
+          <Link
+            href="/settings/billing"
+            className="font-semibold underline-offset-2 hover:underline"
+          >
+            Choose a plan →
+          </Link>
+        )}
       </div>
     );
   }
@@ -52,12 +62,14 @@ export default function TrialBanner({
       <span>
         {daysLeft === 1 ? "1 day" : `${daysLeft} days`} left in your free trial.
       </span>
-      <a
-        href={`mailto:${contactEmail}`}
-        className="font-semibold text-text-primary underline-offset-2 hover:underline"
-      >
-        Get in touch
-      </a>
+      {isOwner && (
+        <Link
+          href="/settings/billing"
+          className="font-semibold text-text-primary underline-offset-2 hover:underline"
+        >
+          Choose a plan
+        </Link>
+      )}
     </div>
   );
 }
