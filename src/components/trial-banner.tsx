@@ -25,6 +25,13 @@ export default function TrialBanner({
   const currentUser = useCurrentUser();
   const isOwner = currentUser?.role === "owner";
 
+  // Hide the entire banner from admin/staff. They can't act on the
+  // trial state and don't need to see countdowns — the owner is
+  // the one who manages billing. Non-owners get redirected to a
+  // /paused page when the trial actually expires (see middleware
+  // hard-block logic).
+  if (!isOwner) return null;
+
   if (!trialEndsAt) return null;
 
   const ends = new Date(trialEndsAt);

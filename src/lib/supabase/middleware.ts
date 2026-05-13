@@ -100,11 +100,15 @@ export async function updateSession(request: NextRequest) {
 
     if (!isBypassed) {
       const isOnboarding = pathname.startsWith("/onboarding");
-      // Paths the user is allowed to reach even when hard-blocked.
-      // /settings/billing so they can pay; /onboarding so a half-
-      // signed-up user can finish before billing kicks in.
+      // Paths the user is allowed to reach even when hard-blocked:
+      //   - /settings/billing → owner pays here
+      //   - /paused           → admin/staff land here (read-only
+      //                          "ask your owner" screen)
+      //   - /onboarding       → half-signed-up flow not yet billed
       const allowedWhileBlocked =
-        pathname.startsWith("/settings/billing") || isOnboarding;
+        pathname.startsWith("/settings/billing") ||
+        pathname.startsWith("/paused") ||
+        isOnboarding;
 
       const ownerOnlyPrefixes = ["/team", "/reports"];
       const nonStaffPrefixes = ["/clients"];
@@ -141,10 +145,14 @@ export async function updateSession(request: NextRequest) {
         }
 
         // Hard-block: trial expired OR sub past_due/canceled/incomplete.
-        // The user can still reach /settings/billing (to add a card)
-        // and /onboarding (to finish setup), plus all API routes (so
-        // the checkout flow works). Everything else redirects to the
-        // billing page.
+        // The user can still reach /settings/billing (owner pays),
+        // /paused (admin/staff see the "ask your owner" screen),
+        // /onboarding (half-signed-up), plus all API routes (so the
+        // checkout flow works). Everything else redirects to a
+        // role-appropriate destination: owners → billing page (they
+        // can fix it); non-owners → /paused (they can't, so we tell
+        // them to contact the owner instead of dumping them on the
+        // "Only the salon owner can manage billing" page).
         if (
           salon &&
           salon.is_onboarded &&
@@ -152,7 +160,8 @@ export async function updateSession(request: NextRequest) {
           isHardBlocked(salon.subscription_status, salon.trial_ends_at)
         ) {
           const url = request.nextUrl.clone();
-          url.pathname = "/settings/billing";
+          url.pathname =
+            profile.role === "owner" ? "/settings/billing" : "/paused";
           return NextResponse.redirect(url);
         }
 
