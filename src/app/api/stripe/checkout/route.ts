@@ -100,6 +100,18 @@ export async function POST(req: NextRequest) {
       // other jurisdictions) once it's enabled in the dashboard.
       // Harmless if Tax isn't enabled yet — Stripe will just skip.
       automatic_tax: { enabled: true },
+      // Required for automatic_tax when the Customer doesn't have
+      // an address yet (newly-created customers don't). 'auto'
+      // tells Stripe to copy the address the user enters at
+      // checkout back onto the Customer record, which satisfies
+      // Stripe Tax's "valid address" requirement and persists the
+      // address for next time (Portal access, future invoices,
+      // etc.).
+      customer_update: { address: "auto", name: "auto" },
+      // Forces the address fields to render in Checkout — without
+      // this, Stripe might skip them and we end up with the same
+      // "no address" error.
+      billing_address_collection: "required",
       // Lets users redeem promo codes on the checkout page.
       allow_promotion_codes: true,
       // The salon_id metadata is what the webhook handler keys on

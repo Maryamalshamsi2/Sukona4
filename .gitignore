@@ -15,8 +15,11 @@
 # debug
 npm-debug.log*
 
-# env files
+# env files — covers both canonical forms (.env.local,
+# .env.production.local) and editor backup variants like
+# .env.local.save (nano), .env.local~ (vim/emacs), .env.local.bak.
 .env*.local
+.env.local*
 
 # typescript
 *.tsbuildinfo
