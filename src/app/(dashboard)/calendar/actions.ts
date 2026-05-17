@@ -346,11 +346,8 @@ export async function updateAppointment(
 
   if (error) return { error: error.message };
 
-  // Replace appointment_services
-  const { error: delSvcErr } = await supabase.from("appointment_services").delete().eq("appointment_id", id);
-  if (delSvcErr) return { error: `Delete services: ${delSvcErr.message}` };
-
-  const rows = serviceEntries.map((e, i) => ({
+  // Build the rows we'll insert for both child tables.
+  const serviceRows = serviceEntries.map((e, i) => ({
     appointment_id: id,
     service_id: e.service_id,
     staff_id: e.staff_id,
@@ -363,30 +360,55 @@ export async function updateAppointment(
     bundle_total_price: e.bundle_total_price ?? null,
     bundle_name: e.bundle_name ?? null,
   }));
-  const { error: insSvcErr } = await supabase.from("appointment_services").insert(rows);
-  if (insSvcErr) return { error: `Insert services: ${insSvcErr.message}` };
-
-  // Replace appointment_staff
-  const { error: delStaffErr } = await supabase.from("appointment_staff").delete().eq("appointment_id", id);
-  if (delStaffErr) return { error: `Delete staff: ${delStaffErr.message}` };
-
   const uniqueStaffIds = [...new Set(serviceEntries.map((e) => e.staff_id))];
-  if (uniqueStaffIds.length > 0) {
-    const staffRows = uniqueStaffIds.map((sid) => ({
-      appointment_id: id,
-      staff_id: sid,
-    }));
-    const { error: insStaffErr } = await supabase.from("appointment_staff").insert(staffRows);
-    if (insStaffErr) return { error: `Insert staff: ${insStaffErr.message}` };
-  }
+  const staffRows = uniqueStaffIds.map((sid) => ({
+    appointment_id: id,
+    staff_id: sid,
+  }));
 
-  const { data: client } = await supabase.from("clients").select("name").eq("id", clientId).single();
-  await logActivity(
-    supabase,
-    id,
-    "edited",
-    `Updated · ${client?.name || "Unknown"}'s appointment`,
-  );
+  // Replace child tables. appointment_services and appointment_staff
+  // are independent — no reason to wait for one's delete/insert
+  // cycle before starting the other's. Used to be four sequential
+  // round trips; now two parallel phases.
+  //
+  // We still need delete-then-insert (not parallel inside a table)
+  // because inserting before deleting would create duplicates.
+  const [delSvc, delStaff] = await Promise.all([
+    supabase.from("appointment_services").delete().eq("appointment_id", id),
+    supabase.from("appointment_staff").delete().eq("appointment_id", id),
+  ]);
+  if (delSvc.error) return { error: `Delete services: ${delSvc.error.message}` };
+  if (delStaff.error) return { error: `Delete staff: ${delStaff.error.message}` };
+
+  const [insSvc, insStaff] = await Promise.all([
+    supabase.from("appointment_services").insert(serviceRows),
+    staffRows.length > 0
+      ? supabase.from("appointment_staff").insert(staffRows)
+      : Promise.resolve({ error: null }),
+  ]);
+  if (insSvc.error) return { error: `Insert services: ${insSvc.error.message}` };
+  if (insStaff.error) return { error: `Insert staff: ${insStaff.error.message}` };
+
+  // Activity log + WhatsApp notification fire in the background —
+  // they don't affect what the user sees on /calendar after save,
+  // and waiting on them was adding ~300-500ms to every edit. The
+  // log appears on /home; revalidatePath there isn't needed since
+  // /home re-fetches activity on mount.
+  void (async () => {
+    try {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .single();
+      await logActivity(
+        supabase,
+        id,
+        "edited",
+        `Updated · ${client?.name || "Unknown"}'s appointment`,
+      );
+    } catch { /* log failures don't matter to the user */ }
+  })();
 
   if (materialChange) {
     void dispatchAppointmentUpdated(id);
