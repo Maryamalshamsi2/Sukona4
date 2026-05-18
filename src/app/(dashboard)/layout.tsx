@@ -86,6 +86,7 @@ export default function DashboardLayout({
                 ...prev,
                 currency: (salonData.currency as string) || prev.currency,
                 plan: (salonData.plan as typeof prev.plan) || prev.plan,
+                is_exempt: !!salonData.is_exempt,
               };
             });
             // Skip the trial banner entirely for exempt salons

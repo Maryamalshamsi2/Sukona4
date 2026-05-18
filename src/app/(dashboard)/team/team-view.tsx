@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import PhoneInput from "@/components/phone-input";
 import { useUndo } from "@/components/undo-toast";
-import { useCurrency, usePlan } from "@/lib/user-context";
+import { useCurrency, usePlan, useIsExempt } from "@/lib/user-context";
 import { canAddStaff, maxStaff, PLAN_LABELS } from "@/lib/plan";
 import {
   getGroups,
@@ -147,8 +147,13 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   // cap, show an upgrade modal instead of opening the add form — the
   // server enforces the same limit and would reject anyway, but
   // catching it here is friendlier UX.
+  //
+  // Exempt salons (migration-035) bypass the cap entirely — they have
+  // full feature access regardless of their stored plan, since
+  // they're internal/founder/demo accounts that aren't paying.
   const plan = usePlan();
-  const atStaffLimit = !canAddStaff(plan, members.length);
+  const isExempt = useIsExempt();
+  const atStaffLimit = !isExempt && !canAddStaff(plan, members.length);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   // ---- Member handlers ----

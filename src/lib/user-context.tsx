@@ -17,6 +17,10 @@ export interface CurrentUser {
    *  the dashboard layout — may be undefined briefly during first
    *  paint. Use `usePlan()` for a safe-default read. */
   plan?: Plan;
+  /** Migration 035 — true for founder/demo/internal salons that
+   *  bypass billing AND plan-feature caps entirely. Loaded async.
+   *  Use `useIsExempt()` for a safe-default read. */
+  is_exempt?: boolean;
 }
 
 /**
@@ -38,6 +42,18 @@ export function useCurrency(): string {
 export function usePlan(): Plan {
   const u = useContext(UserContext);
   return u?.plan || "solo";
+}
+
+/**
+ * Convenience hook for the migration-035 exemption flag. Falls
+ * back to false (strictest) during the first-paint window before
+ * the salon row loads, then patches to true if the salon is
+ * actually exempt. Exempt salons bypass billing hard-blocks AND
+ * plan-feature caps.
+ */
+export function useIsExempt(): boolean {
+  const u = useContext(UserContext);
+  return !!u?.is_exempt;
 }
 
 /**

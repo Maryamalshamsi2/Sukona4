@@ -118,13 +118,16 @@ export async function addTeamMember(formData: FormData) {
   // / Supabase to keep the failure mode clean (just an error string
   // the form surfaces). The UI gates this with an upgrade modal
   // before submission too — this is the server-side fence.
+  //
+  // Exempt salons (migration-035) bypass the cap entirely. They
+  // have full feature access regardless of their stored plan.
   const { data: salon } = await adminSupabase
     .from("salons")
-    .select("plan")
+    .select("plan, is_exempt")
     .eq("id", inviter.salon_id)
     .single();
 
-  if (salon?.plan) {
+  if (salon?.plan && !salon.is_exempt) {
     const plan = salon.plan as Plan;
     const { count } = await adminSupabase
       .from("profiles")
