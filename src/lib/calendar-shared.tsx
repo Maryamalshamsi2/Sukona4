@@ -1450,7 +1450,15 @@ export function AppointmentForm({
         </div>
 
         {clientMode === "existing" ? (
-          <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} required
+          <select value={selectedClientId}
+            onChange={(e) => {
+              e.currentTarget.setCustomValidity("");
+              setSelectedClientId(e.target.value);
+            }}
+            onInvalid={(e) => {
+              e.currentTarget.setCustomValidity("Please choose a client for this appointment.");
+            }}
+            required
             className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
             <option value="">Select a client</option>
             {allClients.map((c) => (
@@ -1603,7 +1611,19 @@ export function AppointmentForm({
                           {selectedService ? getServiceName(selectedService) : "Unknown service"}
                         </div>
                       ) : (
-                        <select value={entry.service_id} onChange={(e) => handleServiceSelect(idx, e.target.value)}
+                        <select value={entry.service_id}
+                          onChange={(e) => {
+                            // Clear any prior custom validity so the
+                            // browser stops nagging once the user picks.
+                            e.currentTarget.setCustomValidity("");
+                            handleServiceSelect(idx, e.target.value);
+                          }}
+                          onInvalid={(e) => {
+                            // Replace the browser-default "Please select
+                            // an item in the list" with a message that
+                            // says WHICH item.
+                            e.currentTarget.setCustomValidity("Please choose a service for this row.");
+                          }}
                           required
                           className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
                           <option value="">Select service</option>
@@ -1634,7 +1654,18 @@ export function AppointmentForm({
                         </select>
                       )}
 
-                      <select value={entry.staff_id} onChange={(e) => updateEntry(idx, "staff_id", e.target.value)}
+                      <select value={entry.staff_id}
+                        onChange={(e) => {
+                          e.currentTarget.setCustomValidity("");
+                          updateEntry(idx, "staff_id", e.target.value);
+                        }}
+                        onInvalid={(e) => {
+                          // This was the field most commonly tripping the
+                          // confusing "select an item" message — users would
+                          // pick the service, miss the staff dropdown, and
+                          // not understand what was being asked.
+                          e.currentTarget.setCustomValidity("Please assign a staff member to this service.");
+                        }}
                         required
                         className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
                         <option value="">Assign staff *</option>
