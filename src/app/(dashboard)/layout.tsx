@@ -71,7 +71,7 @@ export default function DashboardLayout({
         // (migration 030) and trial_ends_at (migration 032).
         supabase
           .from("salons")
-          .select("currency, trial_ends_at, plan")
+          .select("currency, trial_ends_at, plan, is_exempt")
           .eq("id", profile.salon_id)
           .maybeSingle()
           .then(({ data: salonData }) => {
@@ -88,7 +88,11 @@ export default function DashboardLayout({
                 plan: (salonData.plan as typeof prev.plan) || prev.plan,
               };
             });
-            if (salonData.trial_ends_at) {
+            // Skip the trial banner entirely for exempt salons
+            // (migration-035) — they're not on a paying trial, no
+            // countdown to show. Middleware also bypasses
+            // hard-block for these so the value isn't relevant.
+            if (salonData.trial_ends_at && !salonData.is_exempt) {
               setTrialEndsAt(salonData.trial_ends_at as string);
             }
           });

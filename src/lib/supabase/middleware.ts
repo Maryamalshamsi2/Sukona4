@@ -122,7 +122,7 @@ export async function updateSession(request: NextRequest) {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "role, salons!inner(is_onboarded, subscription_status, trial_ends_at)"
+          "role, salons!inner(is_onboarded, subscription_status, trial_ends_at, is_exempt)"
         )
         .eq("id", user.id)
         .single();
@@ -133,6 +133,7 @@ export async function updateSession(request: NextRequest) {
           is_onboarded: boolean;
           subscription_status: SubscriptionStatus;
           trial_ends_at: string | null;
+          is_exempt: boolean;
         } | null;
 
         // Onboarding redirect: highest priority. If the salon isn't
@@ -145,17 +146,18 @@ export async function updateSession(request: NextRequest) {
         }
 
         // Hard-block: trial expired OR sub past_due/canceled/incomplete.
-        // The user can still reach /settings/billing (owner pays),
-        // /paused (admin/staff see the "ask your owner" screen),
-        // /onboarding (half-signed-up), plus all API routes (so the
-        // checkout flow works). Everything else redirects to a
-        // role-appropriate destination: owners → billing page (they
+        // Exempt salons (is_exempt = true) bypass this check entirely —
+        // see migration-035. Used for founder accounts, demo/test
+        // accounts, partner accounts, etc.
+        //
+        // For non-exempt salons: owners → /settings/billing (they
         // can fix it); non-owners → /paused (they can't, so we tell
         // them to contact the owner instead of dumping them on the
         // "Only the salon owner can manage billing" page).
         if (
           salon &&
           salon.is_onboarded &&
+          !salon.is_exempt &&
           !allowedWhileBlocked &&
           isHardBlocked(salon.subscription_status, salon.trial_ends_at)
         ) {
