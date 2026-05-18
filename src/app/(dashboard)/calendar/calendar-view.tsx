@@ -294,6 +294,17 @@ export default function CalendarView({
   const dragPending = useRef<{ apptId: string; appt: AppointmentData; startMin: number } | null>(null);
   const didDrag = useRef(false);
 
+  // Pending-move confirmation. Set when a drag would shift the
+  // appointment by more than 30 minutes — we show a modal asking
+  // the user to confirm, since big moves are usually intentional
+  // and small drags are usually fine to apply directly.
+  const [pendingMove, setPendingMove] = useState<{
+    apptId: string;
+    oldTime: string;
+    newTime: string;
+    clientName: string;
+  } | null>(null);
+
   // Resize state
   const [resizeApptId, setResizeApptId] = useState<string | null>(null);
   const [resizeCurrentHeight, setResizeCurrentHeight] = useState(0);
@@ -665,10 +676,39 @@ export default function CalendarView({
       const snapped = snapMinutes(totalMinutes);
       const clampedMin = Math.max(START_HOUR * 60, Math.min(snapped, (END_HOUR - 1) * 60));
       const newTime = minutesToTime(clampedMin);
-      await updateAppointmentTime(dragApptId, newTime);
+
+      // Capture the drag context BEFORE clearing state — once
+      // setDragApptId(null) lands, the visual snaps back to the
+      // appointment's stored time and we lose the drag values.
+      const draggedId = dragApptId;
+      const oldTime = appt.time?.slice(0, 5) || "";
+      const oldMin = timeToMinutes(oldTime);
+      const diff = Math.abs(clampedMin - oldMin);
+      const clientName = appt.clients?.name || "this appointment";
+
       setDragApptId(null);
       dragPending.current = null;
       dragStartY.current = null;
+
+      // No-op: dragged but landed on the same slot (snap).
+      if (diff === 0) return;
+
+      // Big move (> 30 min) → confirmation modal. Small adjustments
+      // (≤ 30 min) apply immediately — staff nudge appointments by
+      // 15 min routinely and a popup every time would be friction.
+      // The visual position naturally snaps back to the stored time
+      // until the user confirms (and the appointments state updates).
+      if (diff > 30) {
+        setPendingMove({
+          apptId: draggedId,
+          oldTime,
+          newTime,
+          clientName,
+        });
+        return;
+      }
+
+      await updateAppointmentTime(draggedId, newTime);
       reloadAppointments();
       return;
     }
@@ -842,23 +882,19 @@ export default function CalendarView({
   function handlePaidComplete() {
     if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
-    const prevStatus = selectedAppointment.status;
+    // recordPayment / updatePayment now flip status='paid' atomically
+    // server-side (see payments/actions.ts), so all we need to do
+    // here is patch local state and refetch to pick up the freshly
+    // minted receipt tokens. The previous separate
+    // updateAppointmentStatus call was the source of the "payment
+    // saved but status didn't flip" bug — removed.
     patchAppointment(apptId, { status: "paid" });
     setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    void updateAppointmentStatus(apptId, "paid").then((result) => {
-      if (result?.error) {
-        undo.error(result.error);
-        patchAppointment(apptId, { status: prevStatus });
-      } else {
-        // Single targeted refetch so the freshly-minted receipt_token +
-        // payments rows make it into the appointments list.
-        getAppointmentsForDate(dateStr)
-          .then((fresh) => setAppointments(fresh as unknown as AppointmentData[]))
-          .catch(() => { /* non-critical */ });
-      }
-    });
+    getAppointmentsForDate(dateStr)
+      .then((fresh) => setAppointments(fresh as unknown as AppointmentData[]))
+      .catch(() => { /* non-critical */ });
   }
 
   function handleCancel() {
@@ -1812,9 +1848,76 @@ export default function CalendarView({
           />
         )}
       </Modal>
+
+      {/* Confirmation modal for big drag-to-move shifts (>30 min).
+          Small adjustments apply directly; this catches accidental
+          large drags before they commit. The visual position has
+          already snapped back to the stored time (we cleared
+          dragApptId), so canceling here is a no-op — no rollback
+          needed. */}
+      <Modal
+        open={!!pendingMove}
+        onClose={() => setPendingMove(null)}
+        title="Move appointment?"
+      >
+        {pendingMove && (
+          <div className="space-y-5">
+            <p className="text-body text-text-secondary">
+              Move{" "}
+              <span className="font-semibold text-text-primary">
+                {pendingMove.clientName}
+              </span>
+              &rsquo;s appointment from{" "}
+              <span className="font-semibold text-text-primary">
+                {formatTimeForDisplay(pendingMove.oldTime)}
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-text-primary">
+                {formatTimeForDisplay(pendingMove.newTime)}
+              </span>
+              ?
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingMove(null)}
+                className="flex-1 rounded-xl bg-surface-active px-4 py-2.5 text-body-sm font-semibold text-text-primary transition hover:bg-neutral-100"
+              >
+                No, keep it
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { apptId, newTime } = pendingMove;
+                  setPendingMove(null);
+                  await updateAppointmentTime(apptId, newTime);
+                  reloadAppointments();
+                }}
+                className="flex-1 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse transition hover:bg-neutral-800 active:scale-[0.98]"
+              >
+                Yes, move it
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
      </div>
     </div>
   );
+}
+
+/** Format a 24-hour "HH:MM" or "HH:MM:SS" time string for display.
+ *  "14:30" → "2:30 PM"; "14:00" → "2 PM". */
+function formatTimeForDisplay(t: string): string {
+  const [hStr, mStr] = t.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (Number.isNaN(h) || Number.isNaN(m)) return t;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return m === 0
+    ? `${h12} ${ampm}`
+    : `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
 // DetailView and AppointmentForm imported from @/lib/calendar-shared

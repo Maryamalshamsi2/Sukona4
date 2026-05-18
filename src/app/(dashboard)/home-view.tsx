@@ -263,27 +263,20 @@ export default function HomeView({
   function handlePaidComplete() {
     if (!selectedAppointment) return;
     const apptId = selectedAppointment.id;
-    const prevStatus = selectedAppointment.status;
-    // The MarkPaid modal just inserted a payment row + minted tokens.
-    // All that's left is flipping status to paid — do it optimistically
-    // and close everything.
+    // recordPayment / updatePayment now flip status='paid' atomically
+    // server-side (see payments/actions.ts), so all we need to do
+    // here is patch local state and refetch to pick up the freshly
+    // minted receipt tokens. The previous separate
+    // updateAppointmentStatus call was the source of the "payment
+    // saved but status didn't flip" bug — removed.
     patchAppointment(apptId, { status: "paid" });
     setMarkPaidOpen(false);
     setDetailModalOpen(false);
     setSelectedAppointment(null);
-    void updateAppointmentStatus(apptId, "paid").then((result) => {
-      if (result?.error) {
-        undo.error(result.error);
-        patchAppointment(apptId, { status: prevStatus });
-      } else {
-        // Refetch this one appointment so the freshly-minted
-        // receipt_token + payments rows make it into the list.
-        getTodayAppointments(today)
-          .then((fresh) => setAppointments(fresh as unknown as AppointmentData[]))
-          .catch(() => { /* non-critical */ });
-        refreshActivitiesInBackground();
-      }
-    });
+    getTodayAppointments(today)
+      .then((fresh) => setAppointments(fresh as unknown as AppointmentData[]))
+      .catch(() => { /* non-critical */ });
+    refreshActivitiesInBackground();
   }
 
   function handleCancel() {
