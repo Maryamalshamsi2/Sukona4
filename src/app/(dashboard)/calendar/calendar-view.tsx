@@ -518,7 +518,12 @@ export default function CalendarView({
     try {
       const appts = await getAppointmentsForDate(dateStr);
       setAppointments(appts as unknown as AppointmentData[]);
-    } catch { /* ignore */ }
+    } catch (err) {
+      // Used to be a silent catch — meant a stale calendar after a
+      // save with no signal to the user. At least log it so we can
+      // diagnose if it happens.
+      console.error("reloadAppointments failed:", err);
+    }
   }, [dateStr]);
 
   const reloadBlocks = useCallback(async () => {
@@ -1628,13 +1633,28 @@ export default function CalendarView({
           prefillTime={prefillTime}
           prefillStaffId={prefillStaffId}
           onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-                    const result = await createAppointment(clientId, date, time, notes, entries, adjustments);
+            const result = await createAppointment(clientId, date, time, notes, entries, adjustments);
             if (result.error) { undo.error(result.error); return; }
             setAddModalOpen(false);
             setPrefillTime(null);
             setPrefillStaffId(null);
-            // Only appointments changed — skip refetching clients/blocks.
-            reloadAppointments();
+
+            // If the appointment was created for a date other than
+            // the one currently displayed, navigate the calendar to
+            // that date so the user can see what they just created.
+            // Without this, the new appointment is invisible until
+            // they happen to scroll to that day — which is exactly
+            // the "appointment didn't appear on desktop calendar"
+            // bug some users hit when they tweaked the date in the
+            // form. The loadData useEffect fires on dateStr change
+            // and refetches everything for the new date, so no
+            // explicit reloadAppointments call needed in that path.
+            if (date !== dateStr) {
+              const [y, m, d] = date.split("-").map(Number);
+              setSelectedDate(new Date(y, m - 1, d));
+            } else {
+              reloadAppointments();
+            }
           }}
           onNewClient={async (name, phone, address, mapLink, notes) => {
             const result = await addClientQuick(name, phone, address, mapLink, notes);

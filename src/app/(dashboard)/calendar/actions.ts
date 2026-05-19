@@ -260,14 +260,26 @@ export async function createAppointment(
 
   if (svcError) return { error: svcError.message };
 
-  // Also insert into appointment_staff for backwards compat / RLS
+  // Also insert into appointment_staff for backwards compat / RLS.
+  // Surface the error rather than swallowing it — used to be a
+  // silent await that hid RLS denials etc.
   const uniqueStaffIds = [...new Set(serviceEntries.map((e) => e.staff_id))];
   if (uniqueStaffIds.length > 0) {
     const staffRows = uniqueStaffIds.map((sid) => ({
       appointment_id: appointment.id,
       staff_id: sid,
     }));
-    await supabase.from("appointment_staff").insert(staffRows);
+    const { error: staffLinkErr } = await supabase
+      .from("appointment_staff")
+      .insert(staffRows);
+    if (staffLinkErr) {
+      // Appointment + services already inserted; surface the partial-
+      // failure so the UI shows the user instead of pretending the
+      // save fully succeeded.
+      return {
+        error: `Appointment saved but staff link failed: ${staffLinkErr.message}`,
+      };
+    }
   }
 
   // Fetch client name for activity description
