@@ -172,6 +172,26 @@ export default function HomeView({
     loadActivities(activityRange);
   }, [activityRange, didMount, loadActivities]);
 
+  // Refetch appointments + activity when the tab regains focus.
+  // Mirrors the calendar's visibility refetch: keeps the dashboard
+  // in sync when a teammate (or the same user on another device)
+  // adds or edits an appointment in the background. Without this,
+  // the dashboard's "Today" list and Activity feed stay frozen
+  // until the user reloads the page.
+  useEffect(() => {
+    function refresh() {
+      if (document.visibilityState !== "visible") return;
+      reloadAppointments();
+      loadActivities(activityRange).catch(() => { /* non-critical */ });
+    }
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [reloadAppointments, loadActivities, activityRange]);
+
   // Background fetch the booking-form data after the page paints.
   // Staff / clients / services / bundles are only consumed by the
   // "+ New" appointment modal; loading them server-side made the

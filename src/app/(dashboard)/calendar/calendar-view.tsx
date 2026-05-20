@@ -548,6 +548,36 @@ export default function CalendarView({
     loadData();
   }, [loadData]);
 
+  // ---- Refetch when the tab regains focus ----
+  // The bug this fixes: an appointment created on another device (phone,
+  // another browser, a teammate's session) won't appear on a desktop tab
+  // that was already open on /calendar — even after navigating to the
+  // appointment's date — because the only refetch trigger was a dateStr
+  // change. If the desktop user happened to already be on (or navigated
+  // to) the new appointment's date, React state still held the old
+  // appointment list and nothing forced a refresh short of a manual
+  // browser reload. Users reported "I created it on phone, it shows on
+  // phone, but the desktop calendar is empty."
+  //
+  // visibilitychange + focus together cover: switching tabs, switching
+  // windows, locking/unlocking the device, and bringing a backgrounded
+  // app to the foreground (mobile Safari). Refetches are cheap (one
+  // date, RLS-scoped) so we don't try to be clever about dedup — the
+  // fresh data either matches state (no React re-render) or replaces it.
+  useEffect(() => {
+    function refresh() {
+      if (document.visibilityState !== "visible") return;
+      reloadAppointments();
+      reloadBlocks();
+    }
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [reloadAppointments, reloadBlocks]);
+
   // ---- Auto-scroll to current time ----
   // Scrolls the calendar grid so the red "now" line sits about 20% from
   // the top of the viewport, matching the Google/iOS Calendar pattern:
