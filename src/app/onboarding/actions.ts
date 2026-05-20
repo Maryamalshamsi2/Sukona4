@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
 import { isSupportedCurrency } from "@/lib/currency";
+import { dispatchWelcomeEmail } from "@/lib/email/dispatch";
 import {
   BUSINESS_CATEGORIES,
   COUNTRIES,
@@ -118,6 +119,16 @@ export async function completeOnboarding(formData: FormData) {
     .eq("id", profile.salon_id);
 
   if (error) return { error: error.message };
+
+  // Fire-and-forget welcome email. Idempotent — sendEmail() bails
+  // out on the email_send_log unique index if a 'welcome' row
+  // already exists for this salon, so re-running onboarding (which
+  // shouldn't happen, but is defensible) won't double-send.
+  //
+  // We don't await — onboarding completion shouldn't block on
+  // Resend latency, and any failure is recorded in email_send_log
+  // for ops follow-up rather than surfaced as a user-facing error.
+  void dispatchWelcomeEmail(profile.salon_id);
 
   revalidatePath("/", "layout");
   return { success: true };
