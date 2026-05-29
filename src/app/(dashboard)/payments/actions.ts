@@ -62,7 +62,14 @@ export async function recordPayment(
   /** Zero or more uploaded receipt URLs. The first one (if any) is also
    *  written to the legacy `receipt_url` column for backwards compat
    *  with code paths that haven't been migrated to read the array yet. */
-  receiptUrls: string[]
+  receiptUrls: string[],
+  /** Tip amount in salon currency. Defaults to 0 — recorded against
+   *  this payment row, surfaced in /payroll. */
+  tipAmount: number = 0,
+  /** Optional staff id that the tip is attributed to. NULL means the
+   *  payroll calc will split the tip equally across whichever staff
+   *  performed services on this appointment. */
+  tipToStaffId: string | null = null,
 ) {
   const supabase = await createClient();
   const { error } = await supabase.from("payments").insert({
@@ -72,6 +79,8 @@ export async function recordPayment(
     note,
     receipt_urls: receiptUrls,
     receipt_url: receiptUrls[0] ?? null,
+    tip_amount: tipAmount,
+    tip_to_staff_id: tipToStaffId,
   });
   if (error) return { error: error.message };
 
@@ -136,6 +145,7 @@ export async function recordPayment(
   revalidatePath("/payments");
   revalidatePath("/reports");
   revalidatePath("/calendar");
+  revalidatePath("/payroll");
   revalidatePath("/");
   return { success: true };
 }
@@ -152,6 +162,8 @@ export async function updatePayment(
   method: PaymentMethod,
   note: string | null,
   receiptUrls: string[],
+  tipAmount: number = 0,
+  tipToStaffId: string | null = null,
 ) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -164,6 +176,8 @@ export async function updatePayment(
       // Keep the legacy single-column in sync with the first array entry
       // so code paths reading `receipt_url` see a consistent value.
       receipt_url: receiptUrls[0] ?? null,
+      tip_amount: tipAmount,
+      tip_to_staff_id: tipToStaffId,
     })
     .eq("id", paymentId);
 
@@ -172,6 +186,7 @@ export async function updatePayment(
   revalidatePath("/payments");
   revalidatePath("/reports");
   revalidatePath("/calendar");
+  revalidatePath("/payroll");
   revalidatePath("/");
   return { success: true };
 }

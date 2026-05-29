@@ -60,6 +60,9 @@ export interface Profile {
   phone: string | null;
   group_id: string | null;
   salary: number;
+  /** Migration-038. Percentage (0..100) of services revenue that
+   *  feeds into this staff member's monthly payroll. */
+  commission_percent: number;
   job_title: string | null;
   /** Owners can hide a staff member from the calendar (drivers, managers,
    *  etc. who view but don't take appointments). Default true. */

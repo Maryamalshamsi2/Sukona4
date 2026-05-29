@@ -1,0 +1,906 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Modal from "@/components/modal";
+import { useCurrency } from "@/lib/user-context";
+import { formatCurrency } from "@/lib/currency";
+import {
+  getPayrollSummary,
+  getStaffPayrollDetail,
+  addStaffAdjustment,
+  deleteStaffAdjustment,
+  updateStaffPay,
+  type PayrollStaffRow,
+  type PayrollDetail,
+} from "./actions";
+
+/**
+ * /payroll — owner-only monthly salary summary.
+ *
+ * Layout
+ *   Title row · Month picker · "+ Bonus / − Deduction" buttons
+ *   ────────────────────────────────────────────────────────────
+ *   Staff summary table (one row per member)
+ *     Click → drawer: full breakdown + service list + tip list + adjustments
+ *
+ * The drawer doubles as "the thing you screenshot and send the staff
+ * member at the end of the month" — it shows every line that adds
+ * up to the net.
+ */
+
+type Props = {
+  initialMonth: string; // "YYYY-MM"
+  initialRows: PayrollStaffRow[];
+  initialError: string | null;
+};
+
+export default function PayrollView({
+  initialMonth,
+  initialRows,
+  initialError,
+}: Props) {
+  const currency = useCurrency();
+
+  const [month, setMonth] = useState(initialMonth);
+  const [rows, setRows] = useState<PayrollStaffRow[]>(initialRows);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
+
+  // Drill-down drawer
+  const [openStaffId, setOpenStaffId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PayrollDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Adjustment modal — "Add bonus" / "Add deduction" forms share the
+  // same modal; the `type` state inside it switches which header / verb
+  // we render.
+  const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
+
+  // Edit pay (base salary + commission %) modal — re-uses Modal,
+  // pre-fills from the currently open detail.
+  const [editPayOpen, setEditPayOpen] = useState(false);
+
+  // Refetch the summary table when the month changes.
+  async function refreshSummary(forMonth: string) {
+    setLoading(true);
+    setError(null);
+    const res = await getPayrollSummary(forMonth);
+    if (res.error) setError(res.error);
+    setRows(res.rows);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    if (month !== initialMonth) {
+      void refreshSummary(month);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
+
+  // Open the detail drawer — fetches per-staff breakdown.
+  async function openDetail(staffId: string) {
+    setOpenStaffId(staffId);
+    setDetail(null);
+    setDetailLoading(true);
+    const res = await getStaffPayrollDetail(staffId, month);
+    if (res.error) setError(res.error);
+    setDetail(res.detail);
+    setDetailLoading(false);
+  }
+
+  function closeDetail() {
+    setOpenStaffId(null);
+    setDetail(null);
+  }
+
+  async function refreshDetailAndSummary() {
+    if (openStaffId) {
+      const [s, d] = await Promise.all([
+        getPayrollSummary(month),
+        getStaffPayrollDetail(openStaffId, month),
+      ]);
+      setRows(s.rows);
+      setDetail(d.detail);
+    } else {
+      await refreshSummary(month);
+    }
+  }
+
+  // Totals row for the table footer — quick sanity check for the owner.
+  const totals = useMemo(() => {
+    return rows.reduce(
+      (acc, r) => ({
+        servicesRevenue: acc.servicesRevenue + r.servicesRevenue,
+        commission: acc.commission + r.commission,
+        tips: acc.tips + r.tips,
+        bonuses: acc.bonuses + r.bonuses,
+        deductions: acc.deductions + r.deductions,
+        net: acc.net + r.net,
+      }),
+      {
+        servicesRevenue: 0,
+        commission: 0,
+        tips: 0,
+        bonuses: 0,
+        deductions: 0,
+        net: 0,
+      },
+    );
+  }, [rows]);
+
+  return (
+    <div>
+      {/* ---- Title row ---- */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-title-page font-semibold tracking-tight text-text-primary">
+            Payroll
+          </h1>
+          <p className="mt-1 text-body-sm text-text-secondary">
+            Monthly salary breakdown for each member of your team.
+          </p>
+        </div>
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="h-9 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 text-body-sm font-medium text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-body-sm text-error-700">
+          {error}
+        </div>
+      )}
+
+      {/* ---- Summary table — desktop ---- */}
+      <div className="mt-6 hidden overflow-hidden rounded-2xl ring-1 ring-border bg-white sm:block">
+        <table className="w-full text-body-sm">
+          <thead className="bg-surface-active text-text-secondary">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium">Staff</th>
+              <th className="px-4 py-3 text-right font-medium">Revenue</th>
+              <th className="px-4 py-3 text-right font-medium">Commission</th>
+              <th className="px-4 py-3 text-right font-medium">Tips</th>
+              <th className="px-4 py-3 text-right font-medium">Bonus</th>
+              <th className="px-4 py-3 text-right font-medium">Deduct.</th>
+              <th className="px-4 py-3 text-right font-medium">Net</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {loading && rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-text-tertiary">
+                  Loading…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-text-tertiary">
+                  No team members yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr
+                  key={r.staffId}
+                  onClick={() => openDetail(r.staffId)}
+                  className="cursor-pointer hover:bg-surface-hover"
+                >
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-text-primary">{r.fullName}</div>
+                    <div className="text-caption text-text-tertiary capitalize">
+                      {r.role}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
+                    {formatCurrency(r.servicesRevenue, currency)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
+                    {formatCurrency(r.commission, currency)}
+                    {r.commissionPercent > 0 && (
+                      <span className="ml-1 text-caption text-text-tertiary">
+                        ({r.commissionPercent}%)
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
+                    {formatCurrency(r.tips, currency)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                    {r.bonuses > 0 ? formatCurrency(r.bonuses, currency) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-error-700">
+                    {r.deductions > 0 ? `−${formatCurrency(r.deductions, currency)}` : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-text-primary">
+                    {formatCurrency(r.net, currency)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot className="bg-surface-active text-text-secondary">
+              <tr>
+                <td className="px-4 py-3 font-semibold text-text-primary">Total</td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {formatCurrency(totals.servicesRevenue, currency)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {formatCurrency(totals.commission, currency)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {formatCurrency(totals.tips, currency)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {formatCurrency(totals.bonuses, currency)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  −{formatCurrency(totals.deductions, currency)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-text-primary">
+                  {formatCurrency(totals.net, currency)}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {/* ---- Summary cards — mobile ---- */}
+      <div className="mt-6 space-y-3 sm:hidden">
+        {loading && rows.length === 0 ? (
+          <p className="text-center text-body-sm text-text-tertiary">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-center text-body-sm text-text-tertiary">
+            No team members yet.
+          </p>
+        ) : (
+          rows.map((r) => (
+            <button
+              key={r.staffId}
+              type="button"
+              onClick={() => openDetail(r.staffId)}
+              className="block w-full rounded-2xl bg-white p-4 text-left ring-1 ring-border active:scale-[0.98] transition"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-text-primary">
+                    {r.fullName}
+                  </div>
+                  <div className="text-caption text-text-tertiary capitalize">
+                    {r.role}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-title-section font-semibold tabular-nums text-text-primary">
+                    {formatCurrency(r.net, currency)}
+                  </div>
+                  <div className="text-caption text-text-tertiary">net</div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-caption">
+                <Mini
+                  label="Revenue"
+                  value={formatCurrency(r.servicesRevenue, currency)}
+                />
+                <Mini label="Tips" value={formatCurrency(r.tips, currency)} />
+                <Mini
+                  label="Bonus/Ded."
+                  value={
+                    r.bonuses + r.deductions === 0
+                      ? "—"
+                      : `${r.bonuses > 0 ? "+" : ""}${formatCurrency(r.bonuses - r.deductions, currency)}`
+                  }
+                />
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* ---- Detail drawer ---- */}
+      <Modal
+        open={openStaffId !== null}
+        onClose={closeDetail}
+        title={detail ? detail.fullName : "Loading…"}
+      >
+        {detailLoading || !detail ? (
+          <p className="text-body-sm text-text-tertiary">Loading breakdown…</p>
+        ) : (
+          <div className="space-y-6">
+            {/* Period label */}
+            <p className="text-body-sm text-text-secondary">
+              {monthLabel(detail.month)} ·{" "}
+              <span className="capitalize text-text-tertiary">{detail.role}</span>
+            </p>
+
+            {/* Net summary card */}
+            <div className="rounded-2xl bg-neutral-900 p-5 text-text-inverse">
+              <p className="text-caption uppercase tracking-wide opacity-70">
+                Net payable
+              </p>
+              <p className="mt-1 text-title-page font-semibold tabular-nums">
+                {formatCurrency(detail.totals.net, currency)}
+              </p>
+            </div>
+
+            {/* Breakdown grid */}
+            <div className="rounded-2xl ring-1 ring-border bg-white">
+              <BreakdownRow
+                label="Base salary"
+                value={formatCurrency(detail.baseSalary, currency)}
+              />
+              <BreakdownRow
+                label={`Commission (${detail.commissionPercent}%)`}
+                value={formatCurrency(detail.totals.commission, currency)}
+              />
+              <BreakdownRow
+                label="Tips received"
+                value={formatCurrency(detail.totals.tips, currency)}
+              />
+              <BreakdownRow
+                label="Bonuses"
+                value={
+                  detail.totals.bonuses > 0
+                    ? `+${formatCurrency(detail.totals.bonuses, currency)}`
+                    : formatCurrency(0, currency)
+                }
+                positive
+              />
+              <BreakdownRow
+                label="Deductions"
+                value={
+                  detail.totals.deductions > 0
+                    ? `−${formatCurrency(detail.totals.deductions, currency)}`
+                    : formatCurrency(0, currency)
+                }
+                negative
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setAdjustmentModalOpen(true)}
+                className="rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-2 text-body-sm font-semibold text-text-primary hover:border-neutral-400"
+              >
+                + Bonus / − Deduction
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditPayOpen(true)}
+                className="rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-2 text-body-sm font-semibold text-text-primary hover:border-neutral-400"
+              >
+                Edit pay
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-2 text-body-sm font-semibold text-text-primary hover:border-neutral-400"
+              >
+                Print / Save PDF
+              </button>
+            </div>
+
+            {/* Services list */}
+            <DetailList
+              title={`Services performed (${detail.services.length})`}
+              emptyLabel="No paid services in this month."
+            >
+              {detail.services.map((s, idx) => (
+                <div
+                  key={`${s.appointmentId}-${idx}`}
+                  className="flex items-center justify-between gap-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-body-sm text-text-primary">
+                      {s.serviceName}
+                    </p>
+                    <p className="text-caption text-text-tertiary">
+                      {formatDate(s.date)}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-body-sm tabular-nums text-text-secondary">
+                    {formatCurrency(s.price, currency)}
+                  </p>
+                </div>
+              ))}
+            </DetailList>
+
+            {/* Tips list */}
+            <DetailList
+              title={`Tips (${detail.tips.length})`}
+              emptyLabel="No tips received in this month."
+            >
+              {detail.tips.map((t, idx) => (
+                <div
+                  key={`${t.appointmentId}-${idx}-${t.split ? "split" : "exp"}`}
+                  className="flex items-center justify-between gap-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-body-sm text-text-primary">
+                      {formatDate(t.date)}
+                      {t.split && (
+                        <span className="ml-2 text-caption text-text-tertiary">
+                          (split share)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-body-sm tabular-nums text-emerald-700">
+                    +{formatCurrency(t.amount, currency)}
+                  </p>
+                </div>
+              ))}
+            </DetailList>
+
+            {/* Adjustments list */}
+            <DetailList
+              title={`Bonuses & deductions (${detail.adjustments.length})`}
+              emptyLabel="No bonuses or deductions in this month."
+            >
+              {detail.adjustments.map((a) => (
+                <AdjustmentRow
+                  key={a.id}
+                  adjustment={a}
+                  currency={currency}
+                  onDeleted={refreshDetailAndSummary}
+                />
+              ))}
+            </DetailList>
+          </div>
+        )}
+      </Modal>
+
+      {/* ---- Adjustment modal ---- */}
+      <AdjustmentModal
+        open={adjustmentModalOpen}
+        staff={detail ? { id: detail.staffId, name: detail.fullName } : null}
+        onClose={() => setAdjustmentModalOpen(false)}
+        onSaved={() => {
+          setAdjustmentModalOpen(false);
+          void refreshDetailAndSummary();
+        }}
+      />
+
+      {/* ---- Edit pay modal ---- */}
+      <EditPayModal
+        open={editPayOpen}
+        staff={detail}
+        currency={currency}
+        onClose={() => setEditPayOpen(false)}
+        onSaved={() => {
+          setEditPayOpen(false);
+          void refreshDetailAndSummary();
+        }}
+      />
+    </div>
+  );
+}
+
+// ---------- Small presentational helpers ----------
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-surface-active px-2 py-1.5">
+      <div className="text-caption text-text-tertiary">{label}</div>
+      <div className="font-medium tabular-nums text-text-primary">{value}</div>
+    </div>
+  );
+}
+
+function BreakdownRow({
+  label,
+  value,
+  positive,
+  negative,
+}: {
+  label: string;
+  value: string;
+  positive?: boolean;
+  negative?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0">
+      <span className="text-body-sm text-text-secondary">{label}</span>
+      <span
+        className={`text-body-sm tabular-nums font-medium ${
+          positive
+            ? "text-emerald-700"
+            : negative
+              ? "text-error-700"
+              : "text-text-primary"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function DetailList({
+  title,
+  emptyLabel,
+  children,
+}: {
+  title: string;
+  emptyLabel: string;
+  children: React.ReactNode;
+}) {
+  const items = Array.isArray(children) ? children : [children];
+  const isEmpty = items.length === 0;
+  return (
+    <div>
+      <h3 className="text-body-sm font-semibold text-text-primary">{title}</h3>
+      <div className="mt-2 rounded-2xl ring-1 ring-border bg-white px-4">
+        {isEmpty ? (
+          <p className="py-3 text-caption text-text-tertiary">{emptyLabel}</p>
+        ) : (
+          <div className="divide-y divide-border">{children}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdjustmentRow({
+  adjustment,
+  currency,
+  onDeleted,
+}: {
+  adjustment: {
+    id: string;
+    type: "bonus" | "deduction";
+    amount: number;
+    reason: string;
+    adjustmentDate: string;
+  };
+  currency: string;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  async function handleDelete() {
+    if (!confirm(`Delete this ${adjustment.type}?`)) return;
+    setDeleting(true);
+    await deleteStaffAdjustment(adjustment.id);
+    setDeleting(false);
+    onDeleted();
+  }
+  return (
+    <div className="flex items-start justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-body-sm text-text-primary">{adjustment.reason}</p>
+        <p className="text-caption text-text-tertiary">
+          {formatDate(adjustment.adjustmentDate)} · {adjustment.type}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className={`text-body-sm tabular-nums font-medium ${
+            adjustment.type === "bonus" ? "text-emerald-700" : "text-error-700"
+          }`}
+        >
+          {adjustment.type === "bonus" ? "+" : "−"}
+          {formatCurrency(adjustment.amount, currency)}
+        </span>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="rounded-md p-1 text-text-tertiary hover:bg-surface-active hover:text-error-700 disabled:opacity-50"
+          aria-label="Delete adjustment"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Adjustment modal ----------
+
+function AdjustmentModal({
+  open,
+  staff,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  staff: { id: string; name: string } | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const currency = useCurrency();
+  const [type, setType] = useState<"bonus" | "deduction">("bonus");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [date, setDate] = useState(todayISO);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setType("bonus");
+      setAmount("");
+      setReason("");
+      setDate(todayISO());
+      setError(null);
+    }
+  }, [open]);
+
+  if (!staff) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!staff) return;
+    const amt = parseFloat(amount);
+    if (!isFinite(amt) || amt <= 0) {
+      setError("Enter a positive amount");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    const res = await addStaffAdjustment(staff.id, type, amt, reason, date);
+    setSubmitting(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Add adjustment · ${staff.name}`} variant="center">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary">
+            Type *
+          </label>
+          <div className="mt-1.5 grid grid-cols-2 gap-2">
+            {(["bonus", "deduction"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={`rounded-xl border-[1.5px] px-3 py-2.5 text-body-sm font-semibold capitalize transition ${
+                  type === t
+                    ? t === "bonus"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                      : "border-red-600 bg-red-50 text-error-700"
+                    : "border-neutral-200 bg-white text-text-primary hover:border-neutral-400"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="adj-amount" className="block text-body-sm font-semibold text-text-primary">
+            Amount ({currency}) *
+          </label>
+          <input
+            id="adj-amount"
+            type="number"
+            step="0.01"
+            min="0.01"
+            required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="adj-date" className="block text-body-sm font-semibold text-text-primary">
+            Date *
+          </label>
+          <input
+            id="adj-date"
+            type="date"
+            required
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="adj-reason" className="block text-body-sm font-semibold text-text-primary">
+            Reason *
+          </label>
+          <textarea
+            id="adj-reason"
+            required
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={
+              type === "bonus"
+                ? "e.g. Above-target month, customer praise"
+                : "e.g. Late arrivals, missed shift"
+            }
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
+
+        {error && <p className="text-body-sm text-error-700">{error}</p>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-xl bg-surface-active px-4 py-2.5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
+          >
+            {submitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ---------- Edit pay modal ----------
+
+function EditPayModal({
+  open,
+  staff,
+  currency,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  staff: PayrollDetail | null;
+  currency: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [baseSalary, setBaseSalary] = useState("");
+  const [commission, setCommission] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open && staff) {
+      setBaseSalary(String(staff.baseSalary));
+      setCommission(String(staff.commissionPercent));
+      setError(null);
+    }
+  }, [open, staff]);
+
+  if (!staff) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!staff) return;
+    setSubmitting(true);
+    setError(null);
+    const res = await updateStaffPay(
+      staff.staffId,
+      parseFloat(baseSalary) || 0,
+      parseFloat(commission) || 0,
+    );
+    setSubmitting(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Edit pay · ${staff.fullName}`} variant="center">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <p className="text-body-sm text-text-secondary">
+          Changes apply to next month&rsquo;s summary onwards. Past months
+          recalculate too, since commission is derived from the current
+          %, not snapshotted.
+        </p>
+
+        <div>
+          <label htmlFor="pay-base" className="block text-body-sm font-semibold text-text-primary">
+            Base monthly salary ({currency})
+          </label>
+          <input
+            id="pay-base"
+            type="number"
+            step="0.01"
+            min="0"
+            value={baseSalary}
+            onChange={(e) => setBaseSalary(e.target.value)}
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+          <p className="mt-1 text-caption text-text-tertiary">
+            Leave 0 for commission-only staff.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="pay-commission" className="block text-body-sm font-semibold text-text-primary">
+            Commission (% of services revenue)
+          </label>
+          <input
+            id="pay-commission"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            value={commission}
+            onChange={(e) => setCommission(e.target.value)}
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+          <p className="mt-1 text-caption text-text-tertiary">
+            E.g. 30 means this staff earns 30% of services they perform.
+          </p>
+        </div>
+
+        {error && <p className="text-body-sm text-error-700">{error}</p>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-xl bg-surface-active px-4 py-2.5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
+          >
+            {submitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ---------- Date helpers ----------
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function formatDate(iso: string) {
+  // ISO "YYYY-MM-DD" → "Tue, May 27". Parse as local to avoid the
+  // off-by-one common when Date interprets the string as UTC.
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function monthLabel(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}

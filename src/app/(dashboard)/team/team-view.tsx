@@ -681,8 +681,10 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </div>
           )}
 
-          {/* Group + Salary (both optional) */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Group + Salary + Commission (all optional). Salary +
+              commission feed the /payroll page — the same formula
+              there: base_salary + commission% × services revenue. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label htmlFor="mem-group" className="block text-body-sm font-semibold text-text-primary">
                 Group <span className="font-normal text-text-tertiary">(optional)</span>
@@ -703,7 +705,7 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </div>
             <div>
               <label htmlFor="mem-salary" className="block text-body-sm font-semibold text-text-primary">
-                Salary ({currency}/mo) <span className="font-normal text-text-tertiary">(optional)</span>
+                Base salary ({currency}/mo)
               </label>
               <input
                 id="mem-salary"
@@ -712,6 +714,23 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                 step="0.01"
                 min="0"
                 defaultValue={editingMember?.salary || ""}
+                placeholder="0"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              />
+            </div>
+            <div>
+              <label htmlFor="mem-commission" className="block text-body-sm font-semibold text-text-primary">
+                Commission (%)
+              </label>
+              <input
+                id="mem-commission"
+                name="commission_percent"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                defaultValue={editingMember?.commission_percent ?? ""}
+                placeholder="0"
                 className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
               />
             </div>

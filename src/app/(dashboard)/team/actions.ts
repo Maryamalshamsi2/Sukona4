@@ -228,6 +228,13 @@ export async function addTeamMember(formData: FormData) {
     // for staff role. The form sends "true"/"false" as a string.
     const appearsOnCalendar = (formData.get("appears_on_calendar") as string) !== "false";
 
+    // Migration-038: commission_percent (0..100). Clamped server-side
+    // so the DB CHECK constraint can never reject.
+    const commissionRaw = parseFloat(formData.get("commission_percent") as string);
+    const commissionPercent = Number.isFinite(commissionRaw)
+      ? Math.max(0, Math.min(100, commissionRaw))
+      : 0;
+
     await adminSupabase
       .from("profiles")
       .update({
@@ -236,12 +243,14 @@ export async function addTeamMember(formData: FormData) {
         job_title: (formData.get("job_title") as string) || null,
         group_id: groupId || null,
         salary: parseFloat(formData.get("salary") as string) || 0,
+        commission_percent: commissionPercent,
         appears_on_calendar: requestedRole === "staff" ? appearsOnCalendar : true,
       })
       .eq("id", data.user.id);
   }
 
   revalidatePath("/team");
+  revalidatePath("/payroll");
   return { success: true };
 }
 
@@ -268,12 +277,19 @@ export async function updateTeamMember(id: string, formData: FormData) {
   // Profile-only fields. These are always editable.
   const newRole = formData.get("role") as string;
   const appearsOnCalendar = (formData.get("appears_on_calendar") as string) !== "false";
+  // Migration-038: commission_percent (0..100), clamped here so the
+  // DB CHECK constraint can never reject a slightly out-of-range value.
+  const commissionRaw = parseFloat(formData.get("commission_percent") as string);
+  const commissionPercent = Number.isFinite(commissionRaw)
+    ? Math.max(0, Math.min(100, commissionRaw))
+    : 0;
   const profileUpdate: Record<string, unknown> = {
     full_name: formData.get("full_name") as string,
     job_title: (formData.get("job_title") as string) || null,
     role: newRole,
     group_id: groupId || null,
     salary: parseFloat(formData.get("salary") as string) || 0,
+    commission_percent: commissionPercent,
     // Calendar visibility — only meaningful for staff role. For owner/admin
     // we force true so toggling them back to staff later doesn't surprise.
     appears_on_calendar: newRole === "staff" ? appearsOnCalendar : true,
@@ -409,6 +425,7 @@ export async function updateTeamMember(id: string, formData: FormData) {
 
   if (error) return { error: error.message };
   revalidatePath("/team");
+  revalidatePath("/payroll");
   return { success: true };
 }
 

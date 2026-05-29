@@ -16,7 +16,16 @@ export type ExistingPayment = {
    *  receipt_url for legacy rows that pre-date the migration. */
   receipt_urls?: string[] | null;
   receipt_url?: string | null;
+  /** Migration-038 — tip recorded against this payment. */
+  tip_amount?: number | null;
+  tip_to_staff_id?: string | null;
 };
+
+/** Lightweight list of staff who can receive tip attribution on this
+ *  payment. Parent passes the staff who actually performed services
+ *  on the appointment; "Split equally" is always available as the
+ *  default. Empty list → tip selector is hidden entirely. */
+export type StaffOption = { id: string; name: string };
 
 const MAX_ATTACHMENTS = 5;
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -32,6 +41,12 @@ type Props = {
    *  submit label change, fields pre-fill from this row, and Save
    *  calls updatePayment(this.id, ...) instead of recordPayment. */
   existingPayment?: ExistingPayment | null;
+  /** Staff who can receive a tip on this appointment. Pass the
+   *  unique set of staff_ids attached to appointment_services so the
+   *  "Tip to" selector only lists people who actually worked on it.
+   *  Omit (or pass [])  to hide the attribution selector — the tip
+   *  will be split equally at payroll time. */
+  appointmentStaff?: StaffOption[];
   onClose: () => void;
   /** Called after a successful submit. In record mode the parent should
    *  flip the appointment status → 'paid'. In edit mode there's nothing
@@ -53,6 +68,7 @@ export default function MarkPaidModal({
   defaultAmount,
   clientName,
   existingPayment,
+  appointmentStaff,
   onClose,
   onPaid,
 }: Props) {
@@ -62,6 +78,11 @@ export default function MarkPaidModal({
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState<string>("");
+  // Tip recorded against this payment (migration-038). Optional, defaults
+  // to 0 / empty input. The attribution selector below ("Tip to") only
+  // renders when there's a non-zero tip AND the parent passed in staff.
+  const [tipAmount, setTipAmount] = useState<string>("");
+  const [tipToStaffId, setTipToStaffId] = useState<string>(""); // "" = split equally
   // Existing attachments fetched from the saved row (edit mode only).
   // Each has a stable URL — removing one drops it from this array.
   const [existingUrls, setExistingUrls] = useState<string[]>([]);
@@ -79,6 +100,12 @@ export default function MarkPaidModal({
       setMethod(existingPayment.method);
       setAmount(String(existingPayment.amount));
       setNote(existingPayment.note ?? "");
+      setTipAmount(
+        existingPayment.tip_amount && existingPayment.tip_amount > 0
+          ? String(existingPayment.tip_amount)
+          : ""
+      );
+      setTipToStaffId(existingPayment.tip_to_staff_id ?? "");
       // Prefer the array; fall back to the single column for legacy rows.
       const urls = existingPayment.receipt_urls?.length
         ? existingPayment.receipt_urls
@@ -90,6 +117,8 @@ export default function MarkPaidModal({
       setMethod("cash");
       setAmount(String(defaultAmount || ""));
       setNote("");
+      setTipAmount("");
+      setTipToStaffId("");
       setExistingUrls([]);
     }
     setNewFiles([]);
@@ -164,10 +193,19 @@ export default function MarkPaidModal({
 
     const noteToSave = method === "other" ? (note.trim() || null) : null;
 
+    // Parse tip — empty / NaN / negative all coerce to 0 (no tip).
+    const tipParsed = parseFloat(tipAmount);
+    const tipToSave = isNaN(tipParsed) || tipParsed < 0 ? 0 : tipParsed;
+    // Attribution only meaningful when there IS a tip. Sending NULL
+    // means "split equally across staff who did the appointment" at
+    // payroll calc time.
+    const tipStaffToSave =
+      tipToSave > 0 && tipToStaffId ? tipToStaffId : null;
+
     const res = isEdit
-      ? await updatePayment(existingPayment!.id, amt, method, noteToSave, finalUrls)
+      ? await updatePayment(existingPayment!.id, amt, method, noteToSave, finalUrls, tipToSave, tipStaffToSave)
       : appointmentId
-        ? await recordPayment(appointmentId, amt, method, noteToSave, finalUrls)
+        ? await recordPayment(appointmentId, amt, method, noteToSave, finalUrls, tipToSave, tipStaffToSave)
         : { error: "Missing appointment id" };
 
     if (res.error) {
@@ -257,6 +295,52 @@ export default function MarkPaidModal({
               Auto-filled from the appointment total. Edit if the final amount differs.
             </p>
           )}
+        </div>
+
+        {/* Tip — optional. Tracked separately from amount because it
+            belongs to the staff member, not the salon. Goes into the
+            monthly payroll summary. */}
+        <div>
+          <label htmlFor="payment-tip" className="block text-body-sm font-semibold text-text-primary">
+            Tip <span className="text-text-tertiary font-normal">(optional)</span>
+          </label>
+          <input
+            id="payment-tip"
+            type="number"
+            step="0.01"
+            min="0"
+            value={tipAmount}
+            onChange={(e) => setTipAmount(e.target.value)}
+            placeholder="0"
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+
+          {/* Attribution picker — only when there's a tip AND the parent
+              passed in 2+ staff. Single-staff appointments don't need a
+              picker (the tip can only go one place). Default value is
+              "Split equally", which stores NULL. */}
+          {parseFloat(tipAmount) > 0 &&
+            appointmentStaff &&
+            appointmentStaff.length >= 2 && (
+              <div className="mt-3">
+                <label htmlFor="payment-tip-to" className="block text-caption font-medium text-text-secondary">
+                  Tip to
+                </label>
+                <select
+                  id="payment-tip-to"
+                  value={tipToStaffId}
+                  onChange={(e) => setTipToStaffId(e.target.value)}
+                  className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                >
+                  <option value="">Split equally across staff</option>
+                  {appointmentStaff.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
         </div>
 
         {/* Receipt attachments. Up to 5, each ≤ 5 MB. Existing rows
