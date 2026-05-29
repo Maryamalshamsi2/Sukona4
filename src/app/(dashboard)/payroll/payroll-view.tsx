@@ -462,7 +462,10 @@ export default function PayrollView({
               </button>
             </div>
 
-            {/* Services list */}
+            {/* Services list. Bundle rows show the bundle name as a
+                small caption so the staff understands why the price
+                isn't the catalog price (it's their share of the
+                bundle's discounted total). */}
             <DetailList
               title={`Services performed (${detail.services.length})`}
               emptyLabel="No paid services in this month."
@@ -478,6 +481,9 @@ export default function PayrollView({
                     </p>
                     <p className="text-caption text-text-tertiary">
                       {formatDate(s.date)}
+                      {s.bundleName && (
+                        <span className="ml-1">· from {s.bundleName}</span>
+                      )}
                     </p>
                   </div>
                   <p className="shrink-0 text-body-sm tabular-nums text-text-secondary">

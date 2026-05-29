@@ -79,7 +79,15 @@ export interface PayrollServiceLine {
   appointmentId: string;
   date: string;
   serviceName: string;
+  /** Bundle-aware effective price (the row's share of the bundle's
+   *  total, NOT the service's list price). For non-bundle rows this
+   *  equals the service's list price. See effectivePrice() in actions. */
   price: number;
+  /** When the row came from a bundle, the bundle's display name. UI
+   *  surfaces it as a small "from <bundleName>" caption so the staff
+   *  can see why the price differs from the catalog price. Null for
+   *  raw (non-bundle) services. */
+  bundleName: string | null;
 }
 
 export interface PayrollTipLine {
@@ -155,6 +163,13 @@ interface AppointmentRow {
     id: string;
     staff_id: string | null;
     services: { id: string; name: string; price: number } | null;
+    /** Migration-025 bundle fields. Both NULL means "raw service,
+     *  not part of a bundle." When set, the effective price for
+     *  payroll is a proportional share of bundle_total_price (see
+     *  effectivePrice below), not the service's list price. */
+    bundle_instance_id: string | null;
+    bundle_total_price: number | null;
+    bundle_name: string | null;
   }>;
   payments: Array<{
     id: string;
@@ -198,7 +213,11 @@ async function fetchMonthData(salonId: string, month: string) {
       .select(
         `
         id, date, status,
-        appointment_services ( id, staff_id, services:service_id ( id, name, price ) ),
+        appointment_services (
+          id, staff_id,
+          bundle_instance_id, bundle_total_price, bundle_name,
+          services:service_id ( id, name, price )
+        ),
         payments ( id, amount, tip_amount, tip_to_staff_id )
       `,
       )
@@ -233,7 +252,14 @@ async function fetchMonthData(salonId: string, month: string) {
       status: a.status as string,
       appointment_services: ((a.appointment_services as unknown[]) ?? []).map(
         (as) => {
-          const r = as as { id: string; staff_id: string | null; services: unknown };
+          const r = as as {
+            id: string;
+            staff_id: string | null;
+            services: unknown;
+            bundle_instance_id: string | null;
+            bundle_total_price: number | string | null;
+            bundle_name: string | null;
+          };
           const svc = Array.isArray(r.services) ? r.services[0] : r.services;
           return {
             id: r.id,
@@ -245,6 +271,10 @@ async function fetchMonthData(salonId: string, month: string) {
                   price: Number((svc as { price: number }).price) || 0,
                 }
               : null,
+            bundle_instance_id: r.bundle_instance_id,
+            bundle_total_price:
+              r.bundle_total_price != null ? Number(r.bundle_total_price) : null,
+            bundle_name: r.bundle_name,
           };
         },
       ),
@@ -265,6 +295,60 @@ async function fetchMonthData(salonId: string, month: string) {
     appointments: appts,
     adjustments: (adjustmentsRes.data ?? []) as AdjustmentRow[],
   };
+}
+
+/**
+ * Bundle-aware effective price per appointment_service row.
+ *
+ * Non-bundle row → uses the service's list price as-is.
+ *
+ * Bundle row → the row gets a proportional share of bundle_total_price,
+ * weighted by the row's list price within the bundle instance. So a
+ * "Mani & Pedi" bundle priced at 195 splits across:
+ *
+ *   Mani share = (95 / (95 + 110)) × 195 = 90.37
+ *   Pedi share = (110 / (95 + 110)) × 195 = 104.63
+ *
+ * Sums back to exactly 195, no rounding drift across the appointment.
+ *
+ * Caller passes the per-instance metadata (total list + bundle total)
+ * already computed once per appointment, so this is O(1) per call.
+ *
+ * Fallbacks (any of these → use list price as-is):
+ *   - bundle_instance_id is null (not part of a bundle)
+ *   - bundle_total_price is null or 0 (legacy row pre-migration-025)
+ *   - sum of list prices in the instance is 0 (would divide by zero)
+ */
+function effectivePrice(
+  as: AppointmentRow["appointment_services"][number],
+  bundleMeta: Map<string, { sumListPrices: number; bundleTotal: number }>,
+): number {
+  const listPrice = as.services?.price ?? 0;
+  if (!as.bundle_instance_id) return listPrice;
+  const meta = bundleMeta.get(as.bundle_instance_id);
+  if (!meta || meta.sumListPrices <= 0 || meta.bundleTotal <= 0) {
+    return listPrice;
+  }
+  return (listPrice / meta.sumListPrices) * meta.bundleTotal;
+}
+
+/** One pass over an appointment's services to build the bundle-instance
+ *  lookup table this appointment's payroll math will need.
+ *  `bundle_total_price` is stamped on every row of the same instance
+ *  (with the same value — see migration-025 + calendar/actions.ts), so
+ *  we take whichever non-null value we see first. */
+function bundleMetaFor(a: AppointmentRow) {
+  const m = new Map<string, { sumListPrices: number; bundleTotal: number }>();
+  for (const as of a.appointment_services) {
+    if (!as.bundle_instance_id) continue;
+    const cur = m.get(as.bundle_instance_id) ?? { sumListPrices: 0, bundleTotal: 0 };
+    cur.sumListPrices += as.services?.price ?? 0;
+    if (cur.bundleTotal === 0 && as.bundle_total_price != null) {
+      cur.bundleTotal = as.bundle_total_price;
+    }
+    m.set(as.bundle_instance_id, cur);
+  }
+  return m;
 }
 
 /** Tip math — given the set of payments on an appointment + the set of
@@ -343,6 +427,10 @@ export async function getPayrollSummary(
 
   // Services revenue + tips, walked once per appointment.
   for (const a of data.appointments) {
+    // Pre-compute bundle-instance metadata for this appointment so
+    // effectivePrice() is O(1) per row (vs. O(n) per call).
+    const bundleMeta = bundleMetaFor(a);
+
     const staffOnAppt = Array.from(
       new Set(
         a.appointment_services
@@ -355,7 +443,11 @@ export async function getPayrollSummary(
       if (!as.staff_id || !as.services) continue;
       const row = accum.get(as.staff_id);
       if (!row) continue; // staff not in current profiles (deleted?)
-      row.servicesRevenue += as.services.price;
+      // Bundle-aware: a bundled row credits the staff with their
+      // proportional share of the bundle's effective price, not the
+      // service's full list price (which would over-count revenue
+      // by the bundle's discount).
+      row.servicesRevenue += effectivePrice(as, bundleMeta);
     }
 
     const shares = tipShares(a.payments, staffOnAppt);
@@ -419,6 +511,7 @@ export async function getStaffPayrollDetail(
   const tips: PayrollTipLine[] = [];
 
   for (const a of data.appointments) {
+    const bundleMeta = bundleMetaFor(a);
     const staffOnAppt = Array.from(
       new Set(
         a.appointment_services
@@ -433,7 +526,10 @@ export async function getStaffPayrollDetail(
         appointmentId: a.id,
         date: a.date,
         serviceName: as.services.name,
-        price: as.services.price,
+        // Bundle-aware effective price (see effectivePrice). For
+        // non-bundle rows this is just the catalog price.
+        price: effectivePrice(as, bundleMeta),
+        bundleName: as.bundle_name,
       });
     }
 
