@@ -214,9 +214,15 @@ async function fetchMonthData(salonId: string, month: string) {
       .lte("adjustment_date", lastDay),
   ]);
 
-  if (profilesRes.error) throw profilesRes.error;
-  if (apptsRes.error) throw apptsRes.error;
-  if (adjustmentsRes.error) throw adjustmentsRes.error;
+  // Re-throw as a real Error so the .catch in the public actions can
+  // pull a clean `.message`. Supabase errors are plain objects
+  // ({ message, code, details, hint }) — without wrapping, the
+  // `err instanceof Error ? err.message : String(err)` fallback
+  // resolves to the string "[object Object]" instead of the real
+  // message.
+  if (profilesRes.error) throw new Error(`profiles: ${profilesRes.error.message}`);
+  if (apptsRes.error) throw new Error(`appointments: ${apptsRes.error.message}`);
+  if (adjustmentsRes.error) throw new Error(`adjustments: ${adjustmentsRes.error.message}`);
 
   // Normalise Supabase's tendency to return joined rows as either
   // object or array depending on inferred cardinality.
