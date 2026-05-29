@@ -391,24 +391,47 @@ export default function PayrollView({
                 label="Tips received"
                 value={formatCurrency(detail.totals.tips, currency)}
               />
-              <BreakdownRow
-                label="Bonuses"
-                value={
-                  detail.totals.bonuses > 0
-                    ? `+${formatCurrency(detail.totals.bonuses, currency)}`
-                    : formatCurrency(0, currency)
-                }
-                positive
-              />
-              <BreakdownRow
-                label="Deductions"
-                value={
-                  detail.totals.deductions > 0
-                    ? `−${formatCurrency(detail.totals.deductions, currency)}`
-                    : formatCurrency(0, currency)
-                }
-                negative
-              />
+              {/* Bonuses & deductions are itemised inline — one row per
+                  adjustment, labelled with its title — so the salary
+                  summary clearly shows what each amount is for. When
+                  there are none, fall back to a single "AED 0" row so
+                  the totals card stays structurally consistent. */}
+              {detail.adjustments.filter((a) => a.type === "bonus").length === 0 ? (
+                <BreakdownRow
+                  label="Bonuses"
+                  value={formatCurrency(0, currency)}
+                  positive
+                />
+              ) : (
+                detail.adjustments
+                  .filter((a) => a.type === "bonus")
+                  .map((a) => (
+                    <BreakdownRow
+                      key={a.id}
+                      label={a.reason}
+                      value={`+${formatCurrency(a.amount, currency)}`}
+                      positive
+                    />
+                  ))
+              )}
+              {detail.adjustments.filter((a) => a.type === "deduction").length === 0 ? (
+                <BreakdownRow
+                  label="Deductions"
+                  value={formatCurrency(0, currency)}
+                  negative
+                />
+              ) : (
+                detail.adjustments
+                  .filter((a) => a.type === "deduction")
+                  .map((a) => (
+                    <BreakdownRow
+                      key={a.id}
+                      label={a.reason}
+                      value={`−${formatCurrency(a.amount, currency)}`}
+                      negative
+                    />
+                  ))
+              )}
             </div>
 
             {/* Actions */}
