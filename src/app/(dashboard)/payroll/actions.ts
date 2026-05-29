@@ -575,6 +575,52 @@ export async function deleteStaffAdjustment(id: string) {
   return { success: true };
 }
 
+/** Edit an existing bonus/deduction row. Owner-only (same gate as
+ *  add/delete). The staff_id can't be changed — owners who got the
+ *  wrong recipient should delete + re-add. Keeping staff_id fixed
+ *  here means we don't need to worry about RLS edge cases where
+ *  the row "moves" between staff. */
+export async function updateStaffAdjustment(
+  id: string,
+  type: "bonus" | "deduction",
+  amount: number,
+  reason: string,
+  adjustmentDate: string,
+) {
+  const gate = await requireOwner();
+  if ("error" in gate) return { error: gate.error };
+
+  // Same validation as the add path — keeps the DB CHECK constraint
+  // from rejecting and gives nicer error messages.
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Amount must be a positive number" };
+  }
+  if (!reason.trim()) {
+    return { error: "Please add a short reason" };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(adjustmentDate)) {
+    return { error: "Invalid date" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("staff_adjustments")
+    .update({
+      type,
+      amount,
+      reason: reason.trim(),
+      adjustment_date: adjustmentDate,
+    })
+    .eq("id", id)
+    // Scope to the owner's salon so a crafted call can't touch another
+    // tenant's adjustment even if the id is leaked.
+    .eq("salon_id", gate.profile.salon_id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/payroll");
+  return { success: true };
+}
+
 /** Bulk-edit the pay fields on a profile (called from /payroll inline
  *  edit). Reuses the salary column from migration-002 as base salary.
  *  targetMultiplier (migration-039) defaults to 0 — keeps the old

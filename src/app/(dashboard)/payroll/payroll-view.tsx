@@ -8,10 +8,12 @@ import {
   getPayrollSummary,
   getStaffPayrollDetail,
   addStaffAdjustment,
+  updateStaffAdjustment,
   deleteStaffAdjustment,
   updateStaffPay,
   type PayrollStaffRow,
   type PayrollDetail,
+  type PayrollAdjustmentLine,
 } from "./actions";
 
 /**
@@ -51,10 +53,13 @@ export default function PayrollView({
   const [detail, setDetail] = useState<PayrollDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Adjustment modal — "Add bonus" / "Add deduction" forms share the
-  // same modal; the `type` state inside it switches which header / verb
-  // we render.
+  // Adjustment modal — dual purpose:
+  //   - editingAdjustment === null  → "Add bonus / deduction" mode
+  //   - editingAdjustment === <row> → "Edit" mode, pre-filled
+  // Setting either opens the modal; closing nulls both.
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
+  const [editingAdjustment, setEditingAdjustment] =
+    useState<PayrollAdjustmentLine | null>(null);
 
   // Edit pay (base salary + commission %) modal — re-uses Modal,
   // pre-fills from the currently open detail.
@@ -410,7 +415,10 @@ export default function PayrollView({
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setAdjustmentModalOpen(true)}
+                onClick={() => {
+                  setEditingAdjustment(null); // ensure add-mode, not stale edit
+                  setAdjustmentModalOpen(true);
+                }}
                 className="rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-2 text-body-sm font-semibold text-text-primary hover:border-neutral-400"
               >
                 + Bonus / − Deduction
@@ -493,6 +501,10 @@ export default function PayrollView({
                   key={a.id}
                   adjustment={a}
                   currency={currency}
+                  onEdit={() => {
+                    setEditingAdjustment(a);
+                    setAdjustmentModalOpen(true);
+                  }}
                   onDeleted={refreshDetailAndSummary}
                 />
               ))}
@@ -501,13 +513,18 @@ export default function PayrollView({
         )}
       </Modal>
 
-      {/* ---- Adjustment modal ---- */}
+      {/* ---- Adjustment modal (add OR edit) ---- */}
       <AdjustmentModal
         open={adjustmentModalOpen}
         staff={detail ? { id: detail.staffId, name: detail.fullName } : null}
-        onClose={() => setAdjustmentModalOpen(false)}
+        editing={editingAdjustment}
+        onClose={() => {
+          setAdjustmentModalOpen(false);
+          setEditingAdjustment(null);
+        }}
         onSaved={() => {
           setAdjustmentModalOpen(false);
+          setEditingAdjustment(null);
           void refreshDetailAndSummary();
         }}
       />
@@ -595,16 +612,12 @@ function DetailList({
 function AdjustmentRow({
   adjustment,
   currency,
+  onEdit,
   onDeleted,
 }: {
-  adjustment: {
-    id: string;
-    type: "bonus" | "deduction";
-    amount: number;
-    reason: string;
-    adjustmentDate: string;
-  };
+  adjustment: PayrollAdjustmentLine;
   currency: string;
+  onEdit: () => void;
   onDeleted: () => void;
 }) {
   const [deleting, setDeleting] = useState(false);
@@ -632,6 +645,18 @@ function AdjustmentRow({
           {adjustment.type === "bonus" ? "+" : "−"}
           {formatCurrency(adjustment.amount, currency)}
         </span>
+        {/* Edit (pencil) — opens the same modal in edit mode, pre-filled. */}
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-md p-1 text-text-tertiary hover:bg-surface-active hover:text-text-primary"
+          aria-label="Edit adjustment"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+          </svg>
+        </button>
+        {/* Delete (trash) */}
         <button
           type="button"
           onClick={handleDelete}
@@ -653,15 +678,20 @@ function AdjustmentRow({
 function AdjustmentModal({
   open,
   staff,
+  editing,
   onClose,
   onSaved,
 }: {
   open: boolean;
   staff: { id: string; name: string } | null;
+  /** When non-null, the modal is in edit mode: pre-fills from this
+   *  row and calls updateStaffAdjustment on submit. Null = add mode. */
+  editing: PayrollAdjustmentLine | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const currency = useCurrency();
+  const isEdit = !!editing;
   const [type, setType] = useState<"bonus" | "deduction">("bonus");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -669,15 +699,24 @@ function AdjustmentModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-sync state whenever the modal (re)opens. Order matters: when
+  // switching between rows (edit one, close, open another) we want
+  // the new row's values, not stale state from the previous edit.
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (editing) {
+      setType(editing.type);
+      setAmount(String(editing.amount));
+      setReason(editing.reason);
+      setDate(editing.adjustmentDate);
+    } else {
       setType("bonus");
       setAmount("");
       setReason("");
       setDate(todayISO());
-      setError(null);
     }
-  }, [open]);
+    setError(null);
+  }, [open, editing]);
 
   if (!staff) return null;
 
@@ -691,7 +730,9 @@ function AdjustmentModal({
     }
     setSubmitting(true);
     setError(null);
-    const res = await addStaffAdjustment(staff.id, type, amt, reason, date);
+    const res = editing
+      ? await updateStaffAdjustment(editing.id, type, amt, reason, date)
+      : await addStaffAdjustment(staff.id, type, amt, reason, date);
     setSubmitting(false);
     if (res.error) {
       setError(res.error);
@@ -701,7 +742,12 @@ function AdjustmentModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Add adjustment · ${staff.name}`} variant="center">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`${isEdit ? "Edit" : "Add"} adjustment · ${staff.name}`}
+      variant="center"
+    >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="block text-body-sm font-semibold text-text-primary">
