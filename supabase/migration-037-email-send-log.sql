@@ -44,6 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_email_send_log_lookup
 -- is exposed to authenticated users.
 ALTER TABLE email_send_log ENABLE ROW LEVEL SECURITY;
 
+-- DROP IF EXISTS for re-run safety (CREATE POLICY isn't idempotent).
+DROP POLICY IF EXISTS "Owner/admin can view own salon's email log" ON email_send_log;
 CREATE POLICY "Owner/admin can view own salon's email log"
   ON email_send_log FOR SELECT TO authenticated
   USING (salon_id = current_user_salon_id() AND is_owner_or_admin());

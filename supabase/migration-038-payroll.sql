@@ -73,8 +73,14 @@ CREATE INDEX IF NOT EXISTS idx_staff_adjustments_salon_date
 -- bypassed, an admin or staff member querying directly would see
 -- nothing. We also rely on the server actions to re-check `role`
 -- before any insert, but defense in depth lives here.
+--
+-- DROP IF EXISTS before each CREATE POLICY — `CREATE POLICY` is not
+-- idempotent in Postgres (no `IF NOT EXISTS` variant), so without
+-- the drops a re-run errors with 42710. Dropping a non-existent
+-- policy is a no-op, so this is safe on a first run too.
 ALTER TABLE staff_adjustments ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Owner can view staff adjustments" ON staff_adjustments;
 CREATE POLICY "Owner can view staff adjustments"
   ON staff_adjustments FOR SELECT TO authenticated
   USING (
@@ -85,6 +91,7 @@ CREATE POLICY "Owner can view staff adjustments"
     )
   );
 
+DROP POLICY IF EXISTS "Owner can insert staff adjustments" ON staff_adjustments;
 CREATE POLICY "Owner can insert staff adjustments"
   ON staff_adjustments FOR INSERT TO authenticated
   WITH CHECK (
@@ -95,6 +102,7 @@ CREATE POLICY "Owner can insert staff adjustments"
     )
   );
 
+DROP POLICY IF EXISTS "Owner can delete staff adjustments" ON staff_adjustments;
 CREATE POLICY "Owner can delete staff adjustments"
   ON staff_adjustments FOR DELETE TO authenticated
   USING (
@@ -105,6 +113,7 @@ CREATE POLICY "Owner can delete staff adjustments"
     )
   );
 
+DROP POLICY IF EXISTS "Owner can update staff adjustments" ON staff_adjustments;
 CREATE POLICY "Owner can update staff adjustments"
   ON staff_adjustments FOR UPDATE TO authenticated
   USING (
