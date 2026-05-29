@@ -15,7 +15,15 @@ import { getCurrentProfile } from "@/lib/auth-server";
  *                        date falls in the month AND the appointment
  *                        is 'paid'
  *
- *   commission       = services_revenue × commission_percent / 100
+ *   target           = base_salary × target_multiplier  (migration-039)
+ *                        — the revenue the staff must hit before
+ *                        commission kicks in. With multiplier=0 the
+ *                        target is 0, so commission applies to all
+ *                        revenue (old behavior preserved).
+ *
+ *   excess           = max(0, services_revenue − target)
+ *
+ *   commission       = excess × commission_percent / 100
  *
  *   tips             = Σ payment.tip_amount where:
  *                        - tip_to_staff_id = this staff (explicit), OR
@@ -52,7 +60,14 @@ export interface PayrollStaffRow {
   role: Role;
   baseSalary: number;
   commissionPercent: number;
+  /** Migration-039 — multiplier × salary = target. 0 means "no target". */
+  targetMultiplier: number;
+  /** Convenience: baseSalary × targetMultiplier. Surfaced so the UI
+   *  can show the target without re-multiplying client-side. */
+  target: number;
   servicesRevenue: number;
+  /** services_revenue ≥ target portion. Always 0 when target is 0. */
+  revenueAboveTarget: number;
   commission: number;
   tips: number;
   bonuses: number;
@@ -91,11 +106,17 @@ export interface PayrollDetail {
   month: string;
   baseSalary: number;
   commissionPercent: number;
+  targetMultiplier: number;
+  /** baseSalary × targetMultiplier — surfaced once so the UI doesn't
+   *  have to know the formula. */
+  target: number;
   services: PayrollServiceLine[];
   tips: PayrollTipLine[];
   adjustments: PayrollAdjustmentLine[];
   totals: {
     servicesRevenue: number;
+    /** Always 0 when target is 0. */
+    revenueAboveTarget: number;
     commission: number;
     tips: number;
     bonuses: number;
@@ -149,6 +170,7 @@ interface ProfileRow {
   role: Role;
   salary: number | null;
   commission_percent: number | null;
+  target_multiplier: number | null;
 }
 
 interface AdjustmentRow {
@@ -169,7 +191,7 @@ async function fetchMonthData(salonId: string, month: string) {
   const [profilesRes, apptsRes, adjustmentsRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, role, salary, commission_percent")
+      .select("id, full_name, role, salary, commission_percent, target_multiplier")
       .eq("salon_id", salonId),
     supabase
       .from("appointments")
@@ -290,9 +312,13 @@ export async function getPayrollSummary(
   // even ones with no work in the month, so the owner sees a row
   // (with 0 revenue + maybe base salary). They can ignore the row
   // by sorting or simply skipping it.
+  //
+  // target / revenueAboveTarget are filled in at the very end (once
+  // servicesRevenue is finalised) because they depend on the full
+  // sum, not the running one.
   const accum = new Map<
     string,
-    Omit<PayrollStaffRow, "commission" | "net">
+    Omit<PayrollStaffRow, "commission" | "net" | "target" | "revenueAboveTarget">
   >();
   for (const p of data.profiles) {
     accum.set(p.id, {
@@ -301,6 +327,7 @@ export async function getPayrollSummary(
       role: p.role,
       baseSalary: Number(p.salary) || 0,
       commissionPercent: Number(p.commission_percent) || 0,
+      targetMultiplier: Number(p.target_multiplier) || 0,
       servicesRevenue: 0,
       tips: 0,
       bonuses: 0,
@@ -341,11 +368,17 @@ export async function getPayrollSummary(
     else row.deductions += Number(adj.amount) || 0;
   }
 
-  // Compute commission + net last, after revenue is finalised.
+  // Compute target / above-target / commission / net last, after
+  // revenue is finalised. The threshold formula:
+  //   target            = base × multiplier (0 disables → behave as old % model)
+  //   revenueAboveTarget= max(0, revenue − target)
+  //   commission        = revenueAboveTarget × commission% / 100
   const rows: PayrollStaffRow[] = Array.from(accum.values()).map((r) => {
-    const commission = (r.servicesRevenue * r.commissionPercent) / 100;
+    const target = r.baseSalary * r.targetMultiplier;
+    const revenueAboveTarget = Math.max(0, r.servicesRevenue - target);
+    const commission = (revenueAboveTarget * r.commissionPercent) / 100;
     const net = r.baseSalary + commission + r.tips + r.bonuses - r.deductions;
-    return { ...r, commission, net };
+    return { ...r, target, revenueAboveTarget, commission, net };
   });
 
   // Default sort: net descending so the top earners surface first.
@@ -438,7 +471,13 @@ export async function getStaffPayrollDetail(
 
   const servicesRevenue = services.reduce((sum, s) => sum + s.price, 0);
   const commissionPercent = Number(profile.commission_percent) || 0;
-  const commission = (servicesRevenue * commissionPercent) / 100;
+  const targetMultiplier = Number(profile.target_multiplier) || 0;
+  const baseSalary = Number(profile.salary) || 0;
+  // Threshold commission (migration-039). target_multiplier=0 reduces
+  // to the old "% of full revenue" model for backwards compat.
+  const target = baseSalary * targetMultiplier;
+  const revenueAboveTarget = Math.max(0, servicesRevenue - target);
+  const commission = (revenueAboveTarget * commissionPercent) / 100;
   const tipsTotal = tips.reduce((sum, t) => sum + t.amount, 0);
   const bonusesTotal = adjustments
     .filter((a) => a.type === "bonus")
@@ -446,7 +485,6 @@ export async function getStaffPayrollDetail(
   const deductionsTotal = adjustments
     .filter((a) => a.type === "deduction")
     .reduce((sum, a) => sum + a.amount, 0);
-  const baseSalary = Number(profile.salary) || 0;
   const net =
     baseSalary + commission + tipsTotal + bonusesTotal - deductionsTotal;
 
@@ -458,11 +496,14 @@ export async function getStaffPayrollDetail(
       month,
       baseSalary,
       commissionPercent,
+      targetMultiplier,
+      target,
       services,
       tips,
       adjustments,
       totals: {
         servicesRevenue,
+        revenueAboveTarget,
         commission,
         tips: tipsTotal,
         bonuses: bonusesTotal,
@@ -529,11 +570,14 @@ export async function deleteStaffAdjustment(id: string) {
 }
 
 /** Bulk-edit the pay fields on a profile (called from /payroll inline
- *  edit). Reuses the salary column from migration-002 as base salary. */
+ *  edit). Reuses the salary column from migration-002 as base salary.
+ *  targetMultiplier (migration-039) defaults to 0 — keeps the old
+ *  "% of full revenue" behavior unless the owner sets a threshold. */
 export async function updateStaffPay(
   staffId: string,
   baseSalary: number,
   commissionPercent: number,
+  targetMultiplier: number,
 ) {
   const gate = await requireOwner();
   if ("error" in gate) return { error: gate.error };
@@ -548,6 +592,13 @@ export async function updateStaffPay(
   ) {
     return { error: "Commission must be between 0 and 100" };
   }
+  if (
+    !Number.isFinite(targetMultiplier) ||
+    targetMultiplier < 0 ||
+    targetMultiplier > 50
+  ) {
+    return { error: "Target multiplier must be between 0 and 50" };
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -555,6 +606,7 @@ export async function updateStaffPay(
     .update({
       salary: baseSalary,
       commission_percent: commissionPercent,
+      target_multiplier: targetMultiplier,
     })
     .eq("id", staffId)
     .eq("salon_id", gate.profile.salon_id);

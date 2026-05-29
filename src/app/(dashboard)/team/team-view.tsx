@@ -681,10 +681,12 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </div>
           )}
 
-          {/* Group + Salary + Commission (all optional). Salary +
-              commission feed the /payroll page — the same formula
-              there: base_salary + commission% × services revenue. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {/* Group + Salary + Target × salary + Commission % — all
+              optional. These feed /payroll using the threshold formula:
+              target = salary × multiplier; commission = % × max(0,
+              revenue − target). Leaving the multiplier at 0 disables
+              the target (commission applies to full revenue). */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="mem-group" className="block text-body-sm font-semibold text-text-primary">
                 Group <span className="font-normal text-text-tertiary">(optional)</span>
@@ -719,6 +721,25 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               />
             </div>
             <div>
+              <label htmlFor="mem-target" className="block text-body-sm font-semibold text-text-primary">
+                Target (× salary)
+              </label>
+              <input
+                id="mem-target"
+                name="target_multiplier"
+                type="number"
+                step="0.01"
+                min="0"
+                max="50"
+                defaultValue={editingMember?.target_multiplier ?? ""}
+                placeholder="0"
+                className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              />
+              <p className="mt-1 text-caption text-text-tertiary">
+                e.g. 3 = target is 3× the salary above.
+              </p>
+            </div>
+            <div>
               <label htmlFor="mem-commission" className="block text-body-sm font-semibold text-text-primary">
                 Commission (%)
               </label>
@@ -733,6 +754,9 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                 placeholder="0"
                 className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
               />
+              <p className="mt-1 text-caption text-text-tertiary">
+                Applied to revenue above target.
+              </p>
             </div>
           </div>
 

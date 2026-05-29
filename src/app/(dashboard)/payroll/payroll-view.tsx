@@ -200,8 +200,19 @@ export default function PayrollView({
                   <td className="px-4 py-3 text-right tabular-nums text-text-secondary">
                     {formatCurrency(r.commission, currency)}
                     {r.commissionPercent > 0 && (
-                      <span className="ml-1 text-caption text-text-tertiary">
-                        ({r.commissionPercent}%)
+                      <span
+                        className="ml-1 text-caption text-text-tertiary"
+                        title={
+                          r.targetMultiplier > 0
+                            ? `${r.commissionPercent}% × (revenue − target ${formatCurrency(r.target, currency)})`
+                            : `${r.commissionPercent}% × revenue`
+                        }
+                      >
+                        ({r.commissionPercent}%
+                        {r.targetMultiplier > 0 && (
+                          <>, {r.targetMultiplier}×</>
+                        )}
+                        )
                       </span>
                     )}
                   </td>
@@ -327,14 +338,48 @@ export default function PayrollView({
               </p>
             </div>
 
-            {/* Breakdown grid */}
+            {/* Commission breakdown (only when a target is set —
+                migration-039). Shows the staff member exactly how
+                the commission was calculated. When target_multiplier=0
+                we hide this whole card and the Commission row in the
+                main breakdown reverts to "% of total revenue" wording. */}
+            {detail.targetMultiplier > 0 && (
+              <div className="rounded-2xl ring-1 ring-border bg-white">
+                <div className="border-b border-border px-4 py-2.5 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Commission calculation
+                </div>
+                <BreakdownRow
+                  label="Services revenue"
+                  value={formatCurrency(detail.totals.servicesRevenue, currency)}
+                />
+                <BreakdownRow
+                  label={`Target (${detail.targetMultiplier}× salary)`}
+                  value={`−${formatCurrency(detail.target, currency)}`}
+                />
+                <BreakdownRow
+                  label="Revenue above target"
+                  value={formatCurrency(detail.totals.revenueAboveTarget, currency)}
+                />
+                <BreakdownRow
+                  label={`Commission (${detail.commissionPercent}%)`}
+                  value={formatCurrency(detail.totals.commission, currency)}
+                  positive
+                />
+              </div>
+            )}
+
+            {/* Main breakdown grid */}
             <div className="rounded-2xl ring-1 ring-border bg-white">
               <BreakdownRow
                 label="Base salary"
                 value={formatCurrency(detail.baseSalary, currency)}
               />
               <BreakdownRow
-                label={`Commission (${detail.commissionPercent}%)`}
+                label={
+                  detail.targetMultiplier > 0
+                    ? `Commission (${detail.commissionPercent}% above target)`
+                    : `Commission (${detail.commissionPercent}% of revenue)`
+                }
                 value={formatCurrency(detail.totals.commission, currency)}
               />
               <BreakdownRow
@@ -772,6 +817,7 @@ function EditPayModal({
 }) {
   const [baseSalary, setBaseSalary] = useState("");
   const [commission, setCommission] = useState("");
+  const [targetMultiplier, setTargetMultiplier] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -779,6 +825,7 @@ function EditPayModal({
     if (open && staff) {
       setBaseSalary(String(staff.baseSalary));
       setCommission(String(staff.commissionPercent));
+      setTargetMultiplier(String(staff.targetMultiplier));
       setError(null);
     }
   }, [open, staff]);
@@ -794,6 +841,7 @@ function EditPayModal({
       staff.staffId,
       parseFloat(baseSalary) || 0,
       parseFloat(commission) || 0,
+      parseFloat(targetMultiplier) || 0,
     );
     setSubmitting(false);
     if (res.error) {
@@ -803,13 +851,20 @@ function EditPayModal({
     onSaved();
   }
 
+  // Live preview of the target so the owner sees what their multiplier
+  // resolves to before saving. Recomputed on every keystroke from the
+  // values currently in the form (not the saved staff record).
+  const previewBase = parseFloat(baseSalary) || 0;
+  const previewMul = parseFloat(targetMultiplier) || 0;
+  const previewTarget = previewBase * previewMul;
+
   return (
     <Modal open={open} onClose={onClose} title={`Edit pay · ${staff.fullName}`} variant="center">
       <form onSubmit={handleSubmit} className="space-y-5">
         <p className="text-body-sm text-text-secondary">
           Changes apply to next month&rsquo;s summary onwards. Past months
           recalculate too, since commission is derived from the current
-          %, not snapshotted.
+          values, not snapshotted.
         </p>
 
         <div>
@@ -831,8 +886,30 @@ function EditPayModal({
         </div>
 
         <div>
+          <label htmlFor="pay-target" className="block text-body-sm font-semibold text-text-primary">
+            Target (× salary)
+          </label>
+          <input
+            id="pay-target"
+            type="number"
+            step="0.01"
+            min="0"
+            max="50"
+            value={targetMultiplier}
+            onChange={(e) => setTargetMultiplier(e.target.value)}
+            placeholder="0"
+            className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+          <p className="mt-1 text-caption text-text-tertiary">
+            {previewMul > 0
+              ? `Monthly target: ${formatCurrency(previewTarget, currency)}. Commission applies only to revenue above this.`
+              : "Leave 0 to apply commission to all revenue (no target threshold)."}
+          </p>
+        </div>
+
+        <div>
           <label htmlFor="pay-commission" className="block text-body-sm font-semibold text-text-primary">
-            Commission (% of services revenue)
+            Commission (%)
           </label>
           <input
             id="pay-commission"
@@ -845,7 +922,9 @@ function EditPayModal({
             className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
           <p className="mt-1 text-caption text-text-tertiary">
-            E.g. 30 means this staff earns 30% of services they perform.
+            {previewMul > 0
+              ? `E.g. 10 = 10% of every dirham above the ${formatCurrency(previewTarget, currency)} target.`
+              : `E.g. 30 = 30% of every dirham of services revenue.`}
           </p>
         </div>
 

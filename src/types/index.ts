@@ -60,9 +60,14 @@ export interface Profile {
   phone: string | null;
   group_id: string | null;
   salary: number;
-  /** Migration-038. Percentage (0..100) of services revenue that
-   *  feeds into this staff member's monthly payroll. */
+  /** Migration-038. Percentage (0..100) applied at payroll time. With
+   *  target_multiplier=0 this acts on full services revenue; with
+   *  target_multiplier>0 it acts only on the portion ABOVE target. */
   commission_percent: number;
+  /** Migration-039. How many times this staff's salary they must
+   *  bring in before commission kicks in. 0 disables the threshold
+   *  (commission applies to the full revenue). */
+  target_multiplier: number;
   job_title: string | null;
   /** Owners can hide a staff member from the calendar (drivers, managers,
    *  etc. who view but don't take appointments). Default true. */

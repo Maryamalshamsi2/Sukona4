@@ -234,6 +234,11 @@ export async function addTeamMember(formData: FormData) {
     const commissionPercent = Number.isFinite(commissionRaw)
       ? Math.max(0, Math.min(100, commissionRaw))
       : 0;
+    // Migration-039: target_multiplier (0..50). 0 = no target.
+    const targetRaw = parseFloat(formData.get("target_multiplier") as string);
+    const targetMultiplier = Number.isFinite(targetRaw)
+      ? Math.max(0, Math.min(50, targetRaw))
+      : 0;
 
     await adminSupabase
       .from("profiles")
@@ -244,6 +249,7 @@ export async function addTeamMember(formData: FormData) {
         group_id: groupId || null,
         salary: parseFloat(formData.get("salary") as string) || 0,
         commission_percent: commissionPercent,
+        target_multiplier: targetMultiplier,
         appears_on_calendar: requestedRole === "staff" ? appearsOnCalendar : true,
       })
       .eq("id", data.user.id);
@@ -283,6 +289,11 @@ export async function updateTeamMember(id: string, formData: FormData) {
   const commissionPercent = Number.isFinite(commissionRaw)
     ? Math.max(0, Math.min(100, commissionRaw))
     : 0;
+  // Migration-039: target_multiplier (0..50). 0 = no target threshold.
+  const targetRaw = parseFloat(formData.get("target_multiplier") as string);
+  const targetMultiplier = Number.isFinite(targetRaw)
+    ? Math.max(0, Math.min(50, targetRaw))
+    : 0;
   const profileUpdate: Record<string, unknown> = {
     full_name: formData.get("full_name") as string,
     job_title: (formData.get("job_title") as string) || null,
@@ -290,6 +301,7 @@ export async function updateTeamMember(id: string, formData: FormData) {
     group_id: groupId || null,
     salary: parseFloat(formData.get("salary") as string) || 0,
     commission_percent: commissionPercent,
+    target_multiplier: targetMultiplier,
     // Calendar visibility — only meaningful for staff role. For owner/admin
     // we force true so toggling them back to staff later doesn't surprise.
     appears_on_calendar: newRole === "staff" ? appearsOnCalendar : true,
