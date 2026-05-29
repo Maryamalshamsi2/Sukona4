@@ -805,21 +805,28 @@ function AdjustmentModal({
 
         <div>
           <label htmlFor="adj-reason" className="block text-body-sm font-semibold text-text-primary">
-            Reason *
+            Title *
           </label>
-          <textarea
+          {/* Single-line input — short label like "Overtime" or
+              "Customer praise". Stored in the same `reason` column
+              so no DB migration is needed; we just relabel the UI. */}
+          <input
             id="adj-reason"
+            type="text"
             required
-            rows={3}
+            maxLength={80}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={
               type === "bonus"
-                ? "e.g. Above-target month, customer praise"
-                : "e.g. Late arrivals, missed shift"
+                ? "e.g. Overtime, Customer praise"
+                : "e.g. Late arrivals, Missed shift"
             }
             className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
+          <p className="mt-1 text-caption text-text-tertiary">
+            This shows on the staff&rsquo;s monthly summary.
+          </p>
         </div>
 
         {error && <p className="text-body-sm text-error-700">{error}</p>}

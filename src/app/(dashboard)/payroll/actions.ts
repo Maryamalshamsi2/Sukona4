@@ -538,7 +538,7 @@ export async function addStaffAdjustment(
     return { error: "Amount must be a positive number" };
   }
   if (!reason.trim()) {
-    return { error: "Please add a short reason" };
+    return { error: "Please add a short title" };
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(adjustmentDate)) {
     return { error: "Invalid date" };
@@ -596,7 +596,7 @@ export async function updateStaffAdjustment(
     return { error: "Amount must be a positive number" };
   }
   if (!reason.trim()) {
-    return { error: "Please add a short reason" };
+    return { error: "Please add a short title" };
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(adjustmentDate)) {
     return { error: "Invalid date" };
