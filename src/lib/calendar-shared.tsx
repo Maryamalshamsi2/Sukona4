@@ -10,6 +10,14 @@ export interface StaffMember {
   id: string;
   full_name: string;
   job_title: string | null;
+  /** Which team_group this staff belongs to (null = no team assigned).
+   *  Surfaced so the calendar can filter staff columns by team. */
+  group_id: string | null;
+}
+
+export interface TeamGroup {
+  id: string;
+  name: string;
 }
 
 export interface ClientItem {

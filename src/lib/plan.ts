@@ -35,7 +35,14 @@ export const PLAN_LIMITS: Record<
   {
     /** Hard cap on active staff members (including the owner). Infinity = unlimited. */
     maxStaff: number;
-    /** Hard cap on branches / teams the salon can run. */
+    /** Hard cap on team_groups (a.k.a. "Teams" or "Branches" in the UI).
+     *  In a home-service business one group = one area/region with its
+     *  own calendar (e.g. Dubai team vs Abu Dhabi team). Multi-Team
+     *  unlocks running 2+ teams under one salon account. */
+    maxGroups: number;
+    /** Hard cap on physical branches the salon can run. Reserved for
+     *  a future "true branches" feature; today we model regions via
+     *  team_groups (see maxGroups above). */
     maxBranches: number;
     /** Can collect customer reviews via the public /r/[token] page.
      *  Available on ALL plans — freelancers (Solo) need reviews for
@@ -53,6 +60,7 @@ export const PLAN_LIMITS: Record<
 > = {
   solo: {
     maxStaff: 1, // just the owner
+    maxGroups: 1,
     maxBranches: 1,
     reviews: true, // freelancers need reviews — not a paywall
     perStaffReports: false,
@@ -61,6 +69,7 @@ export const PLAN_LIMITS: Record<
   },
   team: {
     maxStaff: 5,
+    maxGroups: 1, // one team under one roof; Multi-Team unlocks more
     maxBranches: 1,
     reviews: true,
     perStaffReports: true,
@@ -69,6 +78,7 @@ export const PLAN_LIMITS: Record<
   },
   multi_team: {
     maxStaff: Infinity,
+    maxGroups: Infinity, // run unlimited regional teams
     maxBranches: Infinity,
     reviews: true,
     perStaffReports: true,
@@ -119,6 +129,16 @@ export function canAddStaff(plan: Plan, currentStaffCount: number): boolean {
 /** Max staff allowed (Infinity for unlimited). */
 export function maxStaff(plan: Plan): number {
   return PLAN_LIMITS[plan].maxStaff;
+}
+
+/** True if the salon can add one more team_group at their current plan. */
+export function canAddGroup(plan: Plan, currentGroupCount: number): boolean {
+  return currentGroupCount < PLAN_LIMITS[plan].maxGroups;
+}
+
+/** Max team_groups allowed (Infinity for unlimited). */
+export function maxGroups(plan: Plan): number {
+  return PLAN_LIMITS[plan].maxGroups;
 }
 
 /** True if reviews collection (public /r/[token] flow) is available. */

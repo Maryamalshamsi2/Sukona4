@@ -123,6 +123,15 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
       : await addGroup(formData);
 
     if (result.error) {
+      // Plan-cap hit → close the group form and pop the upgrade modal
+      // instead of just showing a toast. Same UX as the staff cap, but
+      // we tag the reason as "group" so the modal copy matches.
+      if ("code" in result && result.code === "PLAN_LIMIT_REACHED") {
+        setGroupModalOpen(false);
+        setEditingGroup(null);
+        setUpgradeReason("group");
+        return;
+      }
       undo.error(result.error);
       return;
     }
@@ -155,12 +164,18 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   const plan = usePlan();
   const isExempt = useIsExempt();
   const atStaffLimit = !isExempt && !canAddStaff(plan, members.length);
-  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  // null = closed. "staff" = hit on adding a member; "group" = hit on
+  // adding a team. The modal switches copy + CTA depending on which.
+  const [upgradeReason, setUpgradeReason] = useState<null | "staff" | "group">(null);
+  const upgradeModalOpen = upgradeReason !== null;
+  const setUpgradeModalOpen = (open: boolean) => {
+    if (!open) setUpgradeReason(null);
+  };
 
   // ---- Member handlers ----
   function openAddMember() {
     if (atStaffLimit) {
-      setUpgradeModalOpen(true);
+      setUpgradeReason("staff");
       return;
     }
     setEditingMember(null);
@@ -991,11 +1006,15 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
                 {PLAN_LABELS[plan]} plan&rsquo;s limit
               </p>
               <p className="mt-1.5 text-body-sm text-text-secondary">
-                {plan === "solo"
-                  ? "The Solo plan is for one person. Upgrade to Team to add up to 5 members, or Multi-Team for unlimited."
-                  : plan === "team"
-                    ? `Team plans include up to ${maxStaff(plan)} members. Upgrade to Multi-Team for unlimited.`
-                    : "Your current plan doesn't allow more members."}
+                {upgradeReason === "group"
+                  ? plan === "solo" || plan === "team"
+                    ? "Your plan allows one team. Upgrade to Multi-Team to run multiple regional teams (e.g. Dubai + Abu Dhabi), each with its own calendar."
+                    : "Your current plan doesn't allow more teams."
+                  : plan === "solo"
+                    ? "The Solo plan is for one person. Upgrade to Team to add up to 5 members, or Multi-Team for unlimited."
+                    : plan === "team"
+                      ? `Team plans include up to ${maxStaff(plan)} members. Upgrade to Multi-Team for unlimited.`
+                      : "Your current plan doesn't allow more members."}
               </p>
             </div>
           </div>

@@ -26,6 +26,7 @@ import {
   DetailView,
   AppointmentForm,
   BundleForBooking,
+  TeamGroup,
 } from "@/lib/calendar-shared";
 import {
   getAppointmentsForDate,
@@ -185,6 +186,10 @@ export interface CalendarViewProps {
   initialServices: ServiceItem[];
   initialBundles: BundleForBooking[];
   initialStaffScheduleMap: Map<string, { isOff: boolean; startMin: number; endMin: number }>;
+  /** All team_groups in the salon. The Team selector only renders
+   *  when this has 2+ entries (a single team or none means there's
+   *  no useful choice to offer). */
+  initialTeamGroups: TeamGroup[];
 }
 
 export default function CalendarView({
@@ -196,6 +201,7 @@ export default function CalendarView({
   initialServices,
   initialBundles,
   initialStaffScheduleMap,
+  initialTeamGroups,
 }: CalendarViewProps) {
   const currentUser = useCurrentUser();
   const isStaff = currentUser?.role === "staff";
@@ -221,6 +227,14 @@ export default function CalendarView({
   const [staffFilterOpen, setStaffFilterOpen] = useState(false);
   const staffFilterRef = useRef<HTMLDivElement>(null);
   const staffFilterMobileRef = useRef<HTMLDivElement>(null);
+
+  // Team (team_group) filter — used by Multi-Team salons running 2+
+  // regional teams (e.g. Dubai + Abu Dhabi) to scope the calendar to
+  // one team at a time. null = "All teams". The selector itself only
+  // renders when teamGroups.length >= 2 so single-team salons see no
+  // extra UI.
+  const [teamGroups] = useState<TeamGroup[]>(initialTeamGroups);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
   // Date picker
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -317,10 +331,17 @@ export default function CalendarView({
 
   const dateStr = formatDate(selectedDate);
 
-  // Filtered staff list (empty selectedStaffIds = show all)
+  // Filtered staff list. Two gates applied in order:
+  //   1. Team filter (selectedTeamId) — scopes to staff whose group_id
+  //      matches the chosen team. null = "All teams" (no team filtering).
+  //   2. Individual staff filter (selectedStaffIds) — further narrows
+  //      within whatever the team filter left. Empty set = show all.
+  const teamScopedStaff = selectedTeamId
+    ? staff.filter((s) => s.group_id === selectedTeamId)
+    : staff;
   const filteredStaff = selectedStaffIds.size === 0
-    ? staff
-    : staff.filter((s) => selectedStaffIds.has(s.id));
+    ? teamScopedStaff
+    : teamScopedStaff.filter((s) => selectedStaffIds.has(s.id));
 
   // Dismiss staff filter dropdown on outside click
   useEffect(() => {
@@ -1089,6 +1110,31 @@ export default function CalendarView({
         </div>
 
         <div className="flex items-center gap-1">
+          {/* Mobile team selector — same conditions as desktop. Native
+              <select> renders as the OS picker on mobile, which is the
+              right pattern for a short list of choices. */}
+          {teamGroups.length >= 2 && (
+            <select
+              value={selectedTeamId ?? ""}
+              onChange={(e) => {
+                setSelectedTeamId(e.target.value || null);
+                setSelectedStaffIds(new Set());
+              }}
+              className={`h-8 rounded-full border px-2.5 text-caption font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-100 ${
+                selectedTeamId
+                  ? "bg-neutral-900 text-text-inverse border-neutral-900"
+                  : "bg-white text-text-primary border-neutral-200"
+              }`}
+              aria-label="Filter calendar by team"
+            >
+              <option value="">All teams</option>
+              {teamGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="relative" ref={staffFilterMobileRef}>
             <button
               onClick={() => setStaffFilterOpen((v) => !v)}
@@ -1190,6 +1236,35 @@ export default function CalendarView({
           </button>
         </div>
         <div className="flex items-center gap-2">
+          {/* Team selector — only renders when the salon has 2+ team_
+              groups (i.e. Multi-Team plan and the owner has actually
+              created multiple teams). For Solo/Team this is a no-op. */}
+          {teamGroups.length >= 2 && (
+            <select
+              value={selectedTeamId ?? ""}
+              onChange={(e) => {
+                setSelectedTeamId(e.target.value || null);
+                // Clear individual staff filter when switching teams
+                // — those selections likely belong to the previous
+                // team and would silently keep filtering after the
+                // user already changed view.
+                setSelectedStaffIds(new Set());
+              }}
+              className={`h-9 rounded-full px-3 text-body-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-100 ${
+                selectedTeamId
+                  ? "bg-neutral-900 text-text-inverse border border-neutral-900"
+                  : "bg-white text-text-primary border border-neutral-200 hover:border-neutral-400"
+              }`}
+              aria-label="Filter calendar by team"
+            >
+              <option value="">All teams</option>
+              {teamGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          )}
           {/* Desktop staff filter */}
           <div className="relative" ref={staffFilterRef}>
             <button

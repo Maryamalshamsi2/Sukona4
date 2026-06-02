@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
 import {
   canAddStaff,
+  canAddGroup,
   maxStaff,
+  maxGroups,
   PLAN_LABELS,
   type Plan,
 } from "@/lib/plan";
@@ -26,6 +28,36 @@ export async function getGroups() {
 
 export async function addGroup(formData: FormData) {
   const supabase = await createClient();
+
+  // Plan-gate: Solo/Team can only have 1 team_group, Multi-Team unlimited.
+  // is_exempt salons (migration-035 — founder/demo accounts) bypass the
+  // cap entirely. Returns a stable PLAN_LIMIT_REACHED error code so the
+  // UI can swap in the upgrade modal instead of just showing a toast.
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  const { data: salon } = await supabase
+    .from("salons")
+    .select("plan, is_exempt")
+    .eq("id", profile.salon_id)
+    .single();
+  const plan = (salon?.plan as Plan | undefined) ?? "solo";
+  const isExempt = !!salon?.is_exempt;
+  if (!isExempt) {
+    const { count } = await supabase
+      .from("team_groups")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", profile.salon_id);
+    const currentCount = count ?? 0;
+    if (!canAddGroup(plan, currentCount)) {
+      const max = maxGroups(plan);
+      return {
+        error: `Your ${PLAN_LABELS[plan]} plan allows up to ${max} team${
+          max === 1 ? "" : "s"
+        }. Upgrade to Multi-Team to run multiple regional teams.`,
+        code: "PLAN_LIMIT_REACHED",
+      };
+    }
+  }
 
   const { error } = await supabase.from("team_groups").insert({
     name: formData.get("name") as string,

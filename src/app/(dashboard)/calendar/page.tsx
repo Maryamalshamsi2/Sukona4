@@ -5,6 +5,7 @@ import {
   ClientItem,
   ServiceItem,
   BundleForBooking,
+  TeamGroup,
 } from "@/lib/calendar-shared";
 import {
   getAppointmentsForDate,
@@ -14,6 +15,7 @@ import {
   getCalendarBlocks,
   getBundlesForBooking,
   getStaffSchedulesForDate,
+  getTeamGroups,
 } from "./actions";
 
 interface CalendarBlockData {
@@ -44,7 +46,7 @@ function timeToMinutes(time: string) {
 export default async function CalendarPage() {
   const today = formatDate(new Date());
 
-  const [appts, staffData, clientData, serviceData, blockData, bundleData, schedData] =
+  const [appts, staffData, clientData, serviceData, blockData, bundleData, schedData, teamGroupData] =
     await Promise.all([
       getAppointmentsForDate(today),
       getStaffMembers(),
@@ -53,6 +55,7 @@ export default async function CalendarPage() {
       getCalendarBlocks(today),
       getBundlesForBooking(),
       getStaffSchedulesForDate(today),
+      getTeamGroups(),
     ]);
 
   // Build the staff schedule map server-side (same logic as the client used to do).
@@ -87,6 +90,7 @@ export default async function CalendarPage() {
       initialServices={serviceData as ServiceItem[]}
       initialBundles={bundleData as unknown as BundleForBooking[]}
       initialStaffScheduleMap={staffScheduleMap}
+      initialTeamGroups={(teamGroupData ?? []) as TeamGroup[]}
     />
   );
 }

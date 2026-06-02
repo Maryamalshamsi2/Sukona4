@@ -104,7 +104,10 @@ export async function getStaffMembers() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, job_title")
+    // group_id surfaces which team_group a staff belongs to — used by
+    // the calendar's Team filter (Multi-Team plan) to scope the staff
+    // columns to a single region.
+    .select("id, full_name, job_title, group_id")
     .eq("role", "staff")
     // Hide staff that the owner has flagged as off-calendar (drivers,
     // managers, etc.). They can still log in and read appointments via
@@ -112,6 +115,24 @@ export async function getStaffMembers() {
     .eq("appears_on_calendar", true)
     .order("created_at", { ascending: true });
 
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * List of team_groups (a.k.a. "Teams") in the salon. Powers the
+ * Calendar's Team selector — when the salon has 2+ teams the selector
+ * appears and the staff columns scope to the chosen team.
+ *
+ * Empty list (0 or 1 teams) → the calendar hides the selector
+ * entirely (no useful choice to offer).
+ */
+export async function getTeamGroups() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("team_groups")
+    .select("id, name")
+    .order("name", { ascending: true });
   if (error) throw error;
   return data;
 }
