@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { canUsePayroll, type Plan } from "@/lib/plan";
 
 /**
  * Payroll v1 — server actions used by the /payroll page.
@@ -135,11 +136,39 @@ export interface PayrollDetail {
 
 // ---------- Helpers ----------
 
-/** Owner gate. Returns the profile when allowed; an error object when not. */
+/**
+ * Owner + plan gate. Returns the profile when allowed; an error object
+ * when not.
+ *
+ * Two checks, in order:
+ *   1. Role: must be owner.
+ *   2. Plan: payroll requires Team or Multi-Team. is_exempt salons
+ *      (migration-035 — founder/demo accounts) bypass the plan check.
+ *
+ * The /payroll page itself short-circuits to the UpgradeBlock before
+ * any action runs, so a happy-path user never sees the "Payroll
+ * isn't on your plan" error. This is defense-in-depth: a crafted
+ * client call (e.g. directly invoking the server action from devtools)
+ * still gets rejected.
+ */
 async function requireOwner() {
   const profile = await getCurrentProfile();
   if (!profile) return { error: "Not authenticated" } as const;
   if (profile.role !== "owner") return { error: "Not authorized" } as const;
+
+  const supabase = await createClient();
+  const { data: salon } = await supabase
+    .from("salons")
+    .select("plan, is_exempt")
+    .eq("id", profile.salon_id)
+    .single();
+  const plan = (salon?.plan as Plan | undefined) ?? "solo";
+  const isExempt = !!salon?.is_exempt;
+  if (!isExempt && !canUsePayroll(plan)) {
+    return {
+      error: "Payroll isn't included on your plan. Upgrade to Team to unlock it.",
+    } as const;
+  }
   return { profile };
 }
 

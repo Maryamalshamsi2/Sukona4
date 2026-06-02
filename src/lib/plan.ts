@@ -37,10 +37,16 @@ export const PLAN_LIMITS: Record<
     maxStaff: number;
     /** Hard cap on branches / teams the salon can run. */
     maxBranches: number;
-    /** Can collect customer reviews via the public /r/[token] page. */
+    /** Can collect customer reviews via the public /r/[token] page.
+     *  Available on ALL plans — freelancers (Solo) need reviews for
+     *  marketing more than anyone, so this isn't gated. */
     reviews: boolean;
-    /** Can see per-staff performance breakdowns in Reports. */
+    /** Can see per-staff performance breakdowns in Reports. Off for
+     *  Solo because the breakdown is degenerate when staff_count = 1. */
     perStaffReports: boolean;
+    /** Can use /payroll. Off for Solo because the whole point of
+     *  payroll is sharing salary summaries with OTHER staff. */
+    payroll: boolean;
     /** Can pivot reports across multiple branches in Reports. */
     crossTeamReports: boolean;
   }
@@ -48,8 +54,9 @@ export const PLAN_LIMITS: Record<
   solo: {
     maxStaff: 1, // just the owner
     maxBranches: 1,
-    reviews: false,
+    reviews: true, // freelancers need reviews — not a paywall
     perStaffReports: false,
+    payroll: false,
     crossTeamReports: false,
   },
   team: {
@@ -57,6 +64,7 @@ export const PLAN_LIMITS: Record<
     maxBranches: 1,
     reviews: true,
     perStaffReports: true,
+    payroll: true,
     crossTeamReports: false,
   },
   multi_team: {
@@ -64,6 +72,7 @@ export const PLAN_LIMITS: Record<
     maxBranches: Infinity,
     reviews: true,
     perStaffReports: true,
+    payroll: true,
     crossTeamReports: true,
   },
 };
@@ -120,6 +129,11 @@ export function canUseReviews(plan: Plan): boolean {
 /** True if per-staff performance breakdowns are unlocked in Reports. */
 export function canUsePerStaffReports(plan: Plan): boolean {
   return PLAN_LIMITS[plan].perStaffReports;
+}
+
+/** True if the /payroll page is unlocked. */
+export function canUsePayroll(plan: Plan): boolean {
+  return PLAN_LIMITS[plan].payroll;
 }
 
 /** True if cross-team / cross-branch reporting is unlocked. */
