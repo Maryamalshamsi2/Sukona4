@@ -441,6 +441,84 @@ export async function updateTeamMember(id: string, formData: FormData) {
   return { success: true };
 }
 
+/**
+ * Permanently remove a team member from the salon.
+ *
+ * What gets deleted:
+ *   - auth.users row → cascades to profiles (setup.sql line 15)
+ *   - Anything with `ON DELETE CASCADE` to profiles
+ *       (appointment_staff, staff_schedules, staff_days_off,
+ *        staff_adjustments)
+ *
+ * What survives:
+ *   - Appointments (appointment_services.staff_id → SET NULL, so the
+ *     appointment stays but the assignment becomes "unassigned")
+ *   - Payments (tip_to_staff_id → SET NULL, so tip history is kept
+ *     but no longer attributed)
+ *   - Past activity_log entries (performed_by → SET NULL)
+ *
+ * Guards:
+ *   - Caller must be owner.
+ *   - Owner cannot delete themselves (would orphan the salon).
+ *   - Owner cannot delete another owner (one-owner-per-salon model;
+ *     we don't currently support co-owners, but the guard means a
+ *     future "transfer ownership" feature won't accidentally let
+ *     ownership disappear).
+ *
+ * Plan-limit fallout: after delete, the salon's staff count goes
+ * down by 1, which may bring an over-cap salon back into compliance.
+ * Nothing to do here — canAddStaff() rechecks at add-time.
+ */
+export async function deleteTeamMember(id: string) {
+  const editor = await getCurrentProfile();
+  if (!editor) return { error: "Not authenticated" };
+  if (editor.role !== "owner") return { error: "Only the owner can delete members" };
+
+  if (editor.id === id) {
+    return { error: "You can't delete your own account from here." };
+  }
+
+  // Confirm the target is in the same salon and isn't another owner.
+  const supabase = await createClient();
+  const { data: target, error: fetchErr } = await supabase
+    .from("profiles")
+    .select("id, role, salon_id, full_name")
+    .eq("id", id)
+    .single();
+  if (fetchErr || !target) return { error: "Member not found" };
+  if (target.salon_id !== editor.salon_id) {
+    return { error: "Not authorized" };
+  }
+  if (target.role === "owner") {
+    return { error: "Can't delete a salon owner." };
+  }
+
+  // Delete from auth.users via the admin (service-role) client. The
+  // cascade chain handles the rest: profile → schedules → adjustments →
+  // appointment_staff links. The supabase-js admin call removes the
+  // auth row first, which also revokes any active sessions for that
+  // user (they're immediately signed out everywhere).
+  const adminResult = await getAdminClient();
+  if ("error" in adminResult) return { error: adminResult.error };
+  const adminSupabase = adminResult.admin;
+
+  const { error: delErr } = await adminSupabase.auth.admin.deleteUser(id);
+  if (delErr) return { error: delErr.message };
+
+  // Audit log — no appointment_id, just a salon-level record.
+  await supabase.from("activity_log").insert({
+    appointment_id: null,
+    action: "team_member_deleted",
+    description: `Removed · ${target.full_name || "team member"}`,
+    performed_by: editor.id,
+  });
+
+  revalidatePath("/team");
+  revalidatePath("/payroll");
+  revalidatePath("/calendar");
+  return { success: true };
+}
+
 // ---- STAFF SCHEDULES ----
 
 export async function getStaffSchedules(profileId: string): Promise<StaffSchedule[]> {

@@ -462,34 +462,29 @@ export default function PayrollView({
               </button>
             </div>
 
-            {/* Services list. Bundle rows show the bundle name as a
-                small caption so the staff understands why the price
-                isn't the catalog price (it's their share of the
-                bundle's discounted total). */}
+            {/* Order: Bonuses & deductions → Tips → Services performed.
+                The owner-actionable bits (adjustments) come first since
+                that's what's most likely to be edited mid-conversation
+                with the staff. Tips next (smallest list). Services last
+                because it's the longest list and the staff already
+                "knows" what they did. */}
+
+            {/* Adjustments list */}
             <DetailList
-              title={`Services performed (${detail.services.length})`}
-              emptyLabel="No paid services in this month."
+              title={`Bonuses & deductions (${detail.adjustments.length})`}
+              emptyLabel="No bonuses or deductions in this month."
             >
-              {detail.services.map((s, idx) => (
-                <div
-                  key={`${s.appointmentId}-${idx}`}
-                  className="flex items-center justify-between gap-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-body-sm text-text-primary">
-                      {s.serviceName}
-                    </p>
-                    <p className="text-caption text-text-tertiary">
-                      {formatDate(s.date)}
-                      {s.bundleName && (
-                        <span className="ml-1">· from {s.bundleName}</span>
-                      )}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-body-sm tabular-nums text-text-secondary">
-                    {formatCurrency(s.price, currency)}
-                  </p>
-                </div>
+              {detail.adjustments.map((a) => (
+                <AdjustmentRow
+                  key={a.id}
+                  adjustment={a}
+                  currency={currency}
+                  onEdit={() => {
+                    setEditingAdjustment(a);
+                    setAdjustmentModalOpen(true);
+                  }}
+                  onDeleted={refreshDetailAndSummary}
+                />
               ))}
             </DetailList>
 
@@ -520,22 +515,34 @@ export default function PayrollView({
               ))}
             </DetailList>
 
-            {/* Adjustments list */}
+            {/* Services list. Bundle rows show the bundle name as a
+                small caption so the staff understands why the price
+                isn't the catalog price (it's their share of the
+                bundle's discounted total). */}
             <DetailList
-              title={`Bonuses & deductions (${detail.adjustments.length})`}
-              emptyLabel="No bonuses or deductions in this month."
+              title={`Services performed (${detail.services.length})`}
+              emptyLabel="No paid services in this month."
             >
-              {detail.adjustments.map((a) => (
-                <AdjustmentRow
-                  key={a.id}
-                  adjustment={a}
-                  currency={currency}
-                  onEdit={() => {
-                    setEditingAdjustment(a);
-                    setAdjustmentModalOpen(true);
-                  }}
-                  onDeleted={refreshDetailAndSummary}
-                />
+              {detail.services.map((s, idx) => (
+                <div
+                  key={`${s.appointmentId}-${idx}`}
+                  className="flex items-center justify-between gap-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-body-sm text-text-primary">
+                      {s.serviceName}
+                    </p>
+                    <p className="text-caption text-text-tertiary">
+                      {formatDate(s.date)}
+                      {s.bundleName && (
+                        <span className="ml-1">· from {s.bundleName}</span>
+                      )}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-body-sm tabular-nums text-text-secondary">
+                    {formatCurrency(s.price, currency)}
+                  </p>
+                </div>
               ))}
             </DetailList>
           </div>

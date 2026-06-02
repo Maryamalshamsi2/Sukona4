@@ -15,6 +15,7 @@ import {
   getTeamMembers,
   addTeamMember,
   updateTeamMember,
+  deleteTeamMember,
   getStaffSchedules,
   upsertStaffSchedules,
   getStaffDaysOff,
@@ -237,6 +238,31 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
       }
     }
 
+    closeMemberModal();
+    loadData();
+  }
+
+  // Permanent removal — only available to owners, only for non-self,
+  // non-owner members. The server action enforces the same guards
+  // (defense in depth), and we use a strong, specific confirm prompt
+  // so the owner sees exactly what survives vs. what disappears.
+  async function handleDeleteMember() {
+    if (!editingMember) return;
+    const name = editingMember.full_name || "this team member";
+    const confirmed = window.confirm(
+      `Remove ${name} from your team?\n\n` +
+      `This will:\n` +
+      `• Sign them out everywhere and disable their login\n` +
+      `• Delete their schedule, days off, and pay adjustments history\n\n` +
+      `Past appointments and payments stay, but ${name} won't be assigned to them anymore.\n\n` +
+      `This can't be undone.`
+    );
+    if (!confirmed) return;
+    const result = await deleteTeamMember(editingMember.id);
+    if (result.error) {
+      undo.error(result.error);
+      return;
+    }
     closeMemberModal();
     loadData();
   }
@@ -866,20 +892,42 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-3">
-            <button
-              type="button"
-              onClick={closeMemberModal}
-              className="rounded-xl bg-surface-active hover:bg-neutral-100 px-5 py-2.5 text-body-sm font-semibold text-text-primary"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
-            >
-              {isAddingMember ? "Add Member" : "Save"}
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+            {/* Delete (left-aligned, destructive) — owner-only, edit-
+                mode only, never on the owner's own row, never on
+                another owner. Server action re-checks all three. */}
+            {currentUser?.role === "owner" &&
+              !isAddingMember &&
+              editingMember &&
+              !editingSelf &&
+              editingMember.role !== "owner" ? (
+              <button
+                type="button"
+                onClick={handleDeleteMember}
+                className="rounded-xl border-[1.5px] border-red-200 bg-white px-4 py-2.5 text-body-sm font-semibold text-error-700 hover:bg-red-50"
+              >
+                Delete member
+              </button>
+            ) : (
+              // Empty spacer keeps the right-side buttons right-aligned
+              // when the Delete button is hidden.
+              <span />
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={closeMemberModal}
+                className="rounded-xl bg-surface-active hover:bg-neutral-100 px-5 py-2.5 text-body-sm font-semibold text-text-primary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-xl bg-neutral-900 px-5 py-2.5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+              >
+                {isAddingMember ? "Add Member" : "Save"}
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
