@@ -13,6 +13,8 @@ import {
   updateWhatsAppSettings,
   getWhatsAppLogs,
   sendWhatsAppTestMessage,
+  getEmailConfigStatus,
+  sendTestEmail,
 } from "./actions";
 import type { WhatsAppSendLog } from "@/types";
 import PhoneInput from "@/components/phone-input";
@@ -43,7 +45,7 @@ export interface SalonSettings {
   is_onboarded: boolean;
 }
 
-type SettingsTab = "profile" | "salon" | "whatsapp" | "security";
+type SettingsTab = "profile" | "salon" | "whatsapp" | "email" | "security";
 
 interface SettingsViewProps {
   initialProfile: Profile | null;
@@ -70,13 +72,14 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
     }
   }, []);
 
-  // Salon + WhatsApp tabs are owner-only — staff/admin don't see them.
+  // Salon / WhatsApp / Email tabs are owner-only — staff/admin don't see them.
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: "profile", label: "Profile" },
     ...(isOwner
       ? ([
           { key: "salon", label: "Salon" },
           { key: "whatsapp", label: "WhatsApp" },
+          { key: "email", label: "Email" },
         ] as const)
       : []),
     { key: "security", label: "Security" },
@@ -137,6 +140,8 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
       )}
 
       {tab === "whatsapp" && isOwner && <WhatsAppSection />}
+
+      {tab === "email" && isOwner && <EmailSection />}
 
       {tab === "security" && (
         <SecuritySection />
@@ -1001,6 +1006,210 @@ function WhatsAppSection() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Owner-only panel for verifying transactional email is wired up.
+ * Shows a config-status banner (are env vars set? what's the From
+ * address?) and four "Send test" buttons — one per email type.
+ *
+ * Test sends:
+ *   - go to the owner's profile email (not the customer)
+ *   - render the same templates the production cron / signup flow uses
+ *   - have "[TEST]" prefixed on the subject so they're unmistakable
+ *   - DO NOT write to email_send_log (the production idempotency
+ *     index would otherwise block subsequent tests)
+ *
+ * If any test fails, the inline message surfaces the underlying
+ * Resend / network error so the owner can diagnose without leaving
+ * the page.
+ */
+function EmailSection() {
+  const [config, setConfig] = useState<{
+    configured: boolean;
+    hasApiKey: boolean;
+    hasFrom: boolean;
+    fromAddress: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  // We track which button is mid-send so only that one shows the
+  // spinner state, not the whole row. Null when nothing is pending.
+  const [sendingType, setSendingType] =
+    useState<"welcome" | "trial_3d" | "trial_1d" | "trial_ended" | null>(null);
+  const [result, setResult] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const r = await getEmailConfigStatus();
+      if (cancelled) return;
+      if ("error" in r) {
+        // Non-owners shouldn't ever reach this section (tab is gated),
+        // but treat the auth-failure as "not configured" for safety.
+        setConfig({ configured: false, hasApiKey: false, hasFrom: false, fromAddress: null });
+      } else {
+        setConfig({
+          configured: r.configured,
+          hasApiKey: r.hasApiKey,
+          hasFrom: r.hasFrom,
+          fromAddress: r.fromAddress,
+        });
+      }
+      setLoading(false);
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSend(
+    type: "welcome" | "trial_3d" | "trial_1d" | "trial_ended",
+  ) {
+    setSendingType(type);
+    setResult(null);
+    const res = await sendTestEmail(type);
+    setSendingType(null);
+    if ("error" in res && res.error) {
+      setResult({ type: "error", text: res.error });
+    } else if ("success" in res && res.success) {
+      setResult({
+        type: "success",
+        text: `Test sent to ${res.recipientEmail} — check your inbox (and spam folder).`,
+      });
+    }
+  }
+
+  if (loading) {
+    return <p className="text-text-secondary text-body-sm">Loading...</p>;
+  }
+
+  const TESTS: Array<{
+    key: "welcome" | "trial_3d" | "trial_1d" | "trial_ended";
+    label: string;
+    description: string;
+  }> = [
+    {
+      key: "welcome",
+      label: "Welcome email",
+      description: "Sent automatically after onboarding completes.",
+    },
+    {
+      key: "trial_3d",
+      label: "Trial reminder — 3 days left",
+      description: "Sent by daily cron when trial is 3 days from expiring.",
+    },
+    {
+      key: "trial_1d",
+      label: "Trial reminder — 1 day left",
+      description: "Sent by daily cron the day before trial ends.",
+    },
+    {
+      key: "trial_ended",
+      label: "Trial ended",
+      description: "Sent by daily cron after trial expires without a subscription.",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Config status banner */}
+      <div className="rounded-2xl ring-1 ring-border bg-white">
+        <div className="border-b border-border px-5 py-4">
+          <h3 className="text-body-sm font-semibold text-text-primary">
+            Email delivery (Resend)
+          </h3>
+          <p className="mt-0.5 text-caption text-text-secondary">
+            Sukona sends transactional emails (welcome + trial reminders)
+            through Resend. Use the buttons below to test each template
+            without spamming real customers.
+          </p>
+        </div>
+        <div className="px-5 py-4">
+          {config?.configured ? (
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+              <div>
+                <p className="text-body-sm font-medium text-text-primary">
+                  Configured
+                </p>
+                <p className="text-caption text-text-secondary">
+                  Sending from <span className="font-mono">{config.fromAddress}</span>.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+              <div className="space-y-1">
+                <p className="text-body-sm font-medium text-text-primary">
+                  Not fully configured
+                </p>
+                <ul className="text-caption text-text-secondary list-disc list-inside space-y-0.5">
+                  {!config?.hasApiKey && <li>RESEND_API_KEY env var is missing</li>}
+                  {!config?.hasFrom && <li>EMAIL_FROM env var is missing</li>}
+                </ul>
+                <p className="text-caption text-text-tertiary pt-1">
+                  Set these in Vercel → Project Settings → Environment Variables, then redeploy.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Test sends — one button per template. Tests go to YOUR profile
+          email (the owner's), prefixed with [TEST] in the subject. */}
+      <div className="rounded-2xl ring-1 ring-border bg-white">
+        <div className="border-b border-border px-5 py-4">
+          <h3 className="text-body-sm font-semibold text-text-primary">
+            Send test emails
+          </h3>
+          <p className="mt-0.5 text-caption text-text-secondary">
+            Each button sends one email to <strong>your</strong> address with
+            <code className="mx-1 rounded bg-surface-active px-1 py-0.5 text-caption">[TEST]</code>
+            in the subject. These don&rsquo;t affect the production audit log.
+          </p>
+        </div>
+        <ul className="divide-y divide-border">
+          {TESTS.map((t) => (
+            <li key={t.key} className="flex items-center justify-between gap-4 px-5 py-3.5">
+              <div className="min-w-0">
+                <p className="text-body-sm font-medium text-text-primary">{t.label}</p>
+                <p className="text-caption text-text-tertiary">{t.description}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSend(t.key)}
+                disabled={!config?.configured || sendingType !== null}
+                className="shrink-0 rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-2 text-body-sm font-semibold text-text-primary hover:border-neutral-400 disabled:opacity-40 disabled:hover:border-neutral-200"
+              >
+                {sendingType === t.key ? "Sending…" : "Send test"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Inline result banner — sticks around until the next send or
+          a manual dismiss (click anywhere outside? no, just the next
+          send replaces it). */}
+      {result && (
+        <div
+          className={`rounded-xl px-4 py-3 text-body-sm ${
+            result.type === "success"
+              ? "bg-emerald-50 text-emerald-800"
+              : "bg-red-50 text-error-700"
+          }`}
+        >
+          {result.text}
+        </div>
+      )}
     </div>
   );
 }

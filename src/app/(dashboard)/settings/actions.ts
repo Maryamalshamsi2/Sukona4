@@ -332,3 +332,139 @@ export async function sendWhatsAppTestMessage(toPhone: string) {
   revalidatePath("/settings");
   return { success: true };
 }
+
+// ============================================================
+// Resend (transactional email) — config status + test sends
+// ============================================================
+//
+// `sendTestEmail` is intentionally NOT a wrapper around
+// dispatchWelcomeEmail / dispatchTrialReminder. Those write to
+// email_send_log + short-circuit on a duplicate "sent" row, which is
+// what we want for production (no double-sends to real customers)
+// but the opposite of what you want when testing (you need to be able
+// to fire the same template multiple times).
+//
+// So: render the same templates, send through Resend directly, prefix
+// the subject with "[TEST]" so it's unmistakable in the inbox, and
+// SKIP the audit log entirely. The production audit log stays clean.
+
+export async function getEmailConfigStatus() {
+  // No DB access — just a server-only read of env vars. Tells the UI
+  // which "Send test" buttons to enable and explains in plain English
+  // what's missing if anything is.
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" } as const;
+  if (profile.role !== "owner") return { error: "Not authorized" } as const;
+
+  const hasApiKey = !!process.env.RESEND_API_KEY;
+  const hasFrom = !!process.env.EMAIL_FROM;
+  const fromAddress = process.env.EMAIL_FROM ?? null;
+
+  return {
+    configured: hasApiKey && hasFrom,
+    hasApiKey,
+    hasFrom,
+    fromAddress,
+  } as const;
+}
+
+export async function sendTestEmail(
+  type: "welcome" | "trial_3d" | "trial_1d" | "trial_ended",
+) {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner") {
+    return { error: "Only the salon owner can send test emails" };
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!apiKey || !from) {
+    return {
+      error:
+        "Email isn't configured. Set RESEND_API_KEY and EMAIL_FROM in your Vercel env vars and redeploy.",
+    };
+  }
+
+  // Pull the owner's email + salon name so the test renders with
+  // real values (otherwise we're testing template logic, not what
+  // the customer would actually receive).
+  const supabase = await createClient();
+  const { data: ownerRow } = await supabase
+    .from("profiles")
+    .select("email, full_name")
+    .eq("id", profile.id)
+    .single();
+  const ownerEmail = ownerRow?.email;
+  const ownerName = ownerRow?.full_name || "there";
+  if (!ownerEmail) {
+    return { error: "Your profile has no email address on file." };
+  }
+
+  const { data: salonRow } = await supabase
+    .from("salons")
+    .select("name, trial_ends_at")
+    .eq("id", profile.salon_id)
+    .single();
+  const salonName = salonRow?.name || "your business";
+  // For trial-reminder previews, fall back to "7 days from now" if
+  // the salon doesn't have a trial_ends_at (e.g. exempt accounts) so
+  // the date label in the email body still renders.
+  const trialEndsAt = salonRow?.trial_ends_at
+    ? new Date(salonRow.trial_ends_at)
+    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    "http://localhost:3000";
+
+  // Dynamic import keeps the template + Resend modules out of the
+  // common server bundle. They only load when an owner clicks a test
+  // button, which is rare.
+  const { renderWelcome, renderTrialReminder, renderTrialEnded } =
+    await import("@/lib/email/templates");
+  const { Resend } = await import("resend");
+
+  let tpl;
+  if (type === "welcome") {
+    tpl = renderWelcome({ ownerName, salonName, appUrl });
+  } else if (type === "trial_ended") {
+    tpl = renderTrialEnded({ ownerName, salonName, appUrl });
+  } else {
+    tpl = renderTrialReminder({
+      ownerName,
+      salonName,
+      daysLeft: type === "trial_3d" ? 3 : 1,
+      trialEndsAt,
+      appUrl,
+    });
+  }
+
+  const resend = new Resend(apiKey);
+  try {
+    const res = await resend.emails.send({
+      from,
+      to: ownerEmail,
+      // [TEST] prefix makes these unmistakable in the inbox and in
+      // Resend's dashboard — owner can filter them out from real sends.
+      subject: `[TEST] ${tpl.subject}`,
+      html: tpl.html,
+      text: tpl.text,
+    });
+    if (res.error) {
+      return { error: res.error.message ?? "Resend rejected the send" };
+    }
+    return {
+      success: true,
+      recipientEmail: ownerEmail,
+      resend_message_id: res.data?.id ?? null,
+    };
+  } catch (err) {
+    return {
+      error: `Network error talking to Resend: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+}
