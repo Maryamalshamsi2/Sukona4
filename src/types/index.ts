@@ -171,6 +171,17 @@ export interface InventoryItem {
   name: string;
   quantity: number;
   low_stock_threshold: number;
+  /** Migration-042 — optional team scoping. NULL = salon-wide
+   *  shared item; otherwise the item belongs to that team only. */
+  team_id: string | null;
+  /** Optional extra fields surfaced by later migrations (category,
+   *  unit, cost, notes). The form already reads/writes these; they
+   *  weren't on the original setup.sql definition but exist in
+   *  production. */
+  category?: string | null;
+  unit?: string | null;
+  cost_per_unit?: number | null;
+  notes?: string | null;
   created_at: string;
 }
 

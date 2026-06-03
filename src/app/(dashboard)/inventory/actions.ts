@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getTeamScope } from "@/lib/auth-server";
 
 // Helper to log notification rows. salon_id auto-fills via column default
 // (migration 014). performed_by = the actor; the notification bell filters
@@ -21,13 +22,47 @@ async function logNotification(
   });
 }
 
-export async function getInventoryItems() {
+/**
+ * Inventory items list, with optional team filtering.
+ *
+ * Three scoping modes:
+ *
+ *   1. Scoped admin (admin role + group_id set, Multi-Team v1.5/1.6):
+ *      Always returns items where team_id = their team OR team_id IS
+ *      NULL (salon-wide shared pool). The `teamFilter` argument is
+ *      ignored — they can't see other teams' stock regardless.
+ *
+ *   2. Owner / unscoped admin, `teamFilter` argument provided:
+ *      Returns items where team_id = teamFilter OR team_id IS NULL.
+ *      Lets the owner inspect one team's stock at a time.
+ *
+ *   3. Owner / unscoped admin, no `teamFilter`:
+ *      Returns everything (existing behavior — backwards-compat for
+ *      single-team salons).
+ *
+ * @param teamFilter optional team_group id. Use "shared" to filter to
+ *                   shared-only (team_id IS NULL) items.
+ */
+export async function getInventoryItems(teamFilter?: string | null) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("inventory")
-    .select("*")
-    .order("name", { ascending: true });
+  let query = supabase.from("inventory").select("*");
 
+  const { teamScope } = await getTeamScope();
+  if (teamScope) {
+    // Scoped admin: always limit to (their team) OR (shared). The
+    // server is the source of truth; even if the client passes
+    // teamFilter for another team, we override.
+    query = query.or(`team_id.eq.${teamScope},team_id.is.null`);
+  } else if (teamFilter === "shared") {
+    // Owner explicitly viewing the salon-wide shared pool.
+    query = query.is("team_id", null);
+  } else if (teamFilter) {
+    // Owner viewing one team's items (still includes shared).
+    query = query.or(`team_id.eq.${teamFilter},team_id.is.null`);
+  }
+  // else: owner with no filter → return everything
+
+  const { data, error } = await query.order("name", { ascending: true });
   if (error) throw error;
   return data;
 }
@@ -39,9 +74,18 @@ export async function createInventoryItem(
   category: string,
   unit: string,
   costPerUnit: number | null,
-  notes: string
+  notes: string,
+  /** Team this item belongs to. NULL = salon-wide shared item.
+   *  Scoped admins always get their own team forced onto the row
+   *  regardless of what's passed (server is source of truth). */
+  teamId: string | null = null,
 ) {
   const supabase = await createClient();
+  // Scoped admins can only create items in their own team — defense
+  // against a tampered client setting teamId to another team's id.
+  const { teamScope } = await getTeamScope();
+  const effectiveTeamId = teamScope ?? teamId;
+
   const { error } = await supabase.from("inventory").insert({
     name,
     quantity,
@@ -50,6 +94,7 @@ export async function createInventoryItem(
     unit,
     cost_per_unit: costPerUnit,
     notes: notes || null,
+    team_id: effectiveTeamId,
   });
 
   if (error) return { error: error.message };
@@ -65,7 +110,11 @@ export async function updateInventoryItem(
   category: string,
   unit: string,
   costPerUnit: number | null,
-  notes: string
+  notes: string,
+  /** Optional reassignment of the item's team. Pass undefined to
+   *  keep the existing team; pass null to make it salon-wide. Scoped
+   *  admins can't change team away from their own group. */
+  teamId?: string | null,
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -79,17 +128,27 @@ export async function updateInventoryItem(
     .eq("id", id)
     .single();
 
+  // Scoped admin → force team_id back to their team so they can't
+  // "smuggle" an item out into another team or into the shared pool.
+  const { teamScope } = await getTeamScope();
+  const update: Record<string, unknown> = {
+    name,
+    quantity,
+    low_stock_threshold: lowStockThreshold,
+    category,
+    unit,
+    cost_per_unit: costPerUnit,
+    notes: notes || null,
+  };
+  if (teamScope) {
+    update.team_id = teamScope;
+  } else if (teamId !== undefined) {
+    update.team_id = teamId;
+  }
+
   const { error } = await supabase
     .from("inventory")
-    .update({
-      name,
-      quantity,
-      low_stock_threshold: lowStockThreshold,
-      category,
-      unit,
-      cost_per_unit: costPerUnit,
-      notes: notes || null,
-    })
+    .update(update)
     .eq("id", id);
 
   if (error) return { error: error.message };

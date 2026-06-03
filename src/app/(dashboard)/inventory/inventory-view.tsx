@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Modal from "@/components/modal";
 import { useSearchQuery } from "@/lib/search-context";
 import { useUndo } from "@/components/undo-toast";
-import { useCurrency } from "@/lib/user-context";
+import { useCurrency, useCurrentUser } from "@/lib/user-context";
 import {
   getInventoryItems,
   createInventoryItem,
@@ -22,7 +22,15 @@ export interface InventoryItem {
   unit: string;
   cost_per_unit: number | null;
   notes: string | null;
+  /** Migration-042 — optional team scoping. NULL = salon-wide shared. */
+  team_id: string | null;
   created_at: string;
+}
+
+/** Light team_groups shape for the inventory team selector + badges. */
+export interface TeamRef {
+  id: string;
+  name: string;
 }
 
 const CATEGORIES = [
@@ -35,15 +43,36 @@ const CATEGORIES = [
 
 const UNITS = ["pcs", "bottles", "tubes", "sets", "boxes", "kg", "g", "L", "mL"];
 
-export default function InventoryView({ initialItems }: { initialItems: InventoryItem[] }) {
+export default function InventoryView({
+  initialItems,
+  initialTeams,
+}: {
+  initialItems: InventoryItem[];
+  /** All team_groups in the salon. Empty array = single-team salon
+   *  (or Solo/Team plan) → no team UI rendered. */
+  initialTeams: TeamRef[];
+}) {
   const [items, setItems] = useState<InventoryItem[]>(initialItems);
   const undo = useUndo();
   const currency = useCurrency();
+  const currentUser = useCurrentUser();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStock, setFilterStock] = useState<"all" | "low" | "out">("all");
+
+  // Team filter (Multi-Team v1.6). null = "All teams". "shared" =
+  // only the salon-wide pool (team_id IS NULL). A team_group id =
+  // that team's items + shared.
+  //
+  // Scoped admins (admin role + group_id set) are server-locked to
+  // their own team + shared, so they don't get a team selector —
+  // showing one would be misleading.
+  const [teams] = useState<TeamRef[]>(initialTeams);
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  const isScopedAdmin = currentUser?.role === "admin" && !!currentUser?.group_id;
+  const showTeamSelector = teams.length >= 2 && !isScopedAdmin;
 
   // Search query is owned by the dashboard layout's header input via
   // SearchContext — typing there filters this list automatically.
@@ -68,12 +97,19 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
 
   const loadData = useCallback(async () => {
     try {
-      const data = await getInventoryItems();
+      const data = await getInventoryItems(teamFilter);
       setItems(data as InventoryItem[]);
     } catch {
       undo.error("Failed to load inventory");
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamFilter]);
+
+  // Re-fetch whenever the team filter changes (owner switching between
+  // teams to inspect each one's stock).
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const filtered = items.filter((item) => {
     if (filterCategory && item.category !== filterCategory) return false;
@@ -99,7 +135,31 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Inventory</h1>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Team selector — Multi-Team v1.6. Only renders when the
+              salon has 2+ teams AND the caller isn't a team-scoped
+              admin (they're server-locked to their own team + shared,
+              so a switcher would be misleading). */}
+          {showTeamSelector && (
+            <select
+              value={teamFilter ?? ""}
+              onChange={(e) => setTeamFilter(e.target.value || null)}
+              className={`h-9 rounded-full px-3 text-body-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-100 ${
+                teamFilter
+                  ? "bg-neutral-900 text-text-inverse border border-neutral-900"
+                  : "bg-white text-text-primary border border-neutral-200 hover:border-neutral-400"
+              }`}
+              aria-label="Filter inventory by team"
+            >
+              <option value="">All teams</option>
+              <option value="shared">Shared (salon-wide)</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           {/* Combined Category + Stock filter — funnel icon, mirrors the
               expenses + calendar filter for cross-page consistency. */}
           <div className="relative" ref={filterRef}>
@@ -248,6 +308,17 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
                     <p className="truncate text-body-sm font-semibold text-text-primary">{item.name}</p>
                     <p className="truncate text-caption text-text-secondary">
                       {item.category}
+                      {/* Team chip — only renders when the salon has
+                          2+ teams AND this row is non-shared. Keeps
+                          single-team salons' rows visually clean. */}
+                      {showTeamSelector && item.team_id && (
+                        <>
+                          {" · "}
+                          <span className="inline-flex items-center rounded-full bg-primary-50 px-1.5 py-0.5 text-caption font-medium text-primary-700">
+                            {teams.find((t) => t.id === item.team_id)?.name ?? "Team"}
+                          </span>
+                        </>
+                      )}
                       {item.cost_per_unit && <> · {currency} {Number(item.cost_per_unit).toFixed(2)} per {item.unit}</>}
                     </p>
                   </button>
@@ -296,8 +367,19 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
       {/* Add Modal */}
       <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)} title="Add Item">
         <InventoryForm
-          onSubmit={async (name, qty, threshold, category, unit, cost, notes) => {
-            const result = await createInventoryItem(name, qty, threshold, category, unit, cost, notes);
+          teams={teams}
+          // Hide the team picker entirely for scoped admins — server
+          // forces team_id = their group anyway.
+          hideTeamPicker={isScopedAdmin}
+          // Pre-select the team currently in view (so adding while
+          // viewing "Dubai" defaults to Dubai). "shared" → NULL.
+          defaultTeamId={
+            teamFilter === "shared"
+              ? null
+              : (teamFilter as string | null)
+          }
+          onSubmit={async (name, qty, threshold, category, unit, cost, notes, teamId) => {
+            const result = await createInventoryItem(name, qty, threshold, category, unit, cost, notes, teamId);
             if (result.error) { undo.error(result.error); return; }
             setAddModalOpen(false);
             loadData();
@@ -312,8 +394,10 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
         {selected && (
           <InventoryForm
             defaultValues={selected}
-            onSubmit={async (name, qty, threshold, category, unit, cost, notes) => {
-                const result = await updateInventoryItem(selected.id, name, qty, threshold, category, unit, cost, notes);
+            teams={teams}
+            hideTeamPicker={isScopedAdmin}
+            onSubmit={async (name, qty, threshold, category, unit, cost, notes, teamId) => {
+                const result = await updateInventoryItem(selected.id, name, qty, threshold, category, unit, cost, notes, teamId);
               if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelected(null);
@@ -352,13 +436,25 @@ export default function InventoryView({ initialItems }: { initialItems: Inventor
 
 function InventoryForm({
   defaultValues,
+  teams,
+  hideTeamPicker,
+  defaultTeamId,
   onSubmit,
   onCancel,
   onDelete,
   submitLabel,
 }: {
   defaultValues?: InventoryItem;
-  onSubmit: (name: string, qty: number, threshold: number, category: string, unit: string, cost: number | null, notes: string) => Promise<void>;
+  /** All team_groups in the salon. When length >= 1 and hideTeamPicker
+   *  is false, the form shows a Team picker; otherwise it's hidden. */
+  teams: TeamRef[];
+  /** Force-hide the team picker (used for scoped admins — the server
+   *  forces team_id = their group regardless of what's submitted). */
+  hideTeamPicker?: boolean;
+  /** Pre-select this team when creating a new item (no defaultValues).
+   *  Ignored in edit mode where defaultValues.team_id wins. */
+  defaultTeamId?: string | null;
+  onSubmit: (name: string, qty: number, threshold: number, category: string, unit: string, cost: number | null, notes: string, teamId: string | null) => Promise<void>;
   onCancel: () => void;
   onDelete?: () => void;
   submitLabel: string;
@@ -371,7 +467,13 @@ function InventoryForm({
   const [unit, setUnit] = useState(defaultValues?.unit || "pcs");
   const [costPerUnit, setCostPerUnit] = useState(defaultValues?.cost_per_unit?.toString() || "");
   const [notes, setNotes] = useState(defaultValues?.notes || "");
+  // Team picker state. Empty string = "Shared (salon-wide)" → NULL.
+  const [teamId, setTeamId] = useState<string>(
+    defaultValues?.team_id ?? defaultTeamId ?? "",
+  );
   const [submitting, setSubmitting] = useState(false);
+
+  const showTeamPicker = !hideTeamPicker && teams.length >= 1;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -384,7 +486,9 @@ function InventoryForm({
       category,
       unit,
       costPerUnit ? parseFloat(costPerUnit) : null,
-      notes.trim()
+      notes.trim(),
+      // Empty string from the <select> = NULL (salon-wide shared).
+      teamId || null,
     );
     setSubmitting(false);
   }
@@ -469,6 +573,33 @@ function InventoryForm({
           className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
         />
       </div>
+
+      {/* Team — only shown for Multi-Team salons (teams.length >= 1).
+          Empty value = "Shared (salon-wide)" → NULL in the DB, meaning
+          every team can see + use this item. */}
+      {showTeamPicker && (
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+            Team
+          </label>
+          <select
+            value={teamId}
+            onChange={(e) => setTeamId(e.target.value)}
+            className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          >
+            <option value="">Shared (visible to all teams)</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-caption text-text-tertiary">
+            Shared items appear in every team&rsquo;s view; assigning a team
+            scopes the stock to that team only.
+          </p>
+        </div>
+      )}
 
       {/* Notes */}
       <div>
