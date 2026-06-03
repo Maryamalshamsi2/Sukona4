@@ -10,6 +10,7 @@ import {
   getReportExpenses,
   getReportReviews,
 } from "./actions";
+import { getTeamGroups } from "../calendar/actions";
 
 function toISODate(d: Date) {
   // Local-tz YYYY-MM-DD; see (dashboard)/page.tsx for the rationale.
@@ -29,11 +30,12 @@ export default async function ReportsPage() {
   const from = toISODate(fromDate);
   const to = today;
 
-  const [appts, pays, exps, revs] = await Promise.all([
+  const [appts, pays, exps, revs, teams] = await Promise.all([
     getReportAppointments(from, to),
     getReportPayments(from, to),
     getReportExpenses(from, to),
     getReportReviews(from, to),
+    getTeamGroups(),
   ]);
 
   return (
@@ -42,6 +44,7 @@ export default async function ReportsPage() {
       initialPayments={(pays || []) as unknown as ReportPayment[]}
       initialExpenses={(exps || []) as unknown as ReportExpense[]}
       initialReviews={(revs || []) as unknown as ReportReview[]}
+      initialTeams={(teams || []) as { id: string; name: string }[]}
     />
   );
 }

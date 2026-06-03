@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
@@ -34,12 +34,16 @@ type Props = {
   initialMonth: string; // "YYYY-MM"
   initialRows: PayrollStaffRow[];
   initialError: string | null;
+  /** All team_groups in the salon. Empty / 1 → team selector hidden.
+   *  Multi-Team v1.7 — owner can drill into a single team's payroll. */
+  initialTeams: { id: string; name: string }[];
 };
 
 export default function PayrollView({
   initialMonth,
   initialRows,
   initialError,
+  initialTeams,
 }: Props) {
   const currency = useCurrency();
 
@@ -47,6 +51,11 @@ export default function PayrollView({
   const [rows, setRows] = useState<PayrollStaffRow[]>(initialRows);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
+  // Team filter (v1.7). null = "All teams" (default). When set, the
+  // summary scopes to staff in that team only; the drill-down drawer
+  // is unaffected (you've already picked one staff member by then).
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  const [teams] = useState(initialTeams);
 
   // Drill-down drawer
   const [openStaffId, setOpenStaffId] = useState<string | null>(null);
@@ -65,22 +74,28 @@ export default function PayrollView({
   // pre-fills from the currently open detail.
   const [editPayOpen, setEditPayOpen] = useState(false);
 
-  // Refetch the summary table when the month changes.
-  async function refreshSummary(forMonth: string) {
+  // Refetch the summary table when the month OR team filter changes.
+  async function refreshSummary(forMonth: string, forTeam: string | null) {
     setLoading(true);
     setError(null);
-    const res = await getPayrollSummary(forMonth);
+    const res = await getPayrollSummary(forMonth, forTeam);
     if (res.error) setError(res.error);
     setRows(res.rows);
     setLoading(false);
   }
 
+  // Skip the first render — the server already seeded `initialRows`
+  // for (initialMonth, no team filter). Any subsequent month or team
+  // change re-fetches.
+  const didMountRef = useRef(false);
   useEffect(() => {
-    if (month !== initialMonth) {
-      void refreshSummary(month);
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
     }
+    void refreshSummary(month, teamFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month]);
+  }, [month, teamFilter]);
 
   // Open the detail drawer — fetches per-staff breakdown.
   async function openDetail(staffId: string) {
@@ -101,13 +116,13 @@ export default function PayrollView({
   async function refreshDetailAndSummary() {
     if (openStaffId) {
       const [s, d] = await Promise.all([
-        getPayrollSummary(month),
+        getPayrollSummary(month, teamFilter),
         getStaffPayrollDetail(openStaffId, month),
       ]);
       setRows(s.rows);
       setDetail(d.detail);
     } else {
-      await refreshSummary(month);
+      await refreshSummary(month, teamFilter);
     }
   }
 
@@ -145,12 +160,36 @@ export default function PayrollView({
             Monthly salary breakdown for each member of your team.
           </p>
         </div>
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="h-9 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 text-body-sm font-medium text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
+        <div className="flex items-center gap-2">
+          {/* Team selector (v1.7) — owner-only page, so we don't bother
+              with the admin-scoped-hide logic. Only renders when the
+              salon has 2+ teams. */}
+          {teams.length >= 2 && (
+            <select
+              value={teamFilter ?? ""}
+              onChange={(e) => setTeamFilter(e.target.value || null)}
+              className={`h-9 rounded-full px-3 text-body-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-100 ${
+                teamFilter
+                  ? "bg-neutral-900 text-text-inverse border border-neutral-900"
+                  : "bg-white text-text-primary border border-neutral-200 hover:border-neutral-400"
+              }`}
+              aria-label="Filter payroll by team"
+            >
+              <option value="">All teams</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="h-9 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 text-body-sm font-medium text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
       </div>
 
       {error && (

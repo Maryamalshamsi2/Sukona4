@@ -14,7 +14,36 @@ async function getCurrentUserRole() {
   return { supabase, role: data?.role || "staff" };
 }
 
-export async function getReportAppointments(from: string, to: string) {
+/**
+ * Shared helper — pull the staff ids in a given team_group, used by
+ * the appointment / payment / review filters below. Returns an empty
+ * set if teamId is falsy so callers can skip filtering cheaply.
+ *
+ * Memoising across calls isn't needed — Reports page hits these
+ * three endpoints once per filter change, in parallel, and each pays
+ * one small SELECT on profiles. Cheap.
+ */
+async function teamStaffIdSet(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  teamId: string | null | undefined,
+): Promise<Set<string> | null> {
+  if (!teamId) return null;
+  const { data } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("group_id", teamId);
+  return new Set((data ?? []).map((r) => r.id));
+}
+
+export async function getReportAppointments(
+  from: string,
+  to: string,
+  /** Optional team_group id. When set, only appointments where at
+   *  least one appointment_services row is performed by a staff in
+   *  that team are returned. Same "if my team touched it, it counts"
+   *  rule we use in the calendar admin scoping. */
+  teamId?: string | null,
+) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
@@ -51,15 +80,45 @@ export async function getReportAppointments(from: string, to: string) {
     .order("time", { ascending: false });
 
   if (error) throw error;
-  return data;
+
+  const teamSet = await teamStaffIdSet(supabase, teamId);
+  if (!teamSet) return data ?? [];
+  return (data ?? []).filter((a: { appointment_services?: { staff_id: string | null }[] }) => {
+    const svcs = a.appointment_services ?? [];
+    return svcs.some((as) => as.staff_id && teamSet.has(as.staff_id));
+  });
 }
 
-export async function getReportPayments(from: string, to: string) {
+export async function getReportPayments(
+  from: string,
+  to: string,
+  teamId?: string | null,
+) {
   const supabase = await createClient();
-  // payments join appointments for date filtering
-  const { data, error } = await supabase
-    .from("payments")
-    .select(`
+  // payments join appointments for date filtering. For team scoping
+  // we need the appointment's staff (via appointment_services), so we
+  // pull that too — only when a team filter is set, to avoid the
+  // joined fetch when it's not needed.
+  const select = teamId
+    ? `
+      id,
+      appointment_id,
+      amount,
+      method,
+      note,
+      receipt_url,
+      receipt_urls,
+      created_at,
+      appointments:appointment_id (
+        id,
+        date,
+        time,
+        client_id,
+        clients ( id, name ),
+        appointment_services ( staff_id )
+      )
+    `
+    : `
       id,
       appointment_id,
       amount,
@@ -75,13 +134,26 @@ export async function getReportPayments(from: string, to: string) {
         client_id,
         clients ( id, name )
       )
-    `)
+    `;
+  const { data, error } = await supabase
+    .from("payments")
+    .select(select)
     .gte("created_at", `${from}T00:00:00`)
     .lte("created_at", `${to}T23:59:59`)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+
+  const teamSet = await teamStaffIdSet(supabase, teamId);
+  if (!teamSet) return data ?? [];
+  return (data ?? []).filter((p) => {
+    // After the conditional select above, payments in team-filter
+    // mode have appointment_services nested under appointments.
+    const appt = (p as { appointments?: unknown }).appointments;
+    const apptObj = Array.isArray(appt) ? appt[0] : appt;
+    const svcs = ((apptObj as { appointment_services?: { staff_id: string | null }[] })?.appointment_services) ?? [];
+    return svcs.some((as) => as.staff_id && teamSet.has(as.staff_id));
+  });
 }
 
 export async function getReportExpenses(from: string, to: string) {
@@ -119,7 +191,11 @@ export async function getStaffMembers() {
 // Reviews submitted in the date window. We filter by review submitted_at
 // (not appointment date) because that's when the customer actually rated us
 // — i.e. it's the period that "earned" the rating.
-export async function getReportReviews(from: string, to: string) {
+export async function getReportReviews(
+  from: string,
+  to: string,
+  teamId?: string | null,
+) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("reviews")
@@ -147,5 +223,13 @@ export async function getReportReviews(from: string, to: string) {
     .order("submitted_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+
+  const teamSet = await teamStaffIdSet(supabase, teamId);
+  if (!teamSet) return data ?? [];
+  return (data ?? []).filter((r) => {
+    const appt = (r as { appointments?: unknown }).appointments;
+    const apptObj = Array.isArray(appt) ? appt[0] : appt;
+    const svcs = ((apptObj as { appointment_services?: { staff_id: string | null }[] })?.appointment_services) ?? [];
+    return svcs.some((as) => as.staff_id && teamSet.has(as.staff_id));
+  });
 }

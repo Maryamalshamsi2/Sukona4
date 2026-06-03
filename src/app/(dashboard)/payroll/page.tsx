@@ -5,6 +5,7 @@ import { getCurrentProfile } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { canUsePayroll, type Plan } from "@/lib/plan";
 import { getPayrollSummary } from "./actions";
+import { getTeamGroups } from "../calendar/actions";
 
 /**
  * Owner-only payroll page. Renders the monthly summary table with
@@ -63,13 +64,17 @@ export default async function PayrollPage() {
   }
 
   const month = defaultMonth();
-  const { rows, error } = await getPayrollSummary(month);
+  const [{ rows, error }, teams] = await Promise.all([
+    getPayrollSummary(month),
+    getTeamGroups(),
+  ]);
 
   return (
     <PayrollView
       initialMonth={month}
       initialRows={rows}
       initialError={error || null}
+      initialTeams={(teams || []) as { id: string; name: string }[]}
     />
   );
 }

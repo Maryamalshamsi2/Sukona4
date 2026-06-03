@@ -200,6 +200,9 @@ export interface ReportsViewProps {
   initialPayments: ReportPayment[];
   initialExpenses: ReportExpense[];
   initialReviews: ReportReview[];
+  /** All team_groups in the salon. Empty / 1 → team selector hidden.
+   *  Multi-Team v1.7 — owner can drill into a single team's numbers. */
+  initialTeams: { id: string; name: string }[];
 }
 
 export default function ReportsView({
@@ -207,6 +210,7 @@ export default function ReportsView({
   initialPayments,
   initialExpenses,
   initialReviews,
+  initialTeams,
 }: ReportsViewProps) {
   const currency = useCurrency();
   const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
@@ -269,6 +273,13 @@ export default function ReportsView({
   const [expenses, setExpenses] = useState<ReportExpense[]>(initialExpenses);
   const [reviews, setReviews] = useState<ReportReview[]>(initialReviews);
 
+  // Team filter — null = "All teams" (current behavior). Only shown
+  // when the salon has 2+ teams. Expenses are NOT team-scoped (they're
+  // salon-wide business costs, not staff-tied), so they ignore this
+  // filter — but appointments/payments/reviews refilter.
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  const [teams] = useState(initialTeams);
+
   const getRange = useCallback(() => {
     if (preset === "custom" && customFrom && customTo) {
       return { from: customFrom, to: customTo };
@@ -281,10 +292,10 @@ export default function ReportsView({
     try {
       const { from, to } = getRange();
       const [appts, pays, exps, revs] = await Promise.all([
-        getReportAppointments(from, to),
-        getReportPayments(from, to),
-        getReportExpenses(from, to),
-        getReportReviews(from, to),
+        getReportAppointments(from, to, teamFilter),
+        getReportPayments(from, to, teamFilter),
+        getReportExpenses(from, to), // intentionally not team-scoped
+        getReportReviews(from, to, teamFilter),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
@@ -295,10 +306,11 @@ export default function ReportsView({
     } finally {
       setLoading(false);
     }
-  }, [getRange]);
+  }, [getRange, teamFilter]);
 
-  // Skip the very first run because the server already seeded the initial period's data.
-  // Subsequent preset/customFrom/customTo changes still trigger a fetch.
+  // Skip the very first run because the server already seeded the initial
+  // period's data. Subsequent preset/customFrom/customTo/teamFilter changes
+  // still trigger a fetch.
   const didMountRef = useRef(false);
   useEffect(() => {
     if (!didMountRef.current) {
@@ -399,12 +411,36 @@ export default function ReportsView({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header — title on the left, period filter funnel on the right.
-          Mirrors the expenses + calendar filter pattern. */}
+      {/* Header — title on the left, team selector + period filter on
+          the right. Mirrors the expenses + calendar filter pattern. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-title-page font-bold tracking-tight text-text-primary">Reports</h1>
 
-        <div className="relative shrink-0" ref={filterRef}>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Team selector (Multi-Team v1.7) — only when the salon
+              has 2+ teams. Refetches all data on change. Expenses
+              ignore the filter (they're salon-wide business costs,
+              not staff-tied). */}
+          {teams.length >= 2 && (
+            <select
+              value={teamFilter ?? ""}
+              onChange={(e) => setTeamFilter(e.target.value || null)}
+              className={`h-9 rounded-full px-3 text-body-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-100 ${
+                teamFilter
+                  ? "bg-neutral-900 text-text-inverse border border-neutral-900"
+                  : "bg-white text-text-primary border border-neutral-200 hover:border-neutral-400"
+              }`}
+              aria-label="Filter reports by team"
+            >
+              <option value="">All teams</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="relative" ref={filterRef}>
           <button
             onClick={() => setFilterOpen((v) => !v)}
             aria-label="Filter"
@@ -446,6 +482,7 @@ export default function ReportsView({
               ))}
             </div>
           )}
+        </div>
         </div>
       </div>
 

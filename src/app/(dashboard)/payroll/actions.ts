@@ -215,6 +215,10 @@ interface ProfileRow {
   salary: number | null;
   commission_percent: number | null;
   target_multiplier: number | null;
+  /** team_group this staff belongs to. Used for the v1.7 team filter
+   *  on /payroll — when a team is selected, only profiles with this
+   *  matching group_id are included in the summary. */
+  group_id: string | null;
 }
 
 interface AdjustmentRow {
@@ -235,7 +239,7 @@ async function fetchMonthData(salonId: string, month: string) {
   const [profilesRes, apptsRes, adjustmentsRes] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, role, salary, commission_percent, target_multiplier")
+      .select("id, full_name, role, salary, commission_percent, target_multiplier, group_id")
       .eq("salon_id", salonId),
     supabase
       .from("appointments")
@@ -413,9 +417,16 @@ function tipShares(
 
 // ---------- Public actions ----------
 
-/** Summary table — one row per staff for the given month. */
+/** Summary table — one row per staff for the given month.
+ *
+ *  Multi-Team v1.7: optional `teamId` narrows the result to staff
+ *  whose group_id matches that team. Tips, services, adjustments
+ *  cascade from the filtered staff set, so all the per-row math
+ *  stays correct (a non-team staff doing a service contributes
+ *  nothing to a team-scoped view, by design). */
 export async function getPayrollSummary(
   month: string,
+  teamId?: string | null,
 ): Promise<{ rows: PayrollStaffRow[]; error?: string }> {
   const gate = await requireOwner();
   if ("error" in gate) return { rows: [], error: gate.error };
@@ -425,6 +436,18 @@ export async function getPayrollSummary(
     data = await fetchMonthData(gate.profile.salon_id, month);
   } catch (err) {
     return { rows: [], error: err instanceof Error ? err.message : String(err) };
+  }
+
+  // Scope the profile list before we accumulate. Filtering at the
+  // start (vs. dropping rows at the end) means we don't sum up
+  // services revenue / tips for staff we'll discard — slightly
+  // faster, and the unused-but-non-zero accumulator can never
+  // visually leak into a team's totals.
+  if (teamId) {
+    data = {
+      ...data,
+      profiles: data.profiles.filter((p) => p.group_id === teamId),
+    };
   }
 
   // Initialise per-staff accumulators. We include EVERY salon member,
