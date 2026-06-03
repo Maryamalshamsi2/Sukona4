@@ -9,6 +9,9 @@ export interface CurrentProfile {
   role: UserRole;
   salon_id: string;
   full_name: string;
+  /** team_group the user is assigned to. Drives the per-admin
+   *  team scoping (Multi-Team v1.5). NULL = not scoped. */
+  group_id: string | null;
 }
 
 /**
@@ -21,7 +24,7 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
   if (!user) return null;
   const { data } = await supabase
     .from("profiles")
-    .select("id, role, salon_id, full_name")
+    .select("id, role, salon_id, full_name, group_id")
     .eq("id", user.id)
     .single();
   if (!data) return null;
@@ -30,6 +33,7 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
     role: data.role as UserRole,
     salon_id: data.salon_id,
     full_name: data.full_name ?? "",
+    group_id: data.group_id ?? null,
   };
 }
 
@@ -67,4 +71,37 @@ export async function requireRole(
   if (!role) return { ok: false, error: "Not authenticated" };
   if (!allowed.includes(role)) return { ok: false, error: "Not authorized" };
   return { ok: true, role };
+}
+
+/**
+ * Resolve the caller's team-scope rule.
+ *
+ * Multi-Team v1.5: admins can be pinned to a single team_group so they
+ * only see/manage that team's data. This helper centralises the
+ * "what team should this caller's queries be filtered to?" decision so
+ * every server action applies the rule identically.
+ *
+ *   - Owner          → null (no scope; sees everything)
+ *   - Admin w/ group → that group_id
+ *   - Admin no group → null (backward compat — pre-feature admins
+ *                            continue to see everything)
+ *   - Staff          → null (their own appointment-level RLS already
+ *                            applies; team scoping is for admins)
+ *   - Unauthenticated→ null (caller should reject before this matters)
+ *
+ * Use the returned `teamScope` inside server actions like:
+ *
+ *   const { profile, teamScope } = await getTeamScope();
+ *   if (teamScope) query = query.eq("group_id", teamScope);
+ */
+export async function getTeamScope(): Promise<{
+  profile: CurrentProfile | null;
+  teamScope: string | null;
+}> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { profile: null, teamScope: null };
+  if (profile.role === "admin" && profile.group_id) {
+    return { profile, teamScope: profile.group_id };
+  }
+  return { profile, teamScope: null };
 }

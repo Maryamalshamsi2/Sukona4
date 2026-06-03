@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/auth-server";
+import { getCurrentProfile, getTeamScope } from "@/lib/auth-server";
 import {
   dispatchAppointmentConfirmation,
   dispatchAppointmentUpdated,
@@ -61,7 +61,32 @@ export async function getAppointmentsForDate(date: string) {
     .order("time", { ascending: true });
 
   if (error) throw error;
-  return data;
+
+  // Multi-Team v1.5 — admin team scoping. When the caller is an admin
+  // pinned to one team_group, hide appointments that don't involve
+  // their team. "Involve" = at least one appointment_services row whose
+  // staff belongs to the admin's group. Owner / unscoped admin / staff
+  // see the unfiltered set (getTeamScope returns null for them).
+  //
+  // Done in JS (vs. a Supabase nested filter) because PostgREST can't
+  // express "EXISTS subquery against a joined profiles row" cleanly,
+  // and the per-day appointment set is small enough that an in-process
+  // filter is cheaper than a second round-trip.
+  const { teamScope } = await getTeamScope();
+  if (!teamScope) return data ?? [];
+
+  // Pull the set of staff ids in the admin's team. One query, reused
+  // for every appointment below.
+  const { data: teamStaff } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("group_id", teamScope);
+  const teamStaffIds = new Set((teamStaff ?? []).map((r) => r.id));
+
+  return (data ?? []).filter((appt: { appointment_services?: { staff_id: string | null }[] }) => {
+    const services = appt.appointment_services ?? [];
+    return services.some((as) => as.staff_id && teamStaffIds.has(as.staff_id));
+  });
 }
 
 /**
@@ -102,7 +127,7 @@ export async function markShareSent(appointmentId: string) {
 
 export async function getStaffMembers() {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("profiles")
     // group_id surfaces which team_group a staff belongs to — used by
     // the calendar's Team filter (Multi-Team plan) to scope the staff
@@ -112,8 +137,13 @@ export async function getStaffMembers() {
     // Hide staff that the owner has flagged as off-calendar (drivers,
     // managers, etc.). They can still log in and read appointments via
     // RLS — they just don't appear as a column or as an assignable staff.
-    .eq("appears_on_calendar", true)
-    .order("created_at", { ascending: true });
+    .eq("appears_on_calendar", true);
+
+  // Admin team scoping — narrows staff columns to the admin's team.
+  const { teamScope } = await getTeamScope();
+  if (teamScope) query = query.eq("group_id", teamScope);
+
+  const { data, error } = await query.order("created_at", { ascending: true });
 
   if (error) throw error;
   return data;
@@ -169,7 +199,23 @@ export async function getCalendarBlocks(date: string) {
     .order("start_time", { ascending: true });
 
   if (error) throw error;
-  return data;
+  if (!data) return [];
+
+  // Admin team scoping — only return blocks whose staff_id is on the
+  // admin's team. Blocks are 1:1 with a staff member (vs. appointments
+  // which can have multiple), so the filter is simpler than the
+  // appointment-side filter above.
+  const { teamScope } = await getTeamScope();
+  if (!teamScope) return data;
+
+  const { data: teamStaff } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("group_id", teamScope);
+  const teamStaffIds = new Set((teamStaff ?? []).map((r) => r.id));
+  return data.filter((b: { staff_id: string | null }) =>
+    b.staff_id ? teamStaffIds.has(b.staff_id) : false,
+  );
 }
 
 // ---- ADD NEW CLIENT (inline) ----

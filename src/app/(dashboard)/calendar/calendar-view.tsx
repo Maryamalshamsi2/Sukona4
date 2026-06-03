@@ -233,8 +233,17 @@ export default function CalendarView({
   // one team at a time. null = "All teams". The selector itself only
   // renders when teamGroups.length >= 2 so single-team salons see no
   // extra UI.
+  //
+  // Scoped admins (admin role + group_id set, Multi-Team v1.5) get a
+  // server-side filter that already hides other teams' data. Showing
+  // them the selector would be useless (no other team to switch to)
+  // and confusing (the "All teams" option wouldn't actually surface
+  // other teams). So we suppress the selector for them entirely.
   const [teamGroups] = useState<TeamGroup[]>(initialTeamGroups);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const isScopedAdmin =
+    currentUser?.role === "admin" && !!currentUser?.group_id;
+  const showTeamSelector = teamGroups.length >= 2 && !isScopedAdmin;
 
   // Date picker
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -1113,7 +1122,7 @@ export default function CalendarView({
           {/* Mobile team selector — same conditions as desktop. Native
               <select> renders as the OS picker on mobile, which is the
               right pattern for a short list of choices. */}
-          {teamGroups.length >= 2 && (
+          {showTeamSelector && (
             <select
               value={selectedTeamId ?? ""}
               onChange={(e) => {
@@ -1239,7 +1248,7 @@ export default function CalendarView({
           {/* Team selector — only renders when the salon has 2+ team_
               groups (i.e. Multi-Team plan and the owner has actually
               created multiple teams). For Solo/Team this is a no-op. */}
-          {teamGroups.length >= 2 && (
+          {showTeamSelector && (
             <select
               value={selectedTeamId ?? ""}
               onChange={(e) => {

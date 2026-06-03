@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getTeamScope } from "@/lib/auth-server";
 
 export interface NotificationItem {
   id: string;
@@ -175,7 +176,23 @@ export async function getTodayAppointments(date: string) {
     .order("time", { ascending: true });
 
   if (error) throw error;
-  return data;
+
+  // Admin team scoping — mirror getAppointmentsForDate (calendar) so
+  // the home page's "Today" list stays consistent across views. An
+  // admin pinned to Dubai sees only Dubai appointments on the home
+  // page just like they would on /calendar.
+  const { teamScope } = await getTeamScope();
+  if (!teamScope) return data ?? [];
+
+  const { data: teamStaff } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("group_id", teamScope);
+  const teamStaffIds = new Set((teamStaff ?? []).map((r) => r.id));
+  return (data ?? []).filter((appt: { appointment_services?: { staff_id: string | null }[] }) => {
+    const services = appt.appointment_services ?? [];
+    return services.some((as) => as.staff_id && teamStaffIds.has(as.staff_id));
+  });
 }
 
 export async function getRecentActivities(fromDate?: string) {

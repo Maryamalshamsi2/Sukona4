@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/auth-server";
+import { getCurrentProfile, getTeamScope } from "@/lib/auth-server";
 import {
   canAddStaff,
   canAddGroup,
@@ -95,10 +95,17 @@ export async function deleteGroup(id: string) {
 
 export async function getTeamMembers() {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("profiles")
-    .select("*, team_groups(*)")
-    .order("created_at", { ascending: true });
+    .select("*, team_groups(*)");
+
+  // Admin team scoping: an admin pinned to a team only sees other
+  // members in that same team (Multi-Team v1.5). Owner / unscoped
+  // admin / staff see everyone (getTeamScope returns null).
+  const { teamScope } = await getTeamScope();
+  if (teamScope) query = query.eq("group_id", teamScope);
+
+  const { data, error } = await query.order("created_at", { ascending: true });
 
   if (error) throw error;
   return data;
