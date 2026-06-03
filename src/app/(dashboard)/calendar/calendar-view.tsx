@@ -1741,7 +1741,11 @@ export default function CalendarView({
           dateStr={dateStr}
           clients={clients}
           services={services}
-          staff={staff}
+          // v1.8 — scope the staff picker to the currently-selected
+          // team (owner) or the admin's pinned team (scoped admin).
+          // When neither applies, teamScopedStaff equals the full
+          // staff list, preserving the original behavior.
+          staff={teamScopedStaff}
           bundles={bundles}
           staffSchedules={staffScheduleMap}
           prefillTime={prefillTime}
@@ -1842,7 +1846,12 @@ export default function CalendarView({
             dateStr={selectedAppointment.date}
             clients={clients}
             services={services}
-            staff={staff}
+            // v1.8 — same team scoping as the New form. When editing
+            // a cross-team appointment that was created before the
+            // owner picked a team, the previously-assigned staff who
+            // are NOT in the current team won't appear in the picker
+            // (rare; staff_id stays in the DB regardless).
+            staff={teamScopedStaff}
             bundles={bundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
