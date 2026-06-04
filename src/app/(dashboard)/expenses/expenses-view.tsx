@@ -734,6 +734,10 @@ function ExpenseForm({
   submitLabel: string;
 }) {
   const currency = useCurrency();
+  // Receipt-upload errors call undo.error() — same UX as every other
+  // error in this file. Without this hook here, handleFileUpload
+  // would fall back to a browser alert (the old behavior).
+  const undo = useUndo();
   const [description, setDescription] = useState(defaultValues?.description || "");
   const [amount, setAmount] = useState(defaultValues?.amount?.toString() || "");
   const [expenseType, setExpenseType] = useState(defaultValues?.expense_type || "Supplies");
@@ -765,8 +769,11 @@ function ExpenseForm({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Browser alert() is jarring on mobile and inconsistent with the
+    // rest of the app's error UX. Use the existing undo toast pattern
+    // that's already used for every other error in this file.
     if (file.size > 10 * 1024 * 1024) {
-      alert("File must be smaller than 10MB");
+      undo.error("File must be smaller than 10MB");
       return;
     }
 
@@ -786,7 +793,7 @@ function ExpenseForm({
         .upload(filePath, file);
 
       if (error) {
-        alert("Upload failed: " + error.message);
+        undo.error("Upload failed: " + error.message);
         return;
       }
 
@@ -796,7 +803,7 @@ function ExpenseForm({
 
       setReceiptUrl(urlData.publicUrl);
     } catch {
-      alert("Upload failed");
+      undo.error("Upload failed");
     } finally {
       setUploading(false);
     }

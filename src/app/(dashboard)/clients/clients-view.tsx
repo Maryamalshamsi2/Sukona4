@@ -7,6 +7,7 @@ import PhoneInput from "@/components/phone-input";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
 import { useCurrentUser } from "@/lib/user-context";
+import { formatCurrency } from "@/lib/currency";
 import { getClients, addClient, updateClient, deleteClient, getClientAppointments } from "./actions";
 import {
   getStaffMembers,
@@ -556,9 +557,14 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                     )}
                   </div>
                   {!isStaff && (
-                    <div className="flex shrink-0 gap-3">
-                      <button onClick={() => openEdit(client)} className="p-1 text-body-sm text-text-secondary hover:text-text-primary">Edit</button>
-                      <button onClick={() => handleDelete(client.id)} className="p-1 text-body-sm text-error-500">Delete</button>
+                    /* Bumped from p-1 (~22px tall) to px-3 py-2 (~36px)
+                       so the buttons reach the WCAG 40px touch-target
+                       guideline on mobile. Visual size on desktop is
+                       unchanged because the surrounding rows already
+                       have generous spacing. */
+                    <div className="flex shrink-0 gap-1">
+                      <button onClick={() => openEdit(client)} className="rounded-lg px-3 py-2 text-body-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary">Edit</button>
+                      <button onClick={() => handleDelete(client.id)} className="rounded-lg px-3 py-2 text-body-sm text-error-500 hover:bg-red-50">Delete</button>
                     </div>
                   )}
                 </div>
@@ -709,7 +715,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                         {statusLabel}
                       </span>
                       <span className="text-caption font-semibold text-text-primary tabular-nums">
-                        {currency} {totalPrice}
+                        {formatCurrency(totalPrice, currency)}
                       </span>
                     </div>
                   </button>

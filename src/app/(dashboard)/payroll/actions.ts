@@ -670,6 +670,41 @@ export async function getStaffPayrollDetail(
 
 // ---------- Adjustments CRUD ----------
 
+/**
+ * Activity-log helper — inline (rather than imported from
+ * calendar/actions.ts) to stay within this "use server" boundary and
+ * follow the same per-file-owns-its-own-copy pattern used elsewhere
+ * (e.g. payments/actions.ts has the same). `appointment_id` is null
+ * for these because adjustments aren't tied to an appointment.
+ */
+async function logActivity(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  performerId: string,
+  action: string,
+  description: string,
+) {
+  await supabase.from("activity_log").insert({
+    appointment_id: null,
+    action,
+    description,
+    performed_by: performerId,
+  });
+}
+
+/** Look up a staff member's display name for the activity feed.
+ *  Falls back to "team member" when the profile row can't be read. */
+async function staffName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  staffId: string,
+): Promise<string> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", staffId)
+    .single();
+  return data?.full_name || "team member";
+}
+
 export async function addStaffAdjustment(
   staffId: string,
   type: "bonus" | "deduction",
@@ -704,6 +739,20 @@ export async function addStaffAdjustment(
   });
 
   if (error) return { error: error.message };
+
+  // Audit trail — surfaces in the notification bell + activity feed
+  // so other admins / the owner can see when bonuses/deductions were
+  // added. Verb matches the noun pair already used by payments
+  // ("payment_added" → "adjustment_added"). Description is plain-
+  // English so the bell tooltip doesn't read like raw JSON.
+  const target = await staffName(supabase, staffId);
+  await logActivity(
+    supabase,
+    gate.profile.id,
+    type === "bonus" ? "bonus_added" : "deduction_added",
+    `${type === "bonus" ? "Bonus" : "Deduction"} · ${target} · ${reason.trim()}`,
+  );
+
   revalidatePath("/payroll");
   return { success: true };
 }
@@ -713,12 +762,34 @@ export async function deleteStaffAdjustment(id: string) {
   if ("error" in gate) return { error: gate.error };
 
   const supabase = await createClient();
+
+  // Snapshot the row BEFORE deleting so we can write a meaningful
+  // activity log message. Without this, the bell would show
+  // "Deleted adjustment" with no context. ON DELETE removes the row,
+  // so a post-delete fetch wouldn't give us the data.
+  const { data: before } = await supabase
+    .from("staff_adjustments")
+    .select("type, staff_id, reason")
+    .eq("id", id)
+    .single();
+
   const { error } = await supabase
     .from("staff_adjustments")
     .delete()
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  if (before) {
+    const target = await staffName(supabase, before.staff_id);
+    await logActivity(
+      supabase,
+      gate.profile.id,
+      before.type === "bonus" ? "bonus_removed" : "deduction_removed",
+      `${before.type === "bonus" ? "Bonus" : "Deduction"} removed · ${target} · ${before.reason}`,
+    );
+  }
+
   revalidatePath("/payroll");
   return { success: true };
 }
@@ -765,6 +836,25 @@ export async function updateStaffAdjustment(
     .eq("salon_id", gate.profile.salon_id);
 
   if (error) return { error: error.message };
+
+  // Audit log — fetch the staff name on the now-updated row so the
+  // message reflects the current state (the type may have flipped
+  // bonus↔deduction in the edit).
+  const { data: after } = await supabase
+    .from("staff_adjustments")
+    .select("staff_id")
+    .eq("id", id)
+    .single();
+  if (after) {
+    const target = await staffName(supabase, after.staff_id);
+    await logActivity(
+      supabase,
+      gate.profile.id,
+      type === "bonus" ? "bonus_updated" : "deduction_updated",
+      `${type === "bonus" ? "Bonus" : "Deduction"} updated · ${target} · ${reason.trim()}`,
+    );
+  }
+
   revalidatePath("/payroll");
   return { success: true };
 }
