@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getTeamScope } from "@/lib/auth-server";
 
 export async function getClients() {
   const supabase = await createClient();
@@ -62,6 +63,12 @@ export async function deleteClient(id: string) {
 // Fetch all appointments for a specific client (past + upcoming, including cancelled),
 // ordered by date desc, then time desc. Shaped the same as calendar's getAppointmentsForDate
 // so it can feed directly into <DetailView> and <AppointmentForm>.
+//
+// Admin team scoping (Multi-Team v1.5 extension): a scoped admin
+// (admin role + group_id set) only sees appointments where at least
+// one service was performed by their team. Same rule as the calendar
+// / reports / payroll filters. Owner / unscoped admin / staff see
+// the unfiltered history.
 export async function getClientAppointments(clientId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -88,5 +95,17 @@ export async function getClientAppointments(clientId: string) {
     .order("time", { ascending: false });
 
   if (error) throw error;
-  return data;
+
+  const { teamScope } = await getTeamScope();
+  if (!teamScope) return data ?? [];
+
+  const { data: teamStaff } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("group_id", teamScope);
+  const teamStaffIds = new Set((teamStaff ?? []).map((r) => r.id));
+  return (data ?? []).filter((appt: { appointment_services?: { staff_id: string | null }[] }) => {
+    const svcs = appt.appointment_services ?? [];
+    return svcs.some((as) => as.staff_id && teamStaffIds.has(as.staff_id));
+  });
 }

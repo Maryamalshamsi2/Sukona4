@@ -743,11 +743,27 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       </Modal>
 
       {/* ==== Mark As Paid Modal ==== */}
+      {/* appointmentStaff — unique {id, name} for staff who did
+          services on this appointment. Powers the tip attribution
+          selector inside the modal (renders only when 2+ staff are
+          involved). Same derivation used on /calendar and /home. */}
       <MarkPaidModal
         open={markPaidOpen}
         appointmentId={selectedAppointment?.id ?? null}
         defaultAmount={selectedAppointment ? getApptTotal(selectedAppointment) : 0}
         clientName={selectedAppointment?.clients?.name}
+        appointmentStaff={(() => {
+          if (!selectedAppointment) return [];
+          const seen = new Set<string>();
+          const out: { id: string; name: string }[] = [];
+          for (const as of selectedAppointment.appointment_services ?? []) {
+            if (!as.staff_id || seen.has(as.staff_id)) continue;
+            seen.add(as.staff_id);
+            const s = allStaff.find((m) => m.id === as.staff_id);
+            if (s) out.push({ id: s.id, name: s.full_name });
+          }
+          return out;
+        })()}
         onClose={() => setMarkPaidOpen(false)}
         onPaid={handlePaidComplete}
       />
@@ -756,6 +772,18 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       <MarkPaidModal
         open={editPaymentOpen}
         clientName={selectedAppointment?.clients?.name}
+        appointmentStaff={(() => {
+          if (!selectedAppointment) return [];
+          const seen = new Set<string>();
+          const out: { id: string; name: string }[] = [];
+          for (const as of selectedAppointment.appointment_services ?? []) {
+            if (!as.staff_id || seen.has(as.staff_id)) continue;
+            seen.add(as.staff_id);
+            const s = allStaff.find((m) => m.id === as.staff_id);
+            if (s) out.push({ id: s.id, name: s.full_name });
+          }
+          return out;
+        })()}
         existingPayment={(() => {
           const list = selectedAppointment?.payments ?? [];
           if (list.length === 0) return null;

@@ -301,8 +301,12 @@ export default function ReportsView({
       setPayments(pays as unknown as ReportPayment[]);
       setExpenses(exps as unknown as ReportExpense[]);
       setReviews(revs as unknown as ReportReview[]);
-    } catch {
-      // silently handle
+    } catch (err) {
+      // Don't surface a toast — the page still has its server-seeded
+      // initial data, and the user may not be looking. But DO log
+      // to console so a debugging session catches it instead of
+      // wondering why the date/team filter "did nothing."
+      console.error("Reports data fetch failed:", err);
     } finally {
       setLoading(false);
     }
