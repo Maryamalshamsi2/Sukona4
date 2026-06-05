@@ -30,6 +30,7 @@ export default function LandingPage() {
         <Hero />
         <MobileSection />
         <PaymentsSection />
+        <PayrollSection />
         <ReportsSection />
         <Pricing />
         <FAQ />
@@ -957,6 +958,145 @@ function RevenueMock() {
             />
           </svg>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Payroll — "Pay your team, automatically"
+// Sits between PaymentsSection (white) and ReportsSection (gray).
+// Kept on bg-white so the section after it (ReportsSection, gray)
+// still provides a clean visual break; two whites in a row reads
+// as breathing room between two data-heavy mocks.
+// ============================================================
+
+function PayrollSection() {
+  return (
+    <section className="bg-white py-24 sm:py-32 lg:py-40">
+      <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
+        <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
+          Pay your team,
+          <br />
+          <span className="text-text-secondary">automatically.</span>
+        </h2>
+        <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
+          Salaries, commissions, tips, bonuses, deductions.
+          <br />
+          Calculated from what each staff actually did.
+        </p>
+      </div>
+
+      <div className="mx-auto mt-16 flex max-w-md justify-center px-5 sm:mt-20 sm:px-8">
+        <PayrollMock />
+      </div>
+    </section>
+  );
+}
+
+function PayrollMock() {
+  // Mirrors the real /payroll detail drawer (the thing the owner
+  // shares with each staff at month end): a dark "Net payable"
+  // card on top, a commission-calculation card showing the
+  // threshold math (target-based commission, migration-039), and
+  // an itemised breakdown where each bonus/deduction shows its
+  // own title rather than rolling up to a single "Bonuses" line.
+  //
+  // Numbers are deliberately the same as our test recipe in the
+  // Maripel example so the story stays consistent between landing
+  // and app — owner who clicks "Start trial" sees recognisable
+  // structure on first load.
+  const calcRows = [
+    { label: "Services revenue",     value: "AED 15,035", tone: "secondary" },
+    { label: "Target (3× salary)",   value: "−AED 9,600", tone: "secondary" },
+    { label: "Revenue above target", value: "AED 5,435",  tone: "primary"   },
+    { label: "Commission (10%)",     value: "AED 544",    tone: "emerald"   },
+  ];
+
+  // Each row carries its own title so the staff member reading
+  // the breakdown actually understands what they're being paid /
+  // docked for. Matches the itemised-bonuses change shipped in
+  // the payroll polish work.
+  const breakdownRows = [
+    { label: "Base salary",                  value: "AED 3,200" },
+    { label: "Commission (10% above target)", value: "AED 544"   },
+    { label: "Tips received",                value: "AED 0"     },
+    { label: "Overtime",                     value: "+AED 200",  tone: "positive" },
+    { label: "Customer praise",              value: "+AED 157",  tone: "positive" },
+    { label: "Late arrival",                 value: "−AED 100",  tone: "negative" },
+  ];
+
+  return (
+    <div className="w-full space-y-4 rounded-3xl bg-white p-3 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.22)] ring-1 ring-black/[0.04] sm:p-4">
+      {/* Net payable — dark card matches the real drawer's
+          neutral-900 hero block. The big amount is the only thing
+          that needs to be readable at a glance. */}
+      <div className="rounded-2xl bg-neutral-900 p-5 sm:p-6">
+        <div className="text-caption font-semibold uppercase tracking-wider text-white/70">
+          Net payable
+        </div>
+        <div className="mt-2 text-2xl font-bold text-white tabular-nums sm:text-3xl">
+          AED 4,287
+        </div>
+        <div className="mt-1 text-caption text-white/60">
+          Maripel · May 2026
+        </div>
+      </div>
+
+      {/* Commission calculation — the threshold-based math. Each
+          row matches the real BreakdownRow component's vertical
+          rhythm (border-b divider, right-aligned tabular nums). */}
+      <div className="rounded-2xl bg-white ring-1 ring-[#EAEAEA]">
+        <div className="border-b border-[#EAEAEA] px-5 py-3 text-caption font-semibold uppercase tracking-wider text-text-tertiary sm:px-6">
+          Commission calculation
+        </div>
+        {calcRows.map((r, i) => (
+          <div
+            key={r.label}
+            className={`flex items-center justify-between gap-3 px-5 py-3 sm:px-6 ${
+              i < calcRows.length - 1 ? "border-b border-[#EAEAEA]" : ""
+            }`}
+          >
+            <span className="text-body-sm text-text-secondary">{r.label}</span>
+            <span
+              className={`text-body-sm font-medium tabular-nums ${
+                r.tone === "emerald"
+                  ? "text-emerald-700"
+                  : r.tone === "primary"
+                    ? "text-text-primary"
+                    : "text-text-secondary"
+              }`}
+            >
+              {r.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Salary breakdown — bonuses and deductions render as
+          individual lines with their own titles, not rolled up. */}
+      <div className="rounded-2xl bg-white ring-1 ring-[#EAEAEA]">
+        {breakdownRows.map((r, i) => (
+          <div
+            key={r.label}
+            className={`flex items-center justify-between gap-3 px-5 py-3 sm:px-6 ${
+              i < breakdownRows.length - 1 ? "border-b border-[#EAEAEA]" : ""
+            }`}
+          >
+            <span className="text-body-sm text-text-secondary">{r.label}</span>
+            <span
+              className={`text-body-sm font-medium tabular-nums ${
+                r.tone === "positive"
+                  ? "text-emerald-700"
+                  : r.tone === "negative"
+                    ? "text-error-700"
+                    : "text-text-primary"
+              }`}
+            >
+              {r.value}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
