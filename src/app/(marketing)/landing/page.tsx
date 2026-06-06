@@ -29,7 +29,15 @@ export default function LandingPage() {
       <main>
         <Hero />
         <MobileSection />
-        <PaymentsSection />
+        {/* PaymentsSection ("Happy clients, every time") is hidden
+            until WhatsApp auto-send is fully wired (master WABA + Meta
+            template approval, OR documented per-salon setup). The
+            component is still defined below — uncomment this line to
+            re-enable. wa.me deep links + receipt / review public pages
+            already work in the app; the section's claims are accurate,
+            but we don't want to imply seamless auto-send marketing-side
+            before the broader integration is polished. */}
+        {/* <PaymentsSection /> */}
         <PayrollSection />
         <ReportsSection />
         <Pricing />
