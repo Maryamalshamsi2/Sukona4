@@ -984,14 +984,14 @@ function PayrollSection() {
     <section className="bg-white py-24 sm:py-32 lg:py-40">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <h2 className="mx-auto max-w-3xl text-3xl font-medium tracking-tight text-text-primary leading-[1.1] sm:text-5xl sm:leading-[1.05] lg:text-6xl">
-          Pay your team,
+          Salaries calculated,
           <br />
           <span className="text-text-secondary">automatically.</span>
         </h2>
         <p className="mx-auto mt-6 max-w-lg text-lg text-text-secondary sm:text-xl">
           Salaries, commissions, tips, bonuses, deductions.
           <br />
-          Calculated from what each staff actually did.
+          Calculated and recorded monthly.
         </p>
       </div>
 
