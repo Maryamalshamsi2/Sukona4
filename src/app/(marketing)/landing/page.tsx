@@ -1010,15 +1010,21 @@ function PayrollMock() {
   // an itemised breakdown where each bonus/deduction shows its
   // own title rather than rolling up to a single "Bonuses" line.
   //
-  // Numbers are deliberately the same as our test recipe in the
-  // Maripel example so the story stays consistent between landing
-  // and app — owner who clicks "Start trial" sees recognisable
-  // structure on first load.
+  // Numbers are deliberately generic + round-number-clean (not
+  // pulled from any real salon's data) so privacy is preserved
+  // and visitors don't see weird decimals on a marketing page.
+  // The name "Sara" matches the top earner in RevenueMock below
+  // so the two sections feel like the same fake-business.
+  //
+  // Internal math (audit the sum if you tweak):
+  //   base 5,000 + comm 500 + tips 350 + 200 + 150 − 100 = 6,100
+  //   commission = (revenue 20,000 − target 15,000) × 10% = 500
+  //   target = base 5,000 × 3 = 15,000
   const calcRows = [
-    { label: "Services revenue",     value: "AED 15,035", tone: "secondary" },
-    { label: "Target (3× salary)",   value: "−AED 9,600", tone: "secondary" },
-    { label: "Revenue above target", value: "AED 5,435",  tone: "primary"   },
-    { label: "Commission (10%)",     value: "AED 544",    tone: "emerald"   },
+    { label: "Services revenue",     value: "AED 20,000", tone: "secondary" },
+    { label: "Target (3× salary)",   value: "−AED 15,000", tone: "secondary" },
+    { label: "Revenue above target", value: "AED 5,000",  tone: "primary"   },
+    { label: "Commission (10%)",     value: "AED 500",    tone: "emerald"   },
   ];
 
   // Each row carries its own title so the staff member reading
@@ -1026,11 +1032,11 @@ function PayrollMock() {
   // docked for. Matches the itemised-bonuses change shipped in
   // the payroll polish work.
   const breakdownRows = [
-    { label: "Base salary",                  value: "AED 3,200" },
-    { label: "Commission (10% above target)", value: "AED 544"   },
-    { label: "Tips received",                value: "AED 0"     },
+    { label: "Base salary",                  value: "AED 5,000" },
+    { label: "Commission (10% above target)", value: "AED 500"   },
+    { label: "Tips received",                value: "AED 350"   },
     { label: "Overtime",                     value: "+AED 200",  tone: "positive" },
-    { label: "Customer praise",              value: "+AED 157",  tone: "positive" },
+    { label: "Customer praise",              value: "+AED 150",  tone: "positive" },
     { label: "Late arrival",                 value: "−AED 100",  tone: "negative" },
   ];
 
@@ -1044,10 +1050,10 @@ function PayrollMock() {
           Net payable
         </div>
         <div className="mt-2 text-2xl font-bold text-white tabular-nums sm:text-3xl">
-          AED 4,287
+          AED 6,100
         </div>
         <div className="mt-1 text-caption text-white/60">
-          Maripel · May 2026
+          Sara · this month
         </div>
       </div>
 
