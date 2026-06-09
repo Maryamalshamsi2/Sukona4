@@ -1050,8 +1050,16 @@ export default function CatalogView({
         <div className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
           {addDropdownOpen && (
             <>
-              <div className="fixed inset-0" onClick={() => setAddDropdownOpen(false)} />
-              <div className="absolute bottom-16 right-0 flex flex-col items-stretch gap-2">
+              {/* Backdrop sits BELOW the action buttons. Without an
+                  explicit z-index here, dnd-kit's PointerSensor
+                  (used elsewhere on this page for drag-reorder) can
+                  cause iOS Safari to route the tap to the backdrop
+                  before the button's onClick fires — the dropdown
+                  appears to do nothing. Lower z-index on backdrop
+                  + higher z-index on buttons guarantees the tap
+                  lands on the right element. */}
+              <div className="fixed inset-0 z-[5]" onClick={() => setAddDropdownOpen(false)} />
+              <div className="absolute bottom-16 right-0 z-10 flex flex-col items-stretch gap-2">
                 <button
                   type="button"
                   onClick={() => { setAddDropdownOpen(false); openAddService(); }}
