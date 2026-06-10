@@ -631,7 +631,12 @@ export default function CatalogView({
             </svg>
           </button>
           {addDropdownOpen && (
-            <div className="absolute right-0 top-full z-20 mt-1.5 w-44 rounded-xl border border-border bg-white py-1 shadow-lg">
+            // z-30 (was z-20) so the dropdown sits ABOVE the sticky
+            // category pills strip below it (also z-20). With matching
+            // z-indexes the later DOM element wins, and the strip is
+            // rendered after this — so the dropdown's top item
+            // ("Service") was getting clipped by the strip.
+            <div className="absolute right-0 top-full z-30 mt-1.5 w-44 rounded-xl border border-border bg-white py-1 shadow-lg">
               <button
                 onClick={() => { openAddService(); setAddDropdownOpen(false); }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
