@@ -196,13 +196,18 @@ export async function getStaffMembers() {
  * summary to compute true profit (Revenue − Expenses − Salaries).
  *
  * Method:
- *   1. Enumerate every calendar month that the (from, to) range
- *      touches. A range starting 15 Apr → 20 May touches [Apr, May].
- *   2. For each month, reuse the existing getPayrollSummary() and
- *      sum the per-staff `net` field. Same numbers as /payroll.
+ *   1. Only show this when the date range aligns exactly to whole
+ *      calendar months — `from` is day-1 of some month, `to` is the
+ *      last day of a (same-or-later) month. Otherwise return
+ *      `{ available: false }` so the UI hides the line. Salaries are
+ *      a monthly fixed cost; showing them next to a partial-month
+ *      range produces confusing profit numbers ("Today" would show a
+ *      full month of salary against one day of revenue).
+ *   2. For each whole month in the range, reuse getPayrollSummary()
+ *      and sum the per-staff `net` field. Same numbers as /payroll.
  *   3. Aggregate across months.
  *
- * Owner-only AND plan-gated. Solo plans return { available: false }
+ * Owner-only AND plan-gated. Solo plans return `available: false`
  * because they don't have payroll (per the canUsePayroll matrix).
  * is_exempt salons bypass the plan gate (matches migration-035).
  *
@@ -210,15 +215,10 @@ export async function getStaffMembers() {
  * salaries contribute — consistent with the rest of the report
  * filters on the page.
  *
- * Edge cases:
- *   - Range smaller than a month still pulls the full month's
- *     salary (it's the same monthly cost). This can look weird if
- *     range is one day, but it's mathematically the only honest
- *     way to express "your monthly payroll obligation" — pro-rating
- *     would imply you can pay staff by the hour, which you can't
- *     in most cases.
- *   - Multi-month ranges sum each month's payroll. The "Last 30
- *     days" preset usually crosses two months → both contribute.
+ * To always see the Salaries line, owners should pick a Custom
+ * date range that snaps to month boundaries (e.g. 2026-05-01 to
+ * 2026-05-31). The default presets (Today / 7 days / 30 days)
+ * rarely align this way, so the line will be hidden for those.
  */
 export interface ReportSalaries {
   total: number;
@@ -246,6 +246,29 @@ function monthsInRange(fromYMD: string, toYMD: string): string[] {
   return out;
 }
 
+/**
+ * True when the range spans exactly whole calendar months:
+ *
+ *   from = the 1st of some month
+ *   to   = the last day of some (same-or-later) month
+ *
+ * Used to gate the Salaries line so partial-month ranges hide it
+ * (salaries are a monthly fixed cost; pro-rating them by days
+ * would misrepresent the owner's actual obligation).
+ */
+function isFullMonthRange(fromYMD: string, toYMD: string): boolean {
+  const [fY, fM, fD] = fromYMD.split("-").map(Number);
+  const [tY, tM, tD] = toYMD.split("-").map(Number);
+  if (!fY || !fM || !fD || !tY || !tM || !tD) return false;
+  if (fD !== 1) return false;
+  // Day-0 of next month = last day of current month (handles 28/29/30/31)
+  const lastDayOfToMonth = new Date(tY, tM, 0).getDate();
+  if (tD !== lastDayOfToMonth) return false;
+  // from <= to (already implicit if both pass — but cheap to confirm)
+  if (tY < fY || (tY === fY && tM < fM)) return false;
+  return true;
+}
+
 export async function getReportSalaries(
   from: string,
   to: string,
@@ -269,6 +292,10 @@ export async function getReportSalaries(
   const plan = (salon?.plan as Plan | undefined) ?? "solo";
   const isExempt = !!salon?.is_exempt;
   if (!isExempt && plan === "solo") return empty;
+
+  // Only show on whole-month ranges. Partial months would force a
+  // pro-rate-or-mismatch decision; hiding the line is cleaner.
+  if (!isFullMonthRange(from, to)) return empty;
 
   const months = monthsInRange(from, to);
   if (months.length === 0) return empty;
