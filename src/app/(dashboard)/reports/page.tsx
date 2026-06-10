@@ -9,6 +9,8 @@ import {
   getReportPayments,
   getReportExpenses,
   getReportReviews,
+  getReportSalaries,
+  type ReportSalaries,
 } from "./actions";
 import { getTeamGroups } from "../calendar/actions";
 
@@ -30,12 +32,13 @@ export default async function ReportsPage() {
   const from = toISODate(fromDate);
   const to = today;
 
-  const [appts, pays, exps, revs, teams] = await Promise.all([
+  const [appts, pays, exps, revs, teams, salaries] = await Promise.all([
     getReportAppointments(from, to),
     getReportPayments(from, to),
     getReportExpenses(from, to),
     getReportReviews(from, to),
     getTeamGroups(),
+    getReportSalaries(from, to),
   ]);
 
   return (
@@ -45,6 +48,7 @@ export default async function ReportsPage() {
       initialExpenses={(exps || []) as unknown as ReportExpense[]}
       initialReviews={(revs || []) as unknown as ReportReview[]}
       initialTeams={(teams || []) as { id: string; name: string }[]}
+      initialSalaries={salaries as ReportSalaries}
     />
   );
 }

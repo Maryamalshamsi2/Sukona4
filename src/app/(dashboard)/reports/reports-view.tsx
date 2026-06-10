@@ -6,6 +6,8 @@ import {
   getReportPayments,
   getReportExpenses,
   getReportReviews,
+  getReportSalaries,
+  type ReportSalaries,
 } from "./actions";
 import { deleteAppointment } from "../calendar/actions";
 import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-modal";
@@ -203,6 +205,12 @@ export interface ReportsViewProps {
   /** All team_groups in the salon. Empty / 1 → team selector hidden.
    *  Multi-Team v1.7 — owner can drill into a single team's numbers. */
   initialTeams: { id: string; name: string }[];
+  /** Aggregate staff salary cost for the initial date range. Powers
+   *  the new Salaries line in the Finance summary and the true-profit
+   *  calculation (Revenue − Expenses − Salaries). When `available`
+   *  is false (Solo plan, or no months in range), the line is hidden
+   *  and Profit falls back to Revenue − Expenses. */
+  initialSalaries: ReportSalaries;
 }
 
 export default function ReportsView({
@@ -211,6 +219,7 @@ export default function ReportsView({
   initialExpenses,
   initialReviews,
   initialTeams,
+  initialSalaries,
 }: ReportsViewProps) {
   const currency = useCurrency();
   const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
@@ -272,6 +281,7 @@ export default function ReportsView({
   const [payments, setPayments] = useState<ReportPayment[]>(initialPayments);
   const [expenses, setExpenses] = useState<ReportExpense[]>(initialExpenses);
   const [reviews, setReviews] = useState<ReportReview[]>(initialReviews);
+  const [salaries, setSalaries] = useState<ReportSalaries>(initialSalaries);
 
   // Team filter — null = "All teams" (current behavior). Only shown
   // when the salon has 2+ teams. Expenses are NOT team-scoped (they're
@@ -291,16 +301,18 @@ export default function ReportsView({
     setLoading(true);
     try {
       const { from, to } = getRange();
-      const [appts, pays, exps, revs] = await Promise.all([
+      const [appts, pays, exps, revs, sals] = await Promise.all([
         getReportAppointments(from, to, teamFilter),
         getReportPayments(from, to, teamFilter),
         getReportExpenses(from, to), // intentionally not team-scoped
         getReportReviews(from, to, teamFilter),
+        getReportSalaries(from, to, teamFilter),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
       setExpenses(exps as unknown as ReportExpense[]);
       setReviews(revs as unknown as ReportReview[]);
+      setSalaries(sals);
     } catch (err) {
       // Don't surface a toast — the page still has its server-seeded
       // initial data, and the user may not be looking. But DO log
@@ -341,8 +353,15 @@ export default function ReportsView({
   // ---- Computed stats ----
 
   const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
+  // Tips live in payments.tip_amount, not in `amount`, so they aren't
+  // in totalRevenue above. They're already inside salaries.total
+  // (via payroll's tip-share math) — no double-count.
+  const totalSalaries = salaries.total;
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const profit = totalRevenue - totalExpenses;
+  // Profit now accounts for staff payouts when the salon has payroll
+  // enabled (Team+ plans). For Solo, salaries.available is false and
+  // the line is hidden; profit falls back to the old Revenue − Expenses.
+  const profit = totalRevenue - totalExpenses - (salaries.available ? totalSalaries : 0);
 
   const totalAppointments = appointments.length;
   const completedOrPaid = appointments.filter((a) => a.status === "paid" || a.status === "completed").length;
@@ -820,6 +839,24 @@ export default function ReportsView({
                     <span className="text-body-sm text-text-secondary">Expenses</span>
                     <span className="text-body-sm font-semibold text-red-600">{formatCurrency(totalExpenses)}</span>
                   </div>
+                  {/* Salaries — full month(s) covered by the range. Hidden
+                      for Solo (no payroll) so the summary stays familiar.
+                      For Team+, it's the total Net payable from the
+                      payroll page across all staff for the covered
+                      months. Subtracted into Profit below. */}
+                  {salaries.available && (
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-body-sm text-text-secondary">
+                        Salaries
+                        {salaries.monthsCovered.length > 1 && (
+                          <span className="ml-1.5 text-caption text-text-tertiary">
+                            ({salaries.monthsCovered.length} months)
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-body-sm font-semibold text-red-600">{formatCurrency(totalSalaries)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between py-2.5">
                     <span className="text-body-sm font-semibold text-text-primary">Profit</span>
                     <span className={`text-body-sm font-bold ${profit >= 0 ? "text-green-700" : "text-red-600"}`}>
