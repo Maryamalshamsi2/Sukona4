@@ -8,7 +8,7 @@ export type AppointmentStatus =
   | "paid"
   | "cancelled";
 
-export type PaymentMethod = "cash" | "card" | "other";
+export type PaymentMethod = "cash" | "card" | "other" | "gift_card";
 
 /**
  * A salon (tenant). Every other tenant-scoped row carries a `salon_id`

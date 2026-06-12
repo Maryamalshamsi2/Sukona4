@@ -18,7 +18,7 @@ import { signOut } from "@/app/(dashboard)/actions";
  * filtered by the user's role so staff don't see Team/Reports/Clients.
  */
 
-type Icon = "home" | "calendar" | "catalog" | "more" | "users" | "team" | "receipt" | "package" | "chart" | "payroll" | "sales" | "settings" | "logout";
+type Icon = "home" | "calendar" | "catalog" | "more" | "users" | "team" | "receipt" | "package" | "chart" | "payroll" | "sales" | "gift" | "settings" | "logout";
 
 type MoreItem = {
   href?: string;
@@ -36,9 +36,12 @@ const MORE_ITEMS: MoreItem[] = [
   // The page itself shows the upgrade card on Solo, so we don't need
   // to gate again here — Solo owners can still see + tap the link.
   { href: "/payroll",   label: "Payroll",   icon: "payroll",  allow: ["owner"] },
-  // Retail sales / gift cards. Staff don't see this (owner+admin
-  // only) — matches the RLS gate from migration-043.
+  // Retail sales. Staff don't see this (owner+admin only) — matches
+  // the RLS gate from migration-043.
   { href: "/sales",     label: "Sales",     icon: "sales",    allow: ["owner", "admin"] },
+  // Gift cards — same gate as Sales. Sells/voids here, redemption
+  // happens at the appointment payment screen (migration-044).
+  { href: "/gift-cards", label: "Gift cards", icon: "gift",   allow: ["owner", "admin"] },
   { href: "/catalog",   label: "Catalog",   icon: "catalog",  allow: ["owner", "admin", "staff"] },
   { href: "/inventory", label: "Inventory", icon: "package",  allow: ["owner", "admin", "staff"] },
   { href: "/reports",   label: "Reports",   icon: "chart",    allow: ["owner"] },
@@ -125,6 +128,13 @@ function NavIcon({ icon, className }: { icon: Icon; className?: string }) {
       return (
         <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+        </svg>
+      );
+    case "gift":
+      // Wrapped present — matches the sidebar variant.
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
         </svg>
       );
     case "settings":

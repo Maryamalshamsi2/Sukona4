@@ -8,6 +8,7 @@ import {
   getReportReviews,
 } from "./actions";
 import { getReportRetailSales } from "../sales/actions";
+import { getReportGiftCardSummary } from "../gift-cards/actions";
 import { deleteAppointment } from "../calendar/actions";
 import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-modal";
 import type { PaymentMethod } from "@/types";
@@ -208,6 +209,16 @@ export interface ReportsViewProps {
    *  range. Surfaces in the Finance Revenue breakdown as a separate
    *  caption-sized line ("Services" + "Retail / gift cards"). */
   initialRetailSales: { total: number; count: number };
+  /** Gift card summary (migration-044):
+   *   - redeemedTotal: revenue recognized in window from redemptions
+   *   - soldTotal: nominal cash-in from sales (informational, not revenue)
+   *   - outstandingLiability: current sum of active card balances
+   *     (snapshot — not date-windowed) */
+  initialGiftCards: {
+    redeemedTotal: number;
+    soldTotal: number;
+    outstandingLiability: number;
+  };
 }
 
 export default function ReportsView({
@@ -217,6 +228,7 @@ export default function ReportsView({
   initialReviews,
   initialTeams,
   initialRetailSales,
+  initialGiftCards,
 }: ReportsViewProps) {
   const currency = useCurrency();
   const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
@@ -279,6 +291,7 @@ export default function ReportsView({
   const [expenses, setExpenses] = useState<ReportExpense[]>(initialExpenses);
   const [reviews, setReviews] = useState<ReportReview[]>(initialReviews);
   const [retailSales, setRetailSales] = useState(initialRetailSales);
+  const [giftCards, setGiftCards] = useState(initialGiftCards);
 
   // Team filter — null = "All teams" (current behavior). Only shown
   // when the salon has 2+ teams. Expenses are NOT team-scoped (they're
@@ -298,7 +311,7 @@ export default function ReportsView({
     setLoading(true);
     try {
       const { from, to } = getRange();
-      const [appts, pays, exps, revs, retail] = await Promise.all([
+      const [appts, pays, exps, revs, retail, gift] = await Promise.all([
         getReportAppointments(from, to, teamFilter),
         getReportPayments(from, to, teamFilter),
         getReportExpenses(from, to), // intentionally not team-scoped
@@ -306,12 +319,16 @@ export default function ReportsView({
         // Retail sales aren't team-scoped — they're salon-wide
         // walk-in revenue, not staff-attributed services.
         getReportRetailSales(from, to),
+        // Gift cards — redemption revenue + outstanding liability.
+        // Also salon-wide (not team-scoped).
+        getReportGiftCardSummary(from, to),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
       setExpenses(exps as unknown as ReportExpense[]);
       setReviews(revs as unknown as ReportReview[]);
       setRetailSales(retail);
+      setGiftCards(gift);
     } catch (err) {
       // Don't surface a toast — the page still has its server-seeded
       // initial data, and the user may not be looking. But DO log
@@ -352,6 +369,13 @@ export default function ReportsView({
   // ---- Computed stats ----
 
   // Services revenue (appointment payments) — the original number.
+  //
+  // Important: this INCLUDES gift_card-method payments because those
+  // are recognized as revenue at redemption (when the customer
+  // actually consumes the service). So we don't double-count by
+  // ALSO adding giftCards.redeemedTotal here; redemptions show up
+  // as payments rows with method='gift_card'. The redeemedTotal
+  // field is surfaced separately below as an audit line.
   const totalServicesRevenue = payments.reduce((s, p) => s + p.amount, 0);
   // Retail revenue (migration-043) — sum of standalone sales in range.
   const totalRetailRevenue = retailSales.total;
@@ -366,8 +390,12 @@ export default function ReportsView({
 
   const cashPayments = payments.filter((p) => p.method === "cash");
   const cardPayments = payments.filter((p) => p.method === "card");
+  const giftCardPayments = payments.filter((p) => p.method === "gift_card");
+  const otherPayments = payments.filter((p) => p.method === "other");
   const cashTotal = cashPayments.reduce((s, p) => s + p.amount, 0);
   const cardTotal = cardPayments.reduce((s, p) => s + p.amount, 0);
+  const giftCardPayTotal = giftCardPayments.reduce((s, p) => s + p.amount, 0);
+  const otherPayTotal = otherPayments.reduce((s, p) => s + p.amount, 0);
 
   // Expense breakdown by type
   const expenseByType: Record<string, number> = {};
@@ -708,9 +736,19 @@ export default function ReportsView({
                                     <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${
                                       pay.method === "cash"
                                         ? "bg-green-50 text-green-700"
-                                        : "bg-blue-50 text-blue-700"
+                                        : pay.method === "card"
+                                          ? "bg-blue-50 text-blue-700"
+                                          : pay.method === "gift_card"
+                                            ? "bg-[#F4F0FF] text-[#5B36CC]"
+                                            : "bg-[#FFF8F0] text-[#CC7700]"
                                     }`}>
-                                      {pay.method === "cash" ? "Cash" : "Card"}
+                                      {pay.method === "cash"
+                                        ? "Cash"
+                                        : pay.method === "card"
+                                          ? "Card"
+                                          : pay.method === "gift_card"
+                                            ? "Gift card"
+                                            : "Other"}
                                     </span>
                                     {(() => {
                                       const urls = attachmentsFor(pay);
@@ -771,9 +809,19 @@ export default function ReportsView({
                                 <span className={`inline-block rounded-full px-2 py-0.5 text-caption font-medium ${
                                   pay.method === "cash"
                                     ? "bg-green-50 text-green-700"
-                                    : "bg-blue-50 text-blue-700"
+                                    : pay.method === "card"
+                                      ? "bg-blue-50 text-blue-700"
+                                      : pay.method === "gift_card"
+                                        ? "bg-[#F4F0FF] text-[#5B36CC]"
+                                        : "bg-[#FFF8F0] text-[#CC7700]"
                                 }`}>
-                                  {pay.method === "cash" ? "Cash" : "Card"}
+                                  {pay.method === "cash"
+                                    ? "Cash"
+                                    : pay.method === "card"
+                                      ? "Card"
+                                      : pay.method === "gift_card"
+                                        ? "Gift card"
+                                        : "Other"}
                                 </span>
                               </div>
                               {(() => {
@@ -800,8 +848,9 @@ export default function ReportsView({
                       })}
                     </div>
 
-                    {/* Footer totals — quiet two-line breakdown, replaces the
-                        big stat cards that used to live at the top. */}
+                    {/* Footer totals — per-method breakdown. Gift card
+                        and Other rows only render when they have data,
+                        so single-method salons stay clean. */}
                     <div className="border-t border-border px-5 py-3 text-body-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-text-secondary">Cash</span>
@@ -811,6 +860,18 @@ export default function ReportsView({
                         <span className="text-text-secondary">Card</span>
                         <span className="font-semibold text-text-primary">{formatCurrency(cardTotal)}</span>
                       </div>
+                      {giftCardPayTotal > 0 && (
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-text-secondary">Gift card</span>
+                          <span className="font-semibold text-text-primary">{formatCurrency(giftCardPayTotal)}</span>
+                        </div>
+                      )}
+                      {otherPayTotal > 0 && (
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-text-secondary">Other</span>
+                          <span className="font-semibold text-text-primary">{formatCurrency(otherPayTotal)}</span>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -833,18 +894,33 @@ export default function ReportsView({
                       <span className="text-body-sm text-text-secondary">Revenue</span>
                       <span className="text-body-sm font-semibold text-green-700">{formatCurrency(totalRevenue)}</span>
                     </div>
-                    {/* Breakdown only when there's retail to break out —
-                        keeps the single-source-of-revenue case clean. */}
-                    {retailSales.count > 0 && (
+                    {/* Breakdown when there's retail OR gift card
+                        redemption to call out — keeps the single-source
+                        case clean. */}
+                    {(retailSales.count > 0 || giftCards.redeemedTotal > 0) && (
                       <div className="mt-1.5 space-y-1">
                         <div className="flex items-center justify-between pl-3">
-                          <span className="text-caption text-text-tertiary">Services</span>
+                          <span className="text-caption text-text-tertiary">
+                            Services
+                            {/* Gift card redemptions are already part of
+                                services revenue (they're appointment
+                                payments with method=gift_card); call that
+                                out so the salon can audit what came in
+                                via real cash/card vs. card balance. */}
+                            {giftCards.redeemedTotal > 0 && (
+                              <span className="ml-1 text-text-tertiary/70">
+                                (incl. {formatCurrency(giftCards.redeemedTotal)} via gift card)
+                              </span>
+                            )}
+                          </span>
                           <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalServicesRevenue)}</span>
                         </div>
-                        <div className="flex items-center justify-between pl-3">
-                          <span className="text-caption text-text-tertiary">Retail / gift cards</span>
-                          <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue)}</span>
-                        </div>
+                        {retailSales.count > 0 && (
+                          <div className="flex items-center justify-between pl-3">
+                            <span className="text-caption text-text-tertiary">Retail</span>
+                            <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue)}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -859,6 +935,20 @@ export default function ReportsView({
                     </span>
                   </div>
                 </div>
+                {/* Gift card liability — not a revenue/profit number, but
+                    the owner needs to know how much they owe in unredeemed
+                    gift cards. Shown as a quiet footnote-style line when
+                    nonzero. Snapshot value, not date-windowed. */}
+                {giftCards.outstandingLiability > 0 && (
+                  <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                    <span className="text-caption text-text-tertiary">
+                      Outstanding gift card balance
+                    </span>
+                    <span className="text-caption font-semibold tabular-nums text-text-tertiary">
+                      {formatCurrency(giftCards.outstandingLiability)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl bg-white ring-1 ring-border">

@@ -277,5 +277,6 @@ function formatTime12(time24: string) {
 function formatMethod(method: string) {
   if (method === "cash") return "Cash";
   if (method === "card") return "Card";
+  if (method === "gift_card") return "Gift card";
   return "Other";
 }

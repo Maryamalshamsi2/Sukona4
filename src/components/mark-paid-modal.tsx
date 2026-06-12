@@ -3,9 +3,19 @@
 import { useEffect, useState } from "react";
 import Modal from "@/components/modal";
 import { recordPayment, updatePayment, uploadReceipt } from "@/app/(dashboard)/payments/actions";
+import {
+  getGiftCardByCode,
+  redeemGiftCard,
+} from "@/app/(dashboard)/gift-cards/actions";
 import type { PaymentMethod } from "@/types";
 import { useCurrency } from "@/lib/user-context";
+import { formatCurrency } from "@/lib/currency";
 import { compressImage } from "@/lib/image-compress";
+import {
+  formatCode as formatGiftCardCode,
+  isCompleteCode,
+  normalizeCode,
+} from "@/lib/gift-card-code";
 
 export type ExistingPayment = {
   id: string;
@@ -83,6 +93,22 @@ export default function MarkPaidModal({
   // renders when there's a non-zero tip AND the parent passed in staff.
   const [tipAmount, setTipAmount] = useState<string>("");
   const [tipToStaffId, setTipToStaffId] = useState<string>(""); // "" = split equally
+  // ---- Gift card redemption state. Only relevant when method='gift_card'.
+  // The code lives in display form (with dashes); we normalize when
+  // calling the server. Lookup populates giftCard with balance/customer.
+  // remainderMethod is the cash/card/other used for whatever portion
+  // the card can't cover (partial-redeem scenarios). ----
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const [giftCard, setGiftCard] = useState<{
+    id: string;
+    balance: number;
+    status: string;
+    expires_at: string | null;
+    clientName: string | null;
+  } | null>(null);
+  const [giftCardLookupErr, setGiftCardLookupErr] = useState<string | null>(null);
+  const [giftCardLooking, setGiftCardLooking] = useState(false);
+  const [remainderMethod, setRemainderMethod] = useState<"cash" | "card" | "other">("cash");
   // Existing attachments fetched from the saved row (edit mode only).
   // Each has a stable URL — removing one drops it from this array.
   const [existingUrls, setExistingUrls] = useState<string[]>([]);
@@ -123,7 +149,51 @@ export default function MarkPaidModal({
     }
     setNewFiles([]);
     setError(null);
+    // Reset gift-card scratch state on every open. Edit mode for a
+    // gift_card-method row just shows the locked method; we don't
+    // re-look-up the card because the redemption is immutable.
+    setGiftCardCode("");
+    setGiftCard(null);
+    setGiftCardLookupErr(null);
+    setGiftCardLooking(false);
+    setRemainderMethod("cash");
   }, [open, defaultAmount, existingPayment]);
+
+  // Auto-look-up the card as soon as a complete code is entered.
+  // Prevents the user from having to tap a separate "Look up" button.
+  useEffect(() => {
+    if (method !== "gift_card") return;
+    if (!isCompleteCode(giftCardCode)) {
+      setGiftCard(null);
+      setGiftCardLookupErr(null);
+      return;
+    }
+    let cancelled = false;
+    setGiftCardLooking(true);
+    setGiftCardLookupErr(null);
+    (async () => {
+      const res = await getGiftCardByCode(giftCardCode);
+      if (cancelled) return;
+      setGiftCardLooking(false);
+      if ("error" in res) {
+        setGiftCard(null);
+        setGiftCardLookupErr(res.error ?? "Lookup failed");
+        return;
+      }
+      const c = res.card;
+      const clientObj = Array.isArray(c.clients) ? c.clients[0] : c.clients;
+      setGiftCard({
+        id: c.id,
+        balance: Number(c.balance || 0),
+        status: c.status,
+        expires_at: c.expires_at,
+        clientName: clientObj?.name ?? null,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [giftCardCode, method]);
 
   function addFiles(picked: FileList | null) {
     if (!picked || picked.length === 0) return;
@@ -202,6 +272,104 @@ export default function MarkPaidModal({
     const tipStaffToSave =
       tipToSave > 0 && tipToStaffId ? tipToStaffId : null;
 
+    // ---- Gift card branch (record mode only — edit mode hides the
+    //      gift_card method button entirely). Two paths:
+    //
+    //        Full coverage (balance >= amount):
+    //          - Redeem `amt` from the card
+    //          - Insert one payment row, method='gift_card'
+    //
+    //        Partial coverage (balance < amount):
+    //          - Redeem `balance` from the card
+    //          - Insert one payment row, method='gift_card', amount=balance
+    //          - Insert a second payment row, method=remainderMethod,
+    //            amount=amt-balance, for the remainder
+    //
+    //      The redemption goes FIRST. If it fails (expired, voided,
+    //      gone) we abort before touching `payments`. If the payment
+    //      INSERTs fail after the redemption succeeded, the card is
+    //      already debited — surface a precise error so the user knows
+    //      to record the payment row manually. ----
+    if (!isEdit && method === "gift_card") {
+      if (!appointmentId) {
+        setError("Missing appointment id");
+        setSubmitting(false);
+        return;
+      }
+      if (!giftCard) {
+        setError("Look up the gift card first");
+        setSubmitting(false);
+        return;
+      }
+      const cardAmount = Math.min(amt, giftCard.balance);
+      const remainder = +(amt - cardAmount).toFixed(2);
+
+      // 1. Redeem from the card.
+      const redeem = await redeemGiftCard({
+        code: normalizeCode(giftCardCode),
+        amount: cardAmount,
+        appointmentId,
+        notes: noteToSave,
+      });
+      if ("error" in redeem && redeem.error) {
+        setError(redeem.error);
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. Record the gift_card payment row. Tip goes on the
+      //    REMAINDER row when there is one (tip is rarely on the
+      //    card); otherwise it goes here.
+      const tipOnCard = remainder > 0 ? 0 : tipToSave;
+      const tipStaffOnCard = remainder > 0 ? null : tipStaffToSave;
+      const giftRes = await recordPayment(
+        appointmentId,
+        cardAmount,
+        "gift_card",
+        // Embed the displayed code as a note so the receipt shows
+        // "Gift card · ABCD-EF23-XYZ9" without needing a join.
+        `Gift card · ${formatGiftCardCode(giftCardCode)}`,
+        finalUrls,
+        tipOnCard,
+        tipStaffOnCard,
+      );
+      if (giftRes.error) {
+        setError(
+          `Gift card was redeemed (${formatCurrency(cardAmount, currency)}) but recording the payment failed: ${giftRes.error}`,
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // 3. If there's a remainder, record a second payment row.
+      if (remainder > 0) {
+        const remainderNote =
+          remainderMethod === "other" ? (note.trim() || null) : null;
+        const remRes = await recordPayment(
+          appointmentId,
+          remainder,
+          remainderMethod,
+          remainderNote,
+          // Receipts attached to first row only — Supabase storage
+          // dedup isn't a concern here, just avoids double-listing.
+          [],
+          tipToSave,
+          tipStaffToSave,
+        );
+        if (remRes.error) {
+          setError(
+            `Gift card portion saved. Remainder (${formatCurrency(remainder, currency)}) failed: ${remRes.error}. Record it manually.`,
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      setSubmitting(false);
+      onPaid();
+      return;
+    }
+
     const res = isEdit
       ? await updatePayment(existingPayment!.id, amt, method, noteToSave, finalUrls, tipToSave, tipStaffToSave)
       : appointmentId
@@ -235,13 +403,18 @@ export default function MarkPaidModal({
           </p>
         )}
 
-        {/* Payment method */}
+        {/* Payment method. Gift card is hidden in edit mode — you
+            can't retroactively switch a cash payment into a gift card
+            redemption (the card balance change is its own transaction). */}
         <div>
           <label className="block text-body-sm font-semibold text-text-primary">
             Payment Method *
           </label>
-          <div className="mt-1.5 grid grid-cols-3 gap-2">
-            {(["cash", "card", "other"] as PaymentMethod[]).map((m) => (
+          <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {((isEdit
+              ? (["cash", "card", "other"] as const)
+              : (["cash", "card", "other", "gift_card"] as const)
+            ) as PaymentMethod[]).map((m) => (
               <button
                 key={m}
                 type="button"
@@ -252,14 +425,40 @@ export default function MarkPaidModal({
                     : "border-neutral-200 bg-white text-text-primary hover:border-neutral-400"
                 }`}
               >
-                {m === "card" ? "Card Payment" : m}
+                {m === "card"
+                  ? "Card Payment"
+                  : m === "gift_card"
+                    ? "Gift card"
+                    : m}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Optional note when "Other" selected */}
-        {method === "other" && (
+        {/* Gift card section — code lookup + balance preview + (if
+            balance < amount) remainder method picker. Only renders when
+            method='gift_card'. */}
+        {method === "gift_card" && (
+          <GiftCardRedeemBlock
+            code={giftCardCode}
+            onCodeChange={setGiftCardCode}
+            card={giftCard}
+            lookupErr={giftCardLookupErr}
+            looking={giftCardLooking}
+            amount={parseFloat(amount) || 0}
+            remainderMethod={remainderMethod}
+            onRemainderMethodChange={setRemainderMethod}
+            currency={currency}
+          />
+        )}
+
+        {/* Optional note when "Other" is selected — either as the main
+            method, or as the remainder method behind a partial gift card. */}
+        {(method === "other" ||
+          (method === "gift_card" &&
+            remainderMethod === "other" &&
+            giftCard &&
+            parseFloat(amount) > giftCard.balance)) && (
           <div>
             <label htmlFor="payment-note" className="block text-body-sm font-semibold text-text-primary">
               Note <span className="text-text-tertiary font-normal">(optional)</span>
@@ -439,7 +638,15 @@ export default function MarkPaidModal({
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={
+              submitting ||
+              // Block submit for gift card flow until we have a
+              // verified active card looked up.
+              (method === "gift_card" &&
+                (!giftCard ||
+                  giftCard.status !== "active" ||
+                  giftCard.balance <= 0))
+            }
             className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
           >
             {submitting ? "Saving..." : isEdit ? "Save" : "Mark as Paid"}
@@ -447,5 +654,148 @@ export default function MarkPaidModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ============================================================
+// Gift card sub-block — code input, balance preview, remainder picker
+// ============================================================
+
+function GiftCardRedeemBlock({
+  code,
+  onCodeChange,
+  card,
+  lookupErr,
+  looking,
+  amount,
+  remainderMethod,
+  onRemainderMethodChange,
+  currency,
+}: {
+  code: string;
+  onCodeChange: (v: string) => void;
+  card:
+    | {
+        id: string;
+        balance: number;
+        status: string;
+        expires_at: string | null;
+        clientName: string | null;
+      }
+    | null;
+  lookupErr: string | null;
+  looking: boolean;
+  amount: number;
+  remainderMethod: "cash" | "card" | "other";
+  onRemainderMethodChange: (m: "cash" | "card" | "other") => void;
+  currency: string;
+}) {
+  // Re-display the code with dashes as the user types. Strip first,
+  // then re-format — handles paste of "abcd ef23xyz9" cleanly.
+  const display = formatGiftCardCode(code);
+
+  const usable = card && card.status === "active" && card.balance > 0;
+  const partial = !!(usable && amount > 0 && amount > (card?.balance ?? 0));
+  const remainder = partial && card ? +(amount - card.balance).toFixed(2) : 0;
+
+  return (
+    <div className="space-y-3 rounded-xl bg-neutral-50 ring-1 ring-border px-4 py-3">
+      <div>
+        <label
+          htmlFor="gift-card-code"
+          className="block text-body-sm font-semibold text-text-primary"
+        >
+          Gift card code *
+        </label>
+        <input
+          id="gift-card-code"
+          type="text"
+          value={display}
+          onChange={(e) => onCodeChange(e.target.value)}
+          placeholder="ABCD-EF23-XYZ9"
+          autoComplete="off"
+          spellCheck={false}
+          inputMode="text"
+          className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-3 sm:py-2.5 font-mono tracking-wider transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+      </div>
+
+      {looking && (
+        <p className="text-caption text-text-tertiary">Looking up…</p>
+      )}
+
+      {lookupErr && (
+        <p className="text-body-sm text-error-700">{lookupErr}</p>
+      )}
+
+      {card && card.status !== "active" && (
+        <p className="text-body-sm text-error-700">
+          This card is {card.status === "void" ? "voided" : "fully redeemed"}{" "}
+          and can&apos;t be used.
+        </p>
+      )}
+
+      {usable && (
+        <div className="rounded-lg bg-white ring-1 ring-border px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-caption text-text-tertiary">
+              Available balance
+            </span>
+            <span className="text-body-sm font-semibold tabular-nums text-text-primary">
+              {formatCurrency(card.balance, currency)}
+            </span>
+          </div>
+          {card.clientName && (
+            <p className="mt-0.5 text-caption text-text-tertiary">
+              Issued to {card.clientName}
+            </p>
+          )}
+          {card.expires_at && (
+            <p className="mt-0.5 text-caption text-text-tertiary">
+              Expires {card.expires_at}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Partial-cover prompt: show how much the card covers + a
+          method picker for the remainder. */}
+      {partial && card && (
+        <div className="space-y-2.5 rounded-lg bg-[#FFF8F0] ring-1 ring-[#F0D6A8] px-3 py-2.5">
+          <p className="text-body-sm text-text-primary">
+            Card covers{" "}
+            <span className="font-semibold tabular-nums">
+              {formatCurrency(card.balance, currency)}
+            </span>
+            . Remainder of{" "}
+            <span className="font-semibold tabular-nums">
+              {formatCurrency(remainder, currency)}
+            </span>{" "}
+            needs another method.
+          </p>
+          <div>
+            <label className="block text-caption font-semibold text-text-secondary">
+              Pay remainder with
+            </label>
+            <div className="mt-1.5 grid grid-cols-3 gap-2">
+              {(["cash", "card", "other"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => onRemainderMethodChange(m)}
+                  className={`rounded-lg border-[1.5px] px-2.5 py-1.5 text-caption font-semibold capitalize transition ${
+                    remainderMethod === m
+                      ? "border-neutral-900 bg-neutral-900 text-text-inverse"
+                      : "border-neutral-200 bg-white text-text-primary hover:border-neutral-400"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
