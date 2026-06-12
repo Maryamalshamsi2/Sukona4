@@ -165,6 +165,26 @@ export interface Expense {
   created_at: string;
 }
 
+/**
+ * Migration-043 — standalone retail sale (product, walk-in
+ * merchandise, etc.) not tied to an appointment. Owner+admin only;
+ * staff don't see this surface. Counts toward Reports' Revenue
+ * via getReportRetailSales().
+ */
+export interface RetailSale {
+  id: string;
+  salon_id: string;
+  description: string;
+  amount: number;
+  method: "cash" | "card" | "other";
+  sale_date: string; // ISO date "YYYY-MM-DD"
+  client_id: string | null;
+  staff_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface InventoryItem {
   id: string;
   salon_id: string;

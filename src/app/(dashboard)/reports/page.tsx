@@ -10,6 +10,7 @@ import {
   getReportExpenses,
   getReportReviews,
 } from "./actions";
+import { getReportRetailSales } from "../sales/actions";
 import { getTeamGroups } from "../calendar/actions";
 
 function toISODate(d: Date) {
@@ -30,12 +31,13 @@ export default async function ReportsPage() {
   const from = toISODate(fromDate);
   const to = today;
 
-  const [appts, pays, exps, revs, teams] = await Promise.all([
+  const [appts, pays, exps, revs, teams, retailSales] = await Promise.all([
     getReportAppointments(from, to),
     getReportPayments(from, to),
     getReportExpenses(from, to),
     getReportReviews(from, to),
     getTeamGroups(),
+    getReportRetailSales(from, to),
   ]);
 
   return (
@@ -45,6 +47,7 @@ export default async function ReportsPage() {
       initialExpenses={(exps || []) as unknown as ReportExpense[]}
       initialReviews={(revs || []) as unknown as ReportReview[]}
       initialTeams={(teams || []) as { id: string; name: string }[]}
+      initialRetailSales={retailSales as { total: number; count: number }}
     />
   );
 }

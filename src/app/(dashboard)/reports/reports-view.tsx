@@ -7,6 +7,7 @@ import {
   getReportExpenses,
   getReportReviews,
 } from "./actions";
+import { getReportRetailSales } from "../sales/actions";
 import { deleteAppointment } from "../calendar/actions";
 import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-modal";
 import type { PaymentMethod } from "@/types";
@@ -203,6 +204,10 @@ export interface ReportsViewProps {
   /** All team_groups in the salon. Empty / 1 → team selector hidden.
    *  Multi-Team v1.7 — owner can drill into a single team's numbers. */
   initialTeams: { id: string; name: string }[];
+  /** Aggregate retail sales (migration-043) for the initial date
+   *  range. Surfaces in the Finance Revenue breakdown as a separate
+   *  caption-sized line ("Services" + "Retail / gift cards"). */
+  initialRetailSales: { total: number; count: number };
 }
 
 export default function ReportsView({
@@ -211,6 +216,7 @@ export default function ReportsView({
   initialExpenses,
   initialReviews,
   initialTeams,
+  initialRetailSales,
 }: ReportsViewProps) {
   const currency = useCurrency();
   const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
@@ -272,6 +278,7 @@ export default function ReportsView({
   const [payments, setPayments] = useState<ReportPayment[]>(initialPayments);
   const [expenses, setExpenses] = useState<ReportExpense[]>(initialExpenses);
   const [reviews, setReviews] = useState<ReportReview[]>(initialReviews);
+  const [retailSales, setRetailSales] = useState(initialRetailSales);
 
   // Team filter — null = "All teams" (current behavior). Only shown
   // when the salon has 2+ teams. Expenses are NOT team-scoped (they're
@@ -291,16 +298,20 @@ export default function ReportsView({
     setLoading(true);
     try {
       const { from, to } = getRange();
-      const [appts, pays, exps, revs] = await Promise.all([
+      const [appts, pays, exps, revs, retail] = await Promise.all([
         getReportAppointments(from, to, teamFilter),
         getReportPayments(from, to, teamFilter),
         getReportExpenses(from, to), // intentionally not team-scoped
         getReportReviews(from, to, teamFilter),
+        // Retail sales aren't team-scoped — they're salon-wide
+        // walk-in revenue, not staff-attributed services.
+        getReportRetailSales(from, to),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
       setExpenses(exps as unknown as ReportExpense[]);
       setReviews(revs as unknown as ReportReview[]);
+      setRetailSales(retail);
     } catch (err) {
       // Don't surface a toast — the page still has its server-seeded
       // initial data, and the user may not be looking. But DO log
@@ -340,7 +351,12 @@ export default function ReportsView({
 
   // ---- Computed stats ----
 
-  const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
+  // Services revenue (appointment payments) — the original number.
+  const totalServicesRevenue = payments.reduce((s, p) => s + p.amount, 0);
+  // Retail revenue (migration-043) — sum of standalone sales in range.
+  const totalRetailRevenue = retailSales.total;
+  // Combined revenue for the headline number + profit math.
+  const totalRevenue = totalServicesRevenue + totalRetailRevenue;
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const profit = totalRevenue - totalExpenses;
 
@@ -812,9 +828,25 @@ export default function ReportsView({
               <div className="rounded-2xl bg-white ring-1 ring-border px-5 py-4">
                 <p className="text-caption font-semibold uppercase tracking-wider text-text-tertiary">Summary</p>
                 <div className="mt-2 divide-y divide-border">
-                  <div className="flex items-center justify-between py-2.5">
-                    <span className="text-body-sm text-text-secondary">Revenue</span>
-                    <span className="text-body-sm font-semibold text-green-700">{formatCurrency(totalRevenue)}</span>
+                  <div className="py-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-body-sm text-text-secondary">Revenue</span>
+                      <span className="text-body-sm font-semibold text-green-700">{formatCurrency(totalRevenue)}</span>
+                    </div>
+                    {/* Breakdown only when there's retail to break out —
+                        keeps the single-source-of-revenue case clean. */}
+                    {retailSales.count > 0 && (
+                      <div className="mt-1.5 space-y-1">
+                        <div className="flex items-center justify-between pl-3">
+                          <span className="text-caption text-text-tertiary">Services</span>
+                          <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalServicesRevenue)}</span>
+                        </div>
+                        <div className="flex items-center justify-between pl-3">
+                          <span className="text-caption text-text-tertiary">Retail / gift cards</span>
+                          <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center justify-between py-2.5">
                     <span className="text-body-sm text-text-secondary">Expenses</span>
