@@ -368,19 +368,24 @@ export default function ReportsView({
 
   // ---- Computed stats ----
 
-  // Services revenue (appointment payments) — the original number.
-  //
-  // Important: this INCLUDES gift_card-method payments because those
-  // are recognized as revenue at redemption (when the customer
-  // actually consumes the service). So we don't double-count by
-  // ALSO adding giftCards.redeemedTotal here; redemptions show up
-  // as payments rows with method='gift_card'. The redeemedTotal
-  // field is surfaced separately below as an audit line.
-  const totalServicesRevenue = payments.reduce((s, p) => s + p.amount, 0);
+  // Services revenue (appointment payments) — EXCLUDING gift_card
+  // payments. We recognize gift card revenue at SALE time (when the
+  // cash hits the till), not at redemption. The gift_card payment
+  // row on a redemption-day appointment is just balance being applied
+  // against a service we already booked revenue for; counting it
+  // again here would double-book the same money.
+  const totalServicesRevenue = payments
+    .filter((p) => p.method !== "gift_card")
+    .reduce((s, p) => s + p.amount, 0);
   // Retail revenue (migration-043) — sum of standalone sales in range.
   const totalRetailRevenue = retailSales.total;
+  // Gift card revenue — total cash collected from selling cards in
+  // this window. Recognized at sale, not at redemption. Voided cards
+  // aren't subtracted (no refund movement in v1; salon keeps the cash).
+  const totalGiftCardRevenue = giftCards.soldTotal;
   // Combined revenue for the headline number + profit math.
-  const totalRevenue = totalServicesRevenue + totalRetailRevenue;
+  const totalRevenue =
+    totalServicesRevenue + totalRetailRevenue + totalGiftCardRevenue;
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const profit = totalRevenue - totalExpenses;
 
@@ -862,7 +867,12 @@ export default function ReportsView({
                       </div>
                       {giftCardPayTotal > 0 && (
                         <div className="mt-1 flex items-center justify-between">
-                          <span className="text-text-secondary">Gift card</span>
+                          <span className="text-text-secondary">
+                            Gift card{" "}
+                            <span className="text-text-tertiary text-caption font-normal">
+                              (balance applied)
+                            </span>
+                          </span>
                           <span className="font-semibold text-text-primary">{formatCurrency(giftCardPayTotal)}</span>
                         </div>
                       )}
@@ -894,31 +904,38 @@ export default function ReportsView({
                       <span className="text-body-sm text-text-secondary">Revenue</span>
                       <span className="text-body-sm font-semibold text-green-700">{formatCurrency(totalRevenue)}</span>
                     </div>
-                    {/* Breakdown when there's retail OR gift card
-                        redemption to call out — keeps the single-source
+                    {/* Breakdown when there's more than one revenue
+                        stream to call out — keeps the single-source
                         case clean. */}
-                    {(retailSales.count > 0 || giftCards.redeemedTotal > 0) && (
+                    {(retailSales.count > 0 || totalGiftCardRevenue > 0) && (
                       <div className="mt-1.5 space-y-1">
                         <div className="flex items-center justify-between pl-3">
-                          <span className="text-caption text-text-tertiary">
-                            Services
-                            {/* Gift card redemptions are already part of
-                                services revenue (they're appointment
-                                payments with method=gift_card); call that
-                                out so the salon can audit what came in
-                                via real cash/card vs. card balance. */}
-                            {giftCards.redeemedTotal > 0 && (
-                              <span className="ml-1 text-text-tertiary/70">
-                                (incl. {formatCurrency(giftCards.redeemedTotal)} via gift card)
-                              </span>
-                            )}
-                          </span>
+                          <span className="text-caption text-text-tertiary">Services</span>
                           <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalServicesRevenue)}</span>
                         </div>
                         {retailSales.count > 0 && (
                           <div className="flex items-center justify-between pl-3">
                             <span className="text-caption text-text-tertiary">Retail</span>
                             <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue)}</span>
+                          </div>
+                        )}
+                        {totalGiftCardRevenue > 0 && (
+                          <div className="flex items-center justify-between pl-3">
+                            <span className="text-caption text-text-tertiary">
+                              Gift card sales
+                            </span>
+                            <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalGiftCardRevenue)}</span>
+                          </div>
+                        )}
+                        {/* Audit line — informational. Tells the owner
+                            how much card balance was applied to services
+                            in this window, so they can square the till.
+                            Not part of revenue (it was counted at sale). */}
+                        {giftCards.redeemedTotal > 0 && (
+                          <div className="flex items-center justify-between pl-3 pt-0.5">
+                            <span className="text-caption text-text-tertiary/70 italic">
+                              (gift card balance applied to services: {formatCurrency(giftCards.redeemedTotal)})
+                            </span>
                           </div>
                         )}
                       </div>

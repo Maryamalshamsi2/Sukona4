@@ -1,18 +1,22 @@
 -- migration-044-gift-cards.sql
 --
 -- Gift cards — Phase 2 of the sales feature plan sketched in
--- migration-043. A gift card is sold (cash comes in) but is NOT revenue
--- at sale time — it's an outstanding liability. Revenue is recognized
--- only when the customer redeems against an appointment.
+-- migration-043. (migration-043's comment proposed redemption-time
+-- revenue recognition; the salon owner chose sale-time instead, since
+-- the cash hits the till on sale day. See the Reports view for the
+-- actual revenue math.)
 --
 -- Two tables:
 --   gift_cards               — one row per card (current state)
 --   gift_card_transactions   — append-only log (sale / redemption /
 --                              void / manual adjust)
 --
--- The transactions table is what Reports reads from for the Revenue
--- line (sum of type='redemption' in the date range). The gift_cards
--- table tracks the current balance and outstanding liability.
+-- The transactions table is what Reports reads from for the gift card
+-- sales revenue line (sum of type='sale' in the date range). The
+-- gift_cards table tracks the current balance — this is the
+-- *operational* liability (services still owed), not an accounting
+-- liability (revenue was already booked at sale time). Redemptions
+-- are still logged for audit but don't move the Revenue number.
 --
 -- RLS shape (matches the user's choice — owner/admin sell, staff can
 -- look up codes and redeem at the appointment payment screen):
@@ -59,7 +63,9 @@ CREATE TABLE IF NOT EXISTS gift_card_transactions (
   type            text NOT NULL
                     CHECK (type IN ('sale', 'redemption', 'void', 'adjust')),
   -- amount is always stored POSITIVE; sign is implied by `type`.
-  -- Sale = liability up, redemption = revenue up + liability down.
+  -- Sale = revenue + outstanding-balance up; redemption = balance
+  -- consumed against an appointment (no revenue impact — already booked
+  -- at sale time).
   amount          numeric(10, 2) NOT NULL CHECK (amount > 0),
   appointment_id  uuid REFERENCES appointments(id) ON DELETE SET NULL,
   notes           text,

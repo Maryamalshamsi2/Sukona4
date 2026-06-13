@@ -190,10 +190,11 @@ function validateSell(p: SellPayload): string | null {
 /** Create a new gift card. Generates a code; on the astronomical
  *  chance of a UNIQUE collision, retries up to 3 times.
  *
- *  Note: revenue is NOT recorded at sale time — the cash-in is a
- *  liability against future redemption. We do log a 'sale' row in
- *  gift_card_transactions for audit and so the management UI can
- *  show "sold on Jun 5 for $200". */
+ *  Revenue is recognized at sale time (Reports reads soldTotal from
+ *  the gift_card_transactions log). The 'sale' tx row IS the source
+ *  of truth for the Revenue line in Reports — not the gift_card row
+ *  itself — so a void doesn't retroactively reverse revenue (matching
+ *  the v1 "salon keeps the cash on void" rule). */
 export async function sellGiftCard(payload: SellPayload) {
   const gate = await requireOwnerOrAdmin();
   if ("error" in gate) return { error: gate.error };
@@ -355,13 +356,16 @@ export async function redeemGiftCard(payload: RedeemPayload) {
 // ============================================================
 
 /** For the Reports page:
- *   - `redeemedTotal`: revenue recognized in [from, to] from gift
- *     card redemptions. Sums `gift_card_transactions.amount` where
- *     type='redemption' and created_at within window.
- *   - `soldTotal`: nominal cash-in from card sales in window.
- *     Informational — not revenue.
+ *   - `soldTotal`: revenue from gift card sales in [from, to]. This
+ *     is THE gift card revenue number (recognized at sale time, per
+ *     the salon owner's preference). Sums tx.amount where type='sale'.
+ *   - `redeemedTotal`: total card balance applied to appointments in
+ *     window. Informational ONLY — not revenue (the cash was already
+ *     counted when the card was sold). Used to help reconcile the
+ *     till: "of $X services billed, $Y was paid by card balance".
  *   - `outstandingLiability`: current sum of balances on all 'active'
- *     cards. Snapshot, not date-windowed.
+ *     cards. Snapshot, not date-windowed. Operational ("services still
+ *     owed") not accounting.
  */
 export async function getReportGiftCardSummary(from: string, to: string) {
   const gate = await requireOwnerOrAdmin();
