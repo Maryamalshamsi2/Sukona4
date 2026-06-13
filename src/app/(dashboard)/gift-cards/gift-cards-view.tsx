@@ -5,7 +5,7 @@ import Modal from "@/components/modal";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
-import { formatCode } from "@/lib/gift-card-code";
+import { formatCode, isExpired } from "@/lib/gift-card-code";
 import {
   listGiftCards,
   sellGiftCard,
@@ -63,21 +63,34 @@ interface TransactionRow {
 
 const STATUS_LABEL: Record<GiftCardStatus, string> = {
   active: "Active",
+  expired: "Expired",
   redeemed: "Redeemed",
   void: "Voided",
   all: "All",
 };
 
-const STATUS_ORDER: GiftCardStatus[] = ["active", "redeemed", "void", "all"];
+const STATUS_ORDER: GiftCardStatus[] = ["active", "expired", "redeemed", "void", "all"];
 
-function statusBadgeColor(s: GiftCardRow["status"]) {
+/** Display status that promotes an active-but-past-expiry card to
+ *  "expired" for the UI. The DB still stores status='active' —
+ *  there's no nightly job — so we synthesize this everywhere the
+ *  card is rendered. */
+type DisplayStatus = "active" | "expired" | "redeemed" | "void";
+function displayStatus(card: { status: GiftCardRow["status"]; expires_at: string | null }): DisplayStatus {
+  if (card.status === "active" && isExpired(card.expires_at)) return "expired";
+  return card.status;
+}
+
+function statusBadgeColor(s: DisplayStatus) {
   if (s === "active") return "bg-[#F0FAF2] text-[#1B8736]";
+  if (s === "expired") return "bg-[#FFF4E5] text-[#B06900]";
   if (s === "redeemed") return "bg-gray-100 text-text-secondary";
   return "bg-[#FFF0F0] text-[#CC1F1F]"; // void
 }
 
-function statusBadgeLabel(s: GiftCardRow["status"]) {
+function statusBadgeLabel(s: DisplayStatus) {
   if (s === "active") return "Active";
+  if (s === "expired") return "Expired";
   if (s === "redeemed") return "Redeemed";
   return "Voided";
 }
@@ -155,9 +168,13 @@ export default function GiftCardsView({
     setDetailTx([]);
   }
 
-  // Summary: count + outstanding liability for the current view.
+  // Outstanding liability = currently usable cards only. Expired
+  // cards are no longer a liability (salon kept the cash, customer
+  // forfeited the service). Under the "active" filter the server
+  // already excludes expired; this guard also covers the "all"
+  // filter where active+expired rows DO come back.
   const outstanding = cards
-    .filter((c) => c.status === "active")
+    .filter((c) => c.status === "active" && !isExpired(c.expires_at))
     .reduce((s, c) => s + Number(c.balance || 0), 0);
 
   return (
@@ -256,9 +273,9 @@ export default function GiftCardsView({
                       {formatDateTime(c.created_at)}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-caption font-semibold ${statusBadgeColor(c.status)}`}
+                      className={`rounded-full px-2 py-0.5 text-caption font-semibold ${statusBadgeColor(displayStatus(c))}`}
                     >
-                      {statusBadgeLabel(c.status)}
+                      {statusBadgeLabel(displayStatus(c))}
                     </span>
                     {c.clients?.name && (
                       <span className="truncate text-caption text-text-tertiary">
@@ -634,8 +651,8 @@ function GiftCardDetailModal({
           <div className="rounded-xl ring-1 ring-border px-4 py-3">
             <p className="text-caption text-text-tertiary">Status</p>
             <p className="mt-1">
-              <span className={`rounded-full px-2 py-0.5 text-caption font-semibold ${statusBadgeColor(card.status)}`}>
-                {statusBadgeLabel(card.status)}
+              <span className={`rounded-full px-2 py-0.5 text-caption font-semibold ${statusBadgeColor(displayStatus(card))}`}>
+                {statusBadgeLabel(displayStatus(card))}
               </span>
             </p>
             {card.expires_at && (
@@ -696,14 +713,14 @@ function GiftCardDetailModal({
           )}
         </div>
 
-        {/* Action buttons. Void is available only on active cards
-            (no point voiding something already redeemed/voided).
-            Delete is owner/admin-only via the action gate and works
-            on any status — useful for cleaning up test data or
-            removing a card the salon issued by mistake. */}
+        {/* Action buttons. Void is available only on currently-usable
+            cards — not on already redeemed/voided/expired ones, where
+            it'd be a no-op. Delete is owner/admin-only via the action
+            gate and works on any status — useful for cleaning up test
+            data or removing a card the salon issued by mistake. */}
         {!voidConfirmOpen && !deleteConfirmOpen && (
           <div className="flex justify-end gap-2 pt-2">
-            {card.status === "active" && (
+            {displayStatus(card) === "active" && (
               <button
                 type="button"
                 onClick={() => setVoidConfirmOpen(true)}
@@ -767,7 +784,7 @@ function GiftCardDetailModal({
             </p>
             <p className="text-body-sm text-text-secondary">
               The card and its full transaction history will be removed.
-              {card.status === "active" && card.balance > 0 && (
+              {displayStatus(card) === "active" && card.balance > 0 && (
                 <>
                   {" "}
                   The remaining{" "}

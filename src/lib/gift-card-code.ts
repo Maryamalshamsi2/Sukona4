@@ -29,3 +29,21 @@ export function formatCode(raw: string): string {
 export function isCompleteCode(input: string): boolean {
   return normalizeCode(input).length === CODE_LENGTH;
 }
+
+/** Today as YYYY-MM-DD in the runtime's local timezone. Used for
+ *  expiry comparisons — `expires_at < todayISO()` means expired. */
+export function todayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** True when expires_at is set AND strictly before today. NULL/empty
+ *  expiry means "never expires." Lexical string comparison works for
+ *  the YYYY-MM-DD format because it sorts the same as a date. */
+export function isExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false;
+  return expiresAt < todayISO();
+}

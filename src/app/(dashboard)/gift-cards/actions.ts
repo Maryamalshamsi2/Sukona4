@@ -8,6 +8,7 @@ import {
   CODE_ALPHABET,
   CODE_LENGTH,
   normalizeCode,
+  todayISO,
 } from "@/lib/gift-card-code";
 
 /**
@@ -54,11 +55,16 @@ async function requireAuthed() {
 // List / read
 // ============================================================
 
-export type GiftCardStatus = "active" | "redeemed" | "void" | "all";
+export type GiftCardStatus = "active" | "expired" | "redeemed" | "void" | "all";
 
 /** List of gift cards for the management page. Filterable by status
  *  and (optional) sold-date range. Owner/admin only — the page itself
- *  is gated, but defense-in-depth here too. */
+ *  is gated, but defense-in-depth here too.
+ *
+ *  'expired' isn't a real DB status — there's no nightly job flipping
+ *  cards. We synthesize it: status='active' AND expires_at < today AND
+ *  expires_at IS NOT NULL. The matching 'active' filter excludes
+ *  expired cards so "Active" means "currently usable." */
 export async function listGiftCards(
   status: GiftCardStatus = "all",
   from?: string,
@@ -68,6 +74,7 @@ export async function listGiftCards(
   if ("error" in gate) return [];
 
   const supabase = await createClient();
+  const today = todayISO();
   let query = supabase
     .from("gift_cards")
     .select(`
@@ -78,7 +85,21 @@ export async function listGiftCards(
     `)
     .order("created_at", { ascending: false });
 
-  if (status !== "all") query = query.eq("status", status);
+  if (status === "expired") {
+    // Active in the DB but past expiry — synthetic bucket.
+    query = query
+      .eq("status", "active")
+      .not("expires_at", "is", null)
+      .lt("expires_at", today);
+  } else if (status === "active") {
+    // "Currently usable": active in DB AND either no expiry set
+    // or expiry is today/future. or() runs as a PostgREST OR clause.
+    query = query
+      .eq("status", "active")
+      .or(`expires_at.is.null,expires_at.gte.${today}`);
+  } else if (status !== "all") {
+    query = query.eq("status", status);
+  }
   if (from) query = query.gte("created_at", `${from}T00:00:00`);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
 
@@ -412,6 +433,7 @@ export async function getReportGiftCardSummary(from: string, to: string) {
   }
 
   const supabase = await createClient();
+  const today = todayISO();
   const [txRes, liabRes] = await Promise.all([
     supabase
       .from("gift_card_transactions")
@@ -419,10 +441,15 @@ export async function getReportGiftCardSummary(from: string, to: string) {
       .gte("created_at", `${from}T00:00:00`)
       .lte("created_at", `${to}T23:59:59`)
       .in("type", ["sale", "redemption"]),
+    // Outstanding liability = currently usable cards only. Expired
+    // cards aren't a liability anymore — the salon kept the cash and
+    // the customer forfeited the service. Same "no expiry OR
+    // expiry >= today" predicate as the Active filter.
     supabase
       .from("gift_cards")
       .select("balance")
-      .eq("status", "active"),
+      .eq("status", "active")
+      .or(`expires_at.is.null,expires_at.gte.${today}`),
   ]);
 
   if (txRes.error) console.error("getReportGiftCardSummary tx:", txRes.error);

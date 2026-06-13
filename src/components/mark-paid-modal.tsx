@@ -14,6 +14,7 @@ import { compressImage } from "@/lib/image-compress";
 import {
   formatCode as formatGiftCardCode,
   isCompleteCode,
+  isExpired,
   normalizeCode,
 } from "@/lib/gift-card-code";
 
@@ -641,11 +642,14 @@ export default function MarkPaidModal({
             disabled={
               submitting ||
               // Block submit for gift card flow until we have a
-              // verified active card looked up.
+              // verified usable card looked up. Usable means: active
+              // in DB, has balance, and either no expiry or expiry
+              // hasn't passed yet.
               (method === "gift_card" &&
                 (!giftCard ||
                   giftCard.status !== "active" ||
-                  giftCard.balance <= 0))
+                  giftCard.balance <= 0 ||
+                  isExpired(giftCard.expires_at)))
             }
             className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
           >
@@ -694,7 +698,12 @@ function GiftCardRedeemBlock({
   // then re-format — handles paste of "abcd ef23xyz9" cleanly.
   const display = formatGiftCardCode(code);
 
-  const usable = card && card.status === "active" && card.balance > 0;
+  // "Expired" is synthesized — the DB still says status='active' but
+  // the date has passed. Surface it here so staff don't try to submit
+  // a redemption that the RPC would reject anyway.
+  const expired = !!(card && isExpired(card.expires_at));
+  const usable =
+    !!card && card.status === "active" && card.balance > 0 && !expired;
   const partial = !!(usable && amount > 0 && amount > (card?.balance ?? 0));
   const remainder = partial && card ? +(amount - card.balance).toFixed(2) : 0;
 
@@ -732,6 +741,12 @@ function GiftCardRedeemBlock({
         <p className="text-body-sm text-error-700">
           This card is {card.status === "void" ? "voided" : "fully redeemed"}{" "}
           and can&apos;t be used.
+        </p>
+      )}
+
+      {card && card.status === "active" && expired && (
+        <p className="text-body-sm text-error-700">
+          This card expired on {card.expires_at} and can&apos;t be used.
         </p>
       )}
 

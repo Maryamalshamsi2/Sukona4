@@ -188,6 +188,29 @@ new revenue.
 - [ ] Reports for the sale month → revenue is UNCHANGED (no rollback —
       the salon kept the cash)
 
+### H7c — Expiry
+
+Expiry is computed (no nightly job — synthesized from `expires_at` vs
+today). The DB row stays `status='active'` but the UI promotes it to
+"Expired" everywhere it's rendered.
+
+- [ ] Sell a card with `Expires` set to **yesterday's date** (you can
+      edit `gift_cards.expires_at` directly in Supabase if needed for
+      testing)
+- [ ] `/gift-cards` Active filter: card does NOT appear (excluded by
+      the server query)
+- [ ] Expired filter: card DOES appear, with an amber "Expired" badge
+- [ ] All filter: card appears with the "Expired" badge (not "Active")
+- [ ] Outstanding-liability summary (when Active filter is selected)
+      does NOT include this card's balance
+- [ ] Detail panel: status badge is "Expired"; Void button is hidden
+      (Delete still available)
+- [ ] MarkPaidModal: paste the expired code → balance preview is
+      replaced by a red "This card expired on YYYY-MM-DD" warning;
+      submit button is disabled
+- [ ] If you sell a NEW card with no expiry, all of the above behaves
+      identically to "active" (no expiry means never expires)
+
 ### H7b — Delete (owner/admin only)
 
 - [ ] As **owner/admin** on any card (Active, Redeemed, or Voided):
