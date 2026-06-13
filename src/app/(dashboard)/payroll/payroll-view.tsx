@@ -156,9 +156,6 @@ export default function PayrollView({
           <h1 className="text-title-page font-semibold tracking-tight text-text-primary">
             Payroll
           </h1>
-          <p className="mt-1 text-body-sm text-text-secondary">
-            Monthly salary breakdown for each member of your team.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {/* Team selector (v1.7) — owner-only page, so we don't bother
