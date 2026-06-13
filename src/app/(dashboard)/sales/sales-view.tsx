@@ -302,69 +302,70 @@ export default function SalesView({
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {sales.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4"
-              >
-                <button
-                  onClick={() => openEdit(s)}
-                  className="flex-1 text-left min-w-0 hover:opacity-75"
+          <>
+            <div className="divide-y divide-border">
+              {sales.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4"
                 >
-                  <p className="truncate text-body-sm font-semibold text-text-primary">
-                    {s.description}
-                  </p>
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <span className="text-caption text-text-tertiary">
-                      {formatDate(s.sale_date)}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-caption font-semibold ${methodColor(s.method)}`}
-                    >
-                      {methodLabel(s.method)}
-                    </span>
-                    {s.clients?.name && (
+                  <button
+                    onClick={() => openEdit(s)}
+                    className="flex-1 text-left min-w-0 hover:opacity-75"
+                  >
+                    <p className="truncate text-body-sm font-semibold text-text-primary">
+                      {s.description}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
                       <span className="text-caption text-text-tertiary">
-                        · {s.clients.name}
+                        {formatDate(s.sale_date)}
                       </span>
-                    )}
-                    {s.staff?.full_name && (
-                      <span className="text-caption text-text-tertiary">
-                        · by {s.staff.full_name}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-caption font-semibold ${methodColor(s.method)}`}
+                      >
+                        {methodLabel(s.method)}
                       </span>
-                    )}
-                  </div>
-                </button>
-                <span className="shrink-0 text-body-sm font-semibold tabular-nums text-text-primary">
-                  {formatCurrency(s.amount, currency)}
-                </span>
-                <button
-                  onClick={() => handleDelete(s)}
-                  aria-label="Delete sale"
-                  className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-active hover:text-error-700"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
+                      {s.clients?.name && (
+                        <span className="text-caption text-text-tertiary">
+                          · {s.clients.name}
+                        </span>
+                      )}
+                      {s.staff?.full_name && (
+                        <span className="text-caption text-text-tertiary">
+                          · by {s.staff.full_name}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <span className="shrink-0 text-body-sm font-semibold tabular-nums text-text-primary">
+                    {formatCurrency(s.amount, currency)}
+                  </span>
+                  <button
+                    onClick={() => handleDelete(s)}
+                    aria-label="Delete sale"
+                    className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-active hover:text-error-700"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Total footer — inside the same card as the list, with
+                a top divider. Matches the per-method totals on the
+                /reports Payments tab. Reflects whatever's in the
+                currently-visible filtered set. */}
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-body-sm sm:px-6">
+              <span className="text-text-secondary">Total</span>
+              <span className="font-semibold text-text-primary tabular-nums">
+                {formatCurrency(total, currency)}
+              </span>
+            </div>
+          </>
         )}
       </div>
-
-      {/* Bottom total — same shape as /expenses: right-aligned,
-          reflects the currently-visible filtered set. Hidden on
-          empty so the empty-state CTA isn't competing with a $0. */}
-      {sales.length > 0 && (
-        <div className="mt-4 flex items-center justify-end gap-2 text-body-sm">
-          <span className="text-text-tertiary">Total</span>
-          <span className="font-semibold text-text-primary">
-            {formatCurrency(total, currency)}
-          </span>
-        </div>
-      )}
 
       {/* ---- Add/Edit modal ---- */}
       <SaleFormModal
