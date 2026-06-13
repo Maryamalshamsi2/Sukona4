@@ -30,6 +30,46 @@ export interface TeamViewProps {
   initialGroups: TeamGroup[];
 }
 
+/** Filter-dropdown row matching the /expenses style — checkbox-style
+ *  indicator on the left, label on the right, full-width hover state. */
+function FilterOption({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+        active ? "text-text-primary font-semibold" : "text-text-secondary"
+      }`}
+    >
+      <span
+        className={`flex h-4 w-4 items-center justify-center rounded border ${
+          active ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+        }`}
+      >
+        {active && (
+          <svg
+            className="h-3 w-3 text-text-inverse"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={3}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        )}
+      </span>
+      {label}
+    </button>
+  );
+}
+
 export default function TeamView({ initialMembers, initialGroups }: TeamViewProps) {
   const currentUser = useCurrentUser();
   const [members, setMembers] = useState<Profile[]>(initialMembers);
@@ -87,6 +127,23 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
     if (addDropdownOpen) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [addDropdownOpen]);
+
+  // Group filter dropdown — funnel icon next to "+". Default 'all'
+  // shows every member regardless of group; selecting a group narrows
+  // the list. "Unassigned" only appears as an option when there are
+  // members without a group.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filterOpen) return;
+    function handler(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
 
   async function loadData() {
     try {
@@ -343,82 +400,95 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Team</h1>
         </div>
-        {/* Desktop add button + dropdown. Mobile gets a thumb-zone FAB
-            at the bottom of the screen with the same options — see below. */}
-        <div className="relative shrink-0 hidden sm:block" ref={addDropdownRef}>
-          <button
-            onClick={() => setAddDropdownOpen((o) => !o)}
-            aria-label="Add"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-          {addDropdownOpen && (
-            <div className="absolute right-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-border bg-white py-1 shadow-lg">
-              <button
-                onClick={() => { openAddMember(); setAddDropdownOpen(false); }}
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
-              >
-                Member
-              </button>
-              <button
-                onClick={() => { openAddGroup(); setAddDropdownOpen(false); }}
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
-              >
-                Group
-              </button>
-            </div>
-          )}
+        {/* Desktop: filter funnel + add "+" button. Mobile gets a
+            thumb-zone FAB at the bottom for adding (the filter funnel
+            stays here on mobile too — it's lightweight enough to fit). */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Group filter funnel — matches /expenses + /gift-cards.
+              Highlights when a non-default ("all") filter is set. */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              aria-label="Filter"
+              className={`rounded-lg p-2 ${
+                activeTab !== "all"
+                  ? "bg-surface-active text-text-primary"
+                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+              }`}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+            </button>
+
+            {filterOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Group
+                </p>
+                <FilterOption
+                  active={activeTab === "all"}
+                  label={`All (${members.length})`}
+                  onClick={() => { setActiveTab("all"); setFilterOpen(false); }}
+                />
+                {groups.map((g) => {
+                  const count = members.filter((m) => m.group_id === g.id).length;
+                  return (
+                    <FilterOption
+                      key={g.id}
+                      active={activeTab === g.id}
+                      label={`${g.name} (${count})`}
+                      onClick={() => { setActiveTab(g.id); setFilterOpen(false); }}
+                    />
+                  );
+                })}
+                {members.some((m) => !m.group_id) && (
+                  <FilterOption
+                    active={activeTab === "unassigned"}
+                    label={`Unassigned (${members.filter((m) => !m.group_id).length})`}
+                    onClick={() => { setActiveTab("unassigned"); setFilterOpen(false); }}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Add button — desktop only. Mobile FAB lives at the bottom. */}
+          <div className="relative hidden sm:block" ref={addDropdownRef}>
+            <button
+              onClick={() => setAddDropdownOpen((o) => !o)}
+              aria-label="Add"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+            {addDropdownOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1.5 w-40 rounded-xl border border-border bg-white py-1 shadow-lg">
+                <button
+                  onClick={() => { openAddMember(); setAddDropdownOpen(false); }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+                >
+                  Member
+                </button>
+                <button
+                  onClick={() => { openAddGroup(); setAddDropdownOpen(false); }}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+                >
+                  Group
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Group tabs */}
-      <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
-        <button
-          onClick={() => setActiveTab("all")}
-          className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
-            activeTab === "all"
-              ? "bg-neutral-900 text-text-inverse"
-              : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-          }`}
-        >
-          All ({members.length})
-        </button>
-        {groups.map((g) => {
-          const count = members.filter((m) => m.group_id === g.id).length;
-          return (
-            <button
-              key={g.id}
-              onClick={() => setActiveTab(g.id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
-                activeTab === g.id
-                  ? "bg-neutral-900 text-text-inverse"
-                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-              }`}
-            >
-              {g.name} ({count})
-            </button>
-          );
-        })}
-        {members.some((m) => !m.group_id) && (
-          <button
-            onClick={() => setActiveTab("unassigned")}
-            className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
-              activeTab === "unassigned"
-                ? "bg-neutral-900 text-text-inverse"
-                : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-            }`}
-          >
-            Unassigned ({members.filter((m) => !m.group_id).length})
-          </button>
-        )}
-      </div>
-
-      {/* Group actions */}
+      {/* Group actions — shown when a specific group is filtered. Lets
+          the owner rename or delete that group inline without digging
+          into a separate management screen. */}
       {activeTab !== "all" && activeTab !== "unassigned" && (
-        <div className="mt-2 flex gap-3">
+        <div className="mt-4 flex gap-3">
           <button
             onClick={() => {
               const g = groups.find((g) => g.id === activeTab);

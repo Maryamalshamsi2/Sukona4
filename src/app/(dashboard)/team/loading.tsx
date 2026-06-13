@@ -1,18 +1,15 @@
-// Skeleton for /team. Title row + add button + group tabs + list of
-// member rows. Owner is the only role here that actually creates
+// Skeleton for /team. Title row + filter funnel + add button + list
+// of member rows. Owner is the only role here that actually creates
 // new members, so the layout is the same regardless of who's loading.
 export default function Loading() {
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
         <div className="h-8 w-24 rounded bg-neutral-100 animate-pulse" />
-        <div className="h-9 w-9 rounded-full bg-neutral-100 animate-pulse" />
-      </div>
-      {/* Group tabs */}
-      <div className="mt-4 flex gap-2 overflow-hidden">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-9 w-24 rounded-full bg-neutral-100 animate-pulse" />
-        ))}
+        <div className="flex items-center gap-1">
+          <div className="h-9 w-9 rounded-lg bg-neutral-100 animate-pulse" />
+          <div className="h-9 w-9 rounded-full bg-neutral-100 animate-pulse" />
+        </div>
       </div>
       {/* Member rows */}
       <div className="mt-6 rounded-2xl ring-1 ring-border bg-white divide-y divide-border">

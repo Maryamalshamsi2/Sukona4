@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
@@ -19,9 +19,9 @@ import {
  * /gift-cards — sell, list, inspect, void gift cards. Owner+admin only.
  *
  * Layout:
- *   - Title + "+" → sell modal (amount, payment method, optional
- *     buyer + expiry + notes)
- *   - Status-filter chips (Active / Expired / Redeemed / Voided / All)
+ *   - Title + filter funnel (status) + "+" → sell modal
+ *   - Default shows every card; filter dropdown narrows by status
+ *     (Active / Expired / Redeemed / Voided / All)
  *   - List of cards (code, customer, balance, status, sold date)
  *   - Tap a card → detail modal with full tx history + Void / Delete
  *
@@ -117,9 +117,12 @@ export default function GiftCardsView({
   const [cards, setCards] = useState<GiftCardRow[]>(initialCards);
   const [clients] = useState<ClientOption[]>(initialClients);
   const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<GiftCardStatus>("active");
+  // Default = "all" — show every card, regardless of status. The
+  // initial seed from page.tsx is "active" cards, so we trigger
+  // a refetch on mount to widen the set. Subsequent filter changes
+  // refetch as well.
+  const [statusFilter, setStatusFilter] = useState<GiftCardStatus>("all");
 
-  // Initial seed is "active"; flipping the chip re-fetches.
   const reload = useCallback(async (s: GiftCardStatus) => {
     setLoading(true);
     try {
@@ -135,6 +138,21 @@ export default function GiftCardsView({
   useEffect(() => {
     void reload(statusFilter);
   }, [statusFilter, reload]);
+
+  // Filter dropdown — funnel icon next to "+", same dismiss-on-
+  // outside-click pattern as /expenses and /sales.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filterOpen) return;
+    function handler(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
 
   // Sell modal
   const [sellOpen, setSellOpen] = useState(false);
@@ -169,42 +187,77 @@ export default function GiftCardsView({
 
   return (
     <div>
-      {/* ---- Header ---- */}
+      {/* ---- Header — title + filter funnel + "+" ---- */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-title-page font-bold tracking-tight text-text-primary">
           Gift cards
         </h1>
-        <button
-          type="button"
-          onClick={() => setSellOpen(true)}
-          aria-label="Sell gift card"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Status filter funnel — same icon + dropdown shape as
+              /expenses for cross-page consistency. Icon highlights
+              when a non-default ("all") filter is set. */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              aria-label="Filter"
+              className={`rounded-lg p-2 ${
+                statusFilter !== "all"
+                  ? "bg-surface-active text-text-primary"
+                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+              }`}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+            </button>
 
-      {/* ---- Status filter chips ---- */}
-      <div className="mt-4 flex gap-2 overflow-x-auto">
-        {STATUS_ORDER.map((s) => (
+            {filterOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                  Status
+                </p>
+                {STATUS_ORDER.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setStatusFilter(s);
+                      setFilterOpen(false);
+                    }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                      statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                      statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                    }`}>
+                      {statusFilter === s && (
+                        <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      )}
+                    </span>
+                    {STATUS_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-caption font-semibold transition ${
-              statusFilter === s
-                ? "bg-neutral-900 text-text-inverse"
-                : "bg-white ring-1 ring-border text-text-secondary hover:bg-surface-hover"
-            }`}
+            type="button"
+            onClick={() => setSellOpen(true)}
+            aria-label="Sell gift card"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
           >
-            {STATUS_LABEL[s]}
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
           </button>
-        ))}
+        </div>
       </div>
 
       {/* ---- List of cards ---- */}
-      <div className="mt-4 rounded-2xl bg-white ring-1 ring-border">
+      <div className="mt-6 rounded-2xl bg-white ring-1 ring-border">
         {loading && cards.length === 0 ? (
           <p className="py-12 text-center text-body-sm text-text-tertiary">
             Loading…
@@ -212,11 +265,14 @@ export default function GiftCardsView({
         ) : cards.length === 0 ? (
           <div className="py-12 text-center">
             <p className="text-body-sm text-text-secondary">
-              {statusFilter === "active"
-                ? "No active gift cards."
+              {statusFilter === "all"
+                ? "No gift cards yet."
                 : `No ${STATUS_LABEL[statusFilter].toLowerCase()} cards.`}
             </p>
-            {statusFilter === "active" && (
+            {/* Sell-first CTA only on the empty "all" state — when a
+                non-default filter is set, the issue is usually the
+                filter, not the absence of cards. */}
+            {statusFilter === "all" && (
               <button
                 onClick={() => setSellOpen(true)}
                 className="mt-3 text-body-sm font-semibold text-text-primary underline-offset-2 hover:underline"
