@@ -283,25 +283,8 @@ export default function SalesView({
         </div>
       )}
 
-      {/* ---- Summary card ---- */}
-      <div className="mt-6 rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-        <div className="flex items-center justify-between">
-          <span className="text-body-sm text-text-secondary">
-            Total this period
-            {sales.length > 0 && (
-              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-caption font-normal text-text-secondary">
-                {sales.length}
-              </span>
-            )}
-          </span>
-          <span className="text-body-sm font-semibold text-green-700 tabular-nums">
-            {formatCurrency(total, currency)}
-          </span>
-        </div>
-      </div>
-
       {/* ---- List of sales ---- */}
-      <div className="mt-4 rounded-2xl bg-white ring-1 ring-border">
+      <div className="mt-6 rounded-2xl bg-white ring-1 ring-border">
         {loading && sales.length === 0 ? (
           <p className="py-12 text-center text-body-sm text-text-tertiary">
             Loading…
@@ -370,6 +353,18 @@ export default function SalesView({
           </div>
         )}
       </div>
+
+      {/* Bottom total — same shape as /expenses: right-aligned,
+          reflects the currently-visible filtered set. Hidden on
+          empty so the empty-state CTA isn't competing with a $0. */}
+      {sales.length > 0 && (
+        <div className="mt-4 flex items-center justify-end gap-2 text-body-sm">
+          <span className="text-text-tertiary">Total</span>
+          <span className="font-semibold text-text-primary">
+            {formatCurrency(total, currency)}
+          </span>
+        </div>
+      )}
 
       {/* ---- Add/Edit modal ---- */}
       <SaleFormModal

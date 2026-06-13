@@ -19,12 +19,11 @@ import {
  * /gift-cards — sell, list, inspect, void gift cards. Owner+admin only.
  *
  * Layout:
- *   - Title + status-filter chips (Active / Redeemed / Voided / All)
- *   - Summary card: count + outstanding liability for current filter
- *   - List of cards (code, customer, balance, status, sold date)
- *   - Tap a card → detail modal with full tx history + Void action
- *   - "+" button → sell modal (amount, payment method, optional
+ *   - Title + "+" → sell modal (amount, payment method, optional
  *     buyer + expiry + notes)
+ *   - Status-filter chips (Active / Expired / Redeemed / Voided / All)
+ *   - List of cards (code, customer, balance, status, sold date)
+ *   - Tap a card → detail modal with full tx history + Void / Delete
  *
  * Redemption does NOT happen here — it happens in MarkPaidModal at
  * the appointment payment screen.
@@ -168,15 +167,6 @@ export default function GiftCardsView({
     setDetailTx([]);
   }
 
-  // Outstanding liability = currently usable cards only. Expired
-  // cards are no longer a liability (salon kept the cash, customer
-  // forfeited the service). Under the "active" filter the server
-  // already excludes expired; this guard also covers the "all"
-  // filter where active+expired rows DO come back.
-  const outstanding = cards
-    .filter((c) => c.status === "active" && !isExpired(c.expires_at))
-    .reduce((s, c) => s + Number(c.balance || 0), 0);
-
   return (
     <div>
       {/* ---- Header ---- */}
@@ -211,27 +201,6 @@ export default function GiftCardsView({
             {STATUS_LABEL[s]}
           </button>
         ))}
-      </div>
-
-      {/* ---- Summary card ---- */}
-      <div className="mt-4 rounded-2xl bg-white ring-1 ring-border px-5 py-4">
-        <div className="flex items-center justify-between">
-          <span className="text-body-sm text-text-secondary">
-            {statusFilter === "active"
-              ? "Outstanding liability"
-              : `${STATUS_LABEL[statusFilter]} cards`}
-            {cards.length > 0 && (
-              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-caption font-normal text-text-secondary">
-                {cards.length}
-              </span>
-            )}
-          </span>
-          {statusFilter === "active" && (
-            <span className="text-body-sm font-semibold text-text-primary tabular-nums">
-              {formatCurrency(outstanding, currency)}
-            </span>
-          )}
-        </div>
       </div>
 
       {/* ---- List of cards ---- */}
