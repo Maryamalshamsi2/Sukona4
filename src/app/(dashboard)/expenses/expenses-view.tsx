@@ -422,86 +422,90 @@ export default function ExpensesView({
           )}
         </div>
       ) : (
-        <div className="rounded-2xl ring-1 ring-border bg-white divide-y divide-border">
-          {filtered.map((expense) => {
-            const editable = canEditExpense(expense);
-            return (
-            // Row is a div+role=button (instead of <button>) so the receipt
-            // icon inside can be its own real <button> — nested <button>
-            // is invalid HTML.
-            //
-            // Staff who didn't create this expense get a non-interactive
-            // div: no click handler, no hover, no focus ring. They can
-            // still see the row + tap the receipt icon to view it.
-            <div
-              key={expense.id}
-              {...(editable
-                ? {
-                    role: "button" as const,
-                    tabIndex: 0,
-                    onClick: () => { setSelected(expense); setEditModalOpen(true); },
-                    onKeyDown: (e: React.KeyboardEvent) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelected(expense);
-                        setEditModalOpen(true);
-                      }
-                    },
-                  }
-                : {})}
-              className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-colors sm:gap-4 sm:px-6 ${
-                editable ? "cursor-pointer hover:bg-surface-hover" : "cursor-default"
-              }`}
-            >
-              {/* Description */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-body-sm font-semibold text-text-primary">{expense.description}</p>
-                  {expense.is_private && (
-                    <svg className="h-3.5 w-3.5 shrink-0 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    </svg>
-                  )}
+        <div className="rounded-2xl ring-1 ring-border bg-white">
+          <div className="divide-y divide-border">
+            {filtered.map((expense) => {
+              const editable = canEditExpense(expense);
+              return (
+              // Row is a div+role=button (instead of <button>) so the receipt
+              // icon inside can be its own real <button> — nested <button>
+              // is invalid HTML.
+              //
+              // Staff who didn't create this expense get a non-interactive
+              // div: no click handler, no hover, no focus ring. They can
+              // still see the row + tap the receipt icon to view it.
+              <div
+                key={expense.id}
+                {...(editable
+                  ? {
+                      role: "button" as const,
+                      tabIndex: 0,
+                      onClick: () => { setSelected(expense); setEditModalOpen(true); },
+                      onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelected(expense);
+                          setEditModalOpen(true);
+                        }
+                      },
+                    }
+                  : {})}
+                className={`flex w-full items-center gap-3 px-4 py-4 text-left transition-colors sm:gap-4 sm:px-6 ${
+                  editable ? "cursor-pointer hover:bg-surface-hover" : "cursor-default"
+                }`}
+              >
+                {/* Description */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-body-sm font-semibold text-text-primary">{expense.description}</p>
+                    {expense.is_private && (
+                      <svg className="h-3.5 w-3.5 shrink-0 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    )}
+                  </div>
+                  <p className="text-caption text-text-secondary">
+                    {formatDate(expense.date)}
+                    {expense.time && <> · {formatTime12(expense.time)}</>}
+                  </p>
                 </div>
-                <p className="text-caption text-text-secondary">
-                  {formatDate(expense.date)}
-                  {expense.time && <> · {formatTime12(expense.time)}</>}
-                </p>
+
+                {/* Receipt — tappable preview button. stopPropagation keeps
+                    the row's edit-modal click from firing. */}
+                {expense.receipt_url && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewUrl(expense.receipt_url);
+                    }}
+                    aria-label="View receipt"
+                    className="shrink-0 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-text-primary"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                    </svg>
+                  </button>
+                )}
+
+                {/* Amount */}
+                <span className="shrink-0 text-body-sm font-semibold text-text-primary">
+                  {formatCurrency(Number(expense.amount))}
+                </span>
               </div>
+              );
+            })}
+          </div>
 
-              {/* Receipt — tappable preview button. stopPropagation keeps
-                  the row's edit-modal click from firing. */}
-              {expense.receipt_url && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPreviewUrl(expense.receipt_url);
-                  }}
-                  aria-label="View receipt"
-                  className="shrink-0 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-neutral-100 hover:text-text-primary"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                  </svg>
-                </button>
-              )}
-
-              {/* Amount */}
-              <span className="shrink-0 text-body-sm font-semibold text-text-primary">
-                {formatCurrency(Number(expense.amount))}
-              </span>
-            </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Bottom total — reflects the currently-visible filtered set */}
-      {filtered.length > 0 && (
-        <div className="mt-4 flex items-center justify-end gap-2 text-body-sm">
-          <span className="text-text-tertiary">Total</span>
-          <span className="font-semibold text-text-primary">{formatCurrency(totalAmount)}</span>
+          {/* Total footer — inside the same card as the list, with a
+              top divider. Matches /sales for cross-page consistency.
+              Reflects the currently-visible filtered set. */}
+          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-body-sm sm:px-6">
+            <span className="text-text-secondary">Total</span>
+            <span className="font-semibold text-text-primary tabular-nums">
+              {formatCurrency(totalAmount)}
+            </span>
+          </div>
         </div>
       )}
 
