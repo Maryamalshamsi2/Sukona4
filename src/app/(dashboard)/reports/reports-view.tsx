@@ -904,40 +904,21 @@ export default function ReportsView({
                       <span className="text-body-sm text-text-secondary">Revenue</span>
                       <span className="text-body-sm font-semibold text-green-700">{formatCurrency(totalRevenue)}</span>
                     </div>
-                    {/* Breakdown when there's more than one revenue
-                        stream to call out — keeps the single-source
-                        case clean. */}
+                    {/* Breakdown: Services vs Sales. "Sales" is the
+                        combined non-service revenue — retail sales +
+                        gift card sales. Only shown when there's any
+                        non-service revenue in the window, so a salon
+                        that only does appointments stays clean. */}
                     {(retailSales.count > 0 || totalGiftCardRevenue > 0) && (
                       <div className="mt-1.5 space-y-1">
                         <div className="flex items-center justify-between pl-3">
                           <span className="text-caption text-text-tertiary">Services</span>
                           <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalServicesRevenue)}</span>
                         </div>
-                        {retailSales.count > 0 && (
-                          <div className="flex items-center justify-between pl-3">
-                            <span className="text-caption text-text-tertiary">Retail</span>
-                            <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue)}</span>
-                          </div>
-                        )}
-                        {totalGiftCardRevenue > 0 && (
-                          <div className="flex items-center justify-between pl-3">
-                            <span className="text-caption text-text-tertiary">
-                              Gift card sales
-                            </span>
-                            <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalGiftCardRevenue)}</span>
-                          </div>
-                        )}
-                        {/* Audit line — informational. Tells the owner
-                            how much card balance was applied to services
-                            in this window, so they can square the till.
-                            Not part of revenue (it was counted at sale). */}
-                        {giftCards.redeemedTotal > 0 && (
-                          <div className="flex items-center justify-between pl-3 pt-0.5">
-                            <span className="text-caption text-text-tertiary/70 italic">
-                              (gift card balance applied to services: {formatCurrency(giftCards.redeemedTotal)})
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex items-center justify-between pl-3">
+                          <span className="text-caption text-text-tertiary">Sales</span>
+                          <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue + totalGiftCardRevenue)}</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -952,20 +933,6 @@ export default function ReportsView({
                     </span>
                   </div>
                 </div>
-                {/* Gift card liability — not a revenue/profit number, but
-                    the owner needs to know how much they owe in unredeemed
-                    gift cards. Shown as a quiet footnote-style line when
-                    nonzero. Snapshot value, not date-windowed. */}
-                {giftCards.outstandingLiability > 0 && (
-                  <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-                    <span className="text-caption text-text-tertiary">
-                      Outstanding gift card balance
-                    </span>
-                    <span className="text-caption font-semibold tabular-nums text-text-tertiary">
-                      {formatCurrency(giftCards.outstandingLiability)}
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="rounded-2xl bg-white ring-1 ring-border">
