@@ -211,6 +211,11 @@ export async function sellGiftCard(payload: SellPayload) {
     const { data: card, error: insertErr } = await supabase
       .from("gift_cards")
       .insert({
+        // Belt-and-suspenders: the DB DEFAULT is current_user_salon_id()
+        // but we set it explicitly here too. If a future schema change
+        // drops the default by mistake, this keeps inserts working
+        // (the RLS WITH CHECK clause is what actually enforces tenancy).
+        salon_id: profile.salon_id,
         code,
         initial_amount: payload.amount,
         balance: payload.amount,
@@ -233,10 +238,12 @@ export async function sellGiftCard(payload: SellPayload) {
       return { error: insertErr.message };
     }
 
-    // Log the sale transaction for audit.
+    // Log the sale transaction for audit. Also THE source-of-truth
+    // for the Reports gift card sales revenue line.
     const { error: txErr } = await supabase
       .from("gift_card_transactions")
       .insert({
+        salon_id: profile.salon_id,
         gift_card_id: card.id,
         type: "sale",
         amount: payload.amount,
@@ -284,6 +291,7 @@ export async function voidGiftCard(id: string, reason: string | null) {
   const { error: txErr } = await supabase
     .from("gift_card_transactions")
     .insert({
+      salon_id: gate.profile.salon_id,
       gift_card_id: id,
       type: "void",
       amount: card.balance, // remaining balance at void time, for audit

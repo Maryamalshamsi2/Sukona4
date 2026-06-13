@@ -36,7 +36,15 @@
 
 CREATE TABLE IF NOT EXISTS gift_cards (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  salon_id        uuid NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
+  -- DEFAULT here matters: migration-014 set up tenant-scoping defaults
+  -- via a loop over the tables that existed at the time, so tables
+  -- created in later migrations don't auto-inherit it. Without this
+  -- default, INSERTs that don't set salon_id explicitly are NULL'd
+  -- and RLS rejects them ("new row violates row-level security
+  -- policy"). Set the default on the column directly to match how
+  -- migration-014 wires it up for everything else.
+  salon_id        uuid NOT NULL DEFAULT current_user_salon_id()
+                    REFERENCES salons(id) ON DELETE CASCADE,
   code            text NOT NULL UNIQUE,
   initial_amount  numeric(10, 2) NOT NULL CHECK (initial_amount > 0),
   balance         numeric(10, 2) NOT NULL CHECK (balance >= 0),
@@ -58,7 +66,9 @@ CREATE TABLE IF NOT EXISTS gift_cards (
 
 CREATE TABLE IF NOT EXISTS gift_card_transactions (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  salon_id        uuid NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
+  -- Same default as gift_cards above — see that comment for why.
+  salon_id        uuid NOT NULL DEFAULT current_user_salon_id()
+                    REFERENCES salons(id) ON DELETE CASCADE,
   gift_card_id    uuid NOT NULL REFERENCES gift_cards(id) ON DELETE CASCADE,
   type            text NOT NULL
                     CHECK (type IN ('sale', 'redemption', 'void', 'adjust')),
@@ -256,6 +266,18 @@ $$;
 -- PUBLIC for new functions — revoke that and grant to authenticated.)
 REVOKE ALL ON FUNCTION redeem_gift_card(text, numeric, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION redeem_gift_card(text, numeric, uuid, text) TO authenticated;
+
+-- ============================================
+-- Idempotent patch: salon_id DEFAULT
+-- ============================================
+-- If you ran an earlier draft of this migration that omitted the
+-- DEFAULT clauses above, the CREATE TABLE IF NOT EXISTS calls
+-- won't re-apply them. These ALTERs are safe to run repeatedly and
+-- bring the existing tables up to spec.
+ALTER TABLE gift_cards
+  ALTER COLUMN salon_id SET DEFAULT current_user_salon_id();
+ALTER TABLE gift_card_transactions
+  ALTER COLUMN salon_id SET DEFAULT current_user_salon_id();
 
 -- ============================================
 -- Widen payments.method to accept 'gift_card'
