@@ -10,6 +10,7 @@ import {
   listGiftCards,
   sellGiftCard,
   voidGiftCard,
+  deleteGiftCard,
   getGiftCardDetail,
   type GiftCardStatus,
 } from "./actions";
@@ -563,10 +564,17 @@ function GiftCardDetailModal({
   const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
   const [voiding, setVoiding] = useState(false);
 
+  // Delete is a hard-remove path — separate state from void so we
+  // don't confuse the two confirm dialogs. Only one can be open at a
+  // time (toggling one closes the other).
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     if (!open) {
       setVoidReason("");
       setVoidConfirmOpen(false);
+      setDeleteConfirmOpen(false);
     }
   }, [open]);
 
@@ -581,6 +589,21 @@ function GiftCardDetailModal({
       onError(res.error);
       return;
     }
+    onVoided();
+  }
+
+  async function handleDelete() {
+    if (!card) return;
+    setDeleting(true);
+    const res = await deleteGiftCard(card.id);
+    setDeleting(false);
+    if (res.error) {
+      onError(res.error);
+      return;
+    }
+    // Same callback as void — the list reloads. We don't need a
+    // separate onDeleted hook; the modal closes and the parent
+    // refetches with the current filter.
     onVoided();
   }
 
@@ -673,15 +696,28 @@ function GiftCardDetailModal({
           )}
         </div>
 
-        {/* Void action — only for active cards */}
-        {card.status === "active" && !voidConfirmOpen && (
-          <div className="flex justify-end pt-2">
+        {/* Action buttons. Void is available only on active cards
+            (no point voiding something already redeemed/voided).
+            Delete is owner/admin-only via the action gate and works
+            on any status — useful for cleaning up test data or
+            removing a card the salon issued by mistake. */}
+        {!voidConfirmOpen && !deleteConfirmOpen && (
+          <div className="flex justify-end gap-2 pt-2">
+            {card.status === "active" && (
+              <button
+                type="button"
+                onClick={() => setVoidConfirmOpen(true)}
+                className="rounded-xl bg-white px-4 py-2.5 text-body-sm font-semibold text-error-700 ring-1 ring-error-200 hover:bg-error-50"
+              >
+                Void card
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setVoidConfirmOpen(true)}
+              onClick={() => setDeleteConfirmOpen(true)}
               className="rounded-xl bg-white px-4 py-2.5 text-body-sm font-semibold text-error-700 ring-1 ring-error-200 hover:bg-error-50"
             >
-              Void card
+              Delete card
             </button>
           </div>
         )}
@@ -719,6 +755,53 @@ function GiftCardDetailModal({
                 className="rounded-xl bg-error-700 px-4 py-2 text-body-sm font-semibold text-white hover:bg-error-800 disabled:opacity-50"
               >
                 {voiding ? "Voiding…" : "Void"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deleteConfirmOpen && (
+          <div className="rounded-xl bg-error-50 ring-1 ring-error-200 px-4 py-3 space-y-3">
+            <p className="text-body-sm font-semibold text-error-700">
+              Delete this card?
+            </p>
+            <p className="text-body-sm text-text-secondary">
+              The card and its full transaction history will be removed.
+              {card.status === "active" && card.balance > 0 && (
+                <>
+                  {" "}
+                  The remaining{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatCurrency(card.balance, currency)}
+                  </span>{" "}
+                  balance is gone.
+                </>
+              )}
+              {card.status !== "void" && (
+                <>
+                  {" "}
+                  Revenue from the original sale will be removed from
+                  Reports for that period.
+                </>
+              )}{" "}
+              This can&apos;t be undone.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOpen(false)}
+                disabled={deleting}
+                className="rounded-xl bg-white px-4 py-2 text-body-sm font-semibold text-text-primary ring-1 ring-border hover:bg-surface-hover disabled:opacity-50"
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-xl bg-error-700 px-4 py-2 text-body-sm font-semibold text-white hover:bg-error-800 disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>

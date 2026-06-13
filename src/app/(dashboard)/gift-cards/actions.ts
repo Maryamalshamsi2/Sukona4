@@ -306,6 +306,36 @@ export async function voidGiftCard(id: string, reason: string | null) {
 }
 
 // ============================================================
+// Delete (hard — owner/admin only)
+// ============================================================
+
+/** Hard-delete a gift card. Owner/admin only. The CASCADE on
+ *  gift_card_transactions.gift_card_id wipes the card's tx history
+ *  in the same operation.
+ *
+ *  Caveat the caller should already have warned about: this DOES
+ *  retroactively change Reports revenue for the period the card was
+ *  sold in, because the sale transaction is removed. Any payments
+ *  rows that reference this card via the note text (e.g. "Gift card ·
+ *  ABCD-EF23-XYZ9") survive — the note becomes a dangling reference
+ *  but the appointment payment record stays intact. */
+export async function deleteGiftCard(id: string) {
+  const gate = await requireOwnerOrAdmin();
+  if ("error" in gate) return { error: gate.error };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("gift_cards")
+    .delete()
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/gift-cards");
+  revalidatePath("/reports");
+  return { success: true };
+}
+
+// ============================================================
 // Redeem (via RPC)
 // ============================================================
 

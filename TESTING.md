@@ -188,6 +188,23 @@ new revenue.
 - [ ] Reports for the sale month → revenue is UNCHANGED (no rollback —
       the salon kept the cash)
 
+### H7b — Delete (owner/admin only)
+
+- [ ] As **owner/admin** on any card (Active, Redeemed, or Voided):
+      detail panel shows a "Delete card" button alongside Void
+- [ ] Click Delete → confirm dialog warns about removing tx history
+      (and, for non-void cards, removing the sale revenue from Reports
+      for that period)
+- [ ] Confirm → card disappears from the list AND its `gift_card_transactions`
+      rows are gone (verify in Supabase if curious)
+- [ ] Reports for the period the card was sold → revenue drops by the
+      original sale amount (expected — hard delete is retroactive)
+- [ ] Any `payments` rows from a previously-redeemed card still exist
+      (they reference the code in their note text but no longer match
+      a real card)
+- [ ] As **staff**: even if you reach the detail panel by some route,
+      delete attempts hit the owner/admin gate and return "Not authorized"
+
 ### H8 — Reports breakdown matches sale-time recognition
 
 Set the period filter to a month where you've sold AND redeemed:
