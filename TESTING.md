@@ -109,6 +109,107 @@ Test these on an actual phone (or Chrome devtools mobile emulator at iPhone 14 s
       with NULL staff_id (migration-041)
 - [ ] Sign in from two tabs simultaneously — no weird state
 
+## H — Gift cards (migration-044)
+
+**Setup**: run `supabase/migration-044-gift-cards.sql` in the Supabase
+SQL Editor first. Without it, `/gift-cards` will load but every action
+will error against missing tables.
+
+Revenue model is **sale-time** — the cash is booked the day the card
+is sold, not the day it's redeemed. Redemption days should NOT show
+new revenue.
+
+### H1 — Sell a card (run as owner)
+
+- [ ] `/gift-cards` loads, shows empty state "No active gift cards"
+- [ ] Tap "+" → sell modal opens
+- [ ] Enter amount 100, leave method=cash, no buyer/expiry → submit
+- [ ] Success screen shows a 12-char dashed code (e.g. `ABCD-EF23-XYZ9`)
+- [ ] Code "Copy" button works (paste anywhere to verify)
+- [ ] Press Done → list now shows 1 active card with that code
+
+### H2 — Code formatting + lookup invariants
+
+- [ ] On the sell-modal success screen the code displays as `XXXX-XXXX-XXXX`
+- [ ] In MarkPaidModal: type the code lowercase, no dashes — it
+      auto-formats with dashes as you type
+- [ ] Paste the code with spaces/dashes/mixed case — same auto-format
+- [ ] Enter a non-existent code → red error "Gift card not found" after
+      the 12th character is entered (auto-lookup)
+
+### H3 — Permission gates (data leaks here are the worst)
+
+- [ ] As **staff**: `/gift-cards` is NOT in sidebar OR mobile More sheet
+- [ ] As **staff**: typing `/gift-cards` directly → redirects to home
+- [ ] As **staff**: MarkPaidModal "Gift card" method IS available
+- [ ] As **staff**: lookup of a valid code in your salon works
+- [ ] **Cross-salon**: sign in to a DIFFERENT salon, enter a code from
+      the first salon's card → "Gift card not found" (no cross-tenant leak)
+
+### H4 — Full redemption against an appointment
+
+- [ ] Sell a $200 card
+- [ ] Book/find a $150 appointment → Mark as Paid → pick "Gift card"
+- [ ] Paste the code → balance preview shows "$200"
+- [ ] Amount stays $150, no remainder picker appears → submit
+- [ ] Appointment flips to "paid"
+- [ ] `/gift-cards` → that card now shows balance $50, status Active
+- [ ] Detail panel "History" shows: sale $200, redemption $150
+
+### H5 — Partial redemption (split pay)
+
+- [ ] Sell a $50 card
+- [ ] On a $200 appointment, Mark as Paid → Gift card → paste code
+- [ ] Yellow box appears: "Card covers $50. Remainder of $150 needs
+      another method." → pick Cash → submit
+- [ ] Appointment status = paid
+- [ ] `/payments` lists TWO rows for this appointment: $50 gift_card
+      and $150 cash, both with the same client
+- [ ] Card status flips to "Redeemed" (balance hit 0)
+
+### H6 — Double-spend race (one card, two browsers)
+
+- [ ] Sell a $100 card
+- [ ] Open two browser windows, both on the same appointment's Mark as
+      Paid modal, both pasting the same code
+- [ ] Submit both within ~1 second of each other
+- [ ] One succeeds, the other errors with "Insufficient balance" or
+      "Gift card is redeemed" (the SECURITY DEFINER row lock should
+      prevent both from going through)
+
+### H7 — Void
+
+- [ ] Sell a $300 card
+- [ ] Open the detail panel → "Void card"
+- [ ] Confirm → status flips to "Voided", balance still shows $300 (for
+      audit) but the card can no longer be redeemed
+- [ ] Try to pay an appointment with the voided code → red error "This
+      card is voided and can't be used"
+- [ ] Reports for the sale month → revenue is UNCHANGED (no rollback —
+      the salon kept the cash)
+
+### H8 — Reports breakdown matches sale-time recognition
+
+Set the period filter to a month where you've sold AND redeemed:
+
+- [ ] Revenue line includes the SOLD total (not redemption)
+- [ ] "Services" sub-line does NOT include gift_card-method payments
+- [ ] "Gift card sales" sub-line appears with the right total
+- [ ] Italic audit line "(gift card balance applied to services: $X)"
+      shows when there were redemptions in the window
+- [ ] Footer "Outstanding gift card balance" matches the sum of active
+      card balances visible on `/gift-cards`
+- [ ] Payments tab footer: "Gift card (balance applied)" row appears
+      with the sum of gift_card-method payment rows
+
+### H9 — Mobile
+
+- [ ] `/gift-cards` page doesn't horizontally scroll
+- [ ] Sell modal works (amount, buyer picker, expiry input all reachable)
+- [ ] Detail panel scrolls without trapping (long history)
+- [ ] MarkPaidModal Gift card section reachable above the safe-area on
+      smaller phones
+
 ---
 
 ## How to test the email cron without waiting
