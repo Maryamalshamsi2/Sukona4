@@ -448,9 +448,11 @@ export default function HomeView({
                       isStaff && isMine ? "border-l-[3px] border-l-primary-500" : ""
                     } ${isPaid ? "opacity-35" : ""}`}
                   >
-                    {/* Time range */}
-                    <div className="w-[100px] shrink-0 sm:w-[110px]">
-                      <p className="text-body-sm font-semibold text-text-primary">
+                    {/* Time range. min-w (not fixed w) + whitespace-nowrap
+                        keeps "12 PM – 12:45 PM" on one line on mobile —
+                        the fixed w-[100px] used to wrap longer ranges. */}
+                    <div className="min-w-[100px] shrink-0 sm:min-w-[110px]">
+                      <p className="whitespace-nowrap text-body-sm font-semibold text-text-primary">
                         {formatTime12Short(appt.time)} – {formatTime12Short(endTime)}
                       </p>
                       <p className="mt-0.5 text-caption text-text-tertiary">{formatDuration(duration)}</p>
