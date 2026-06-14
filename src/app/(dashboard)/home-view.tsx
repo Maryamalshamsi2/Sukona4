@@ -448,11 +448,13 @@ export default function HomeView({
                       isStaff && isMine ? "border-l-[3px] border-l-primary-500" : ""
                     } ${isPaid ? "opacity-35" : ""}`}
                   >
-                    {/* Time range. min-w (not fixed w) + whitespace-nowrap
-                        keeps "12 PM – 12:45 PM" on one line on mobile —
-                        the fixed w-[100px] used to wrap longer ranges. */}
-                    <div className="min-w-[100px] shrink-0 sm:min-w-[110px]">
-                      <p className="whitespace-nowrap text-body-sm font-semibold text-text-primary">
+                    {/* Time range. Fixed width sized for the worst-case
+                        range ("10:15 AM – 11:30 PM" ≈ 19 chars) so client
+                        name + location below align across every row.
+                        tabular-nums keeps digit widths consistent so the
+                        column doesn't visually shift between rows. */}
+                    <div className="w-[130px] shrink-0 sm:w-[140px]">
+                      <p className="whitespace-nowrap text-body-sm font-semibold tabular-nums text-text-primary">
                         {formatTime12Short(appt.time)} – {formatTime12Short(endTime)}
                       </p>
                       <p className="mt-0.5 text-caption text-text-tertiary">{formatDuration(duration)}</p>
