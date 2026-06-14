@@ -67,7 +67,7 @@ export default function Modal({
       className={`modal-root fixed inset-0 m-0 h-full w-full max-w-none max-h-none bg-white p-0 shadow-xl backdrop:bg-black/40 backdrop:backdrop-blur-sm ${desktopClasses}`}
     >
       <div
-        className={`flex h-full flex-col ${
+        className={`flex h-full flex-col overflow-x-hidden ${
           variant === "drawer" ? "sm:h-full sm:max-h-none" : "sm:h-auto sm:max-h-[90vh]"
         }`}
       >
@@ -88,8 +88,13 @@ export default function Modal({
             </svg>
           </button>
         </div>
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
+        {/* Scrollable body. overflow-x-hidden defends against
+            children that render wider than the viewport — most
+            commonly iOS Safari's native <input type="date">/"time"
+            which have a larger intrinsic content width than expected.
+            Without this, the user could swipe the whole modal
+            sideways on mobile. */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">{children}</div>
       </div>
     </dialog>
   );

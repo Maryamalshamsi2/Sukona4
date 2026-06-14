@@ -1447,7 +1447,11 @@ export function AppointmentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+    // The Modal wrapper already provides the scrollable body (and
+    // overflow-x-hidden). Don't add nested overflow here — two
+    // scroll containers stacked on mobile makes touch-scrolling
+    // unpredictable and contributes to horizontal-swipe drift.
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="block text-body-sm font-semibold text-text-primary">Client *</label>
@@ -1523,13 +1527,16 @@ export function AppointmentForm({
         )}
       </div>
 
+      {/* min-w-0 on the grid items lets them shrink below the input's
+          intrinsic min-content width — without it, iOS Safari's native
+          date/time inputs push the grid wider than the viewport. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
+        <div className="min-w-0">
           <label className="block text-body-sm font-semibold text-text-primary">Date *</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
             className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-body-sm font-semibold text-text-primary">Start Time *</label>
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required
             className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
