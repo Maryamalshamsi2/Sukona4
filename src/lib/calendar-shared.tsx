@@ -1527,19 +1527,24 @@ export function AppointmentForm({
         )}
       </div>
 
-      {/* min-w-0 on the grid items lets them shrink below the input's
-          intrinsic min-content width — without it, iOS Safari's native
-          date/time inputs push the grid wider than the viewport. */}
+      {/* min-w-0 + appearance-none keep the inputs the same width as
+          the <select> fields above/below on mobile. Without
+          appearance-none, iOS Safari adds its own native chrome to
+          date/time inputs (calendar icon indicator + extra padding)
+          that pushes the visible box wider than the Tailwind w-full
+          container. appearance-none strips that and the picker still
+          opens on tap. box-border is explicit defense against any
+          stray content-box override. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="min-w-0">
           <label className="block text-body-sm font-semibold text-text-primary">Date *</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            className="mt-1 block w-full appearance-none box-border rounded-xl border-[1.5px] border-neutral-200 bg-white px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
         <div className="min-w-0">
           <label className="block text-body-sm font-semibold text-text-primary">Start Time *</label>
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required
-            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            className="mt-1 block w-full appearance-none box-border rounded-xl border-[1.5px] border-neutral-200 bg-white px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100" />
         </div>
       </div>
 
