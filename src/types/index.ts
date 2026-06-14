@@ -6,7 +6,8 @@ export type AppointmentStatus =
   | "arrived"
   | "completed"
   | "paid"
-  | "cancelled";
+  | "cancelled"
+  | "no_show";
 
 export type PaymentMethod = "cash" | "card" | "other" | "gift_card";
 
