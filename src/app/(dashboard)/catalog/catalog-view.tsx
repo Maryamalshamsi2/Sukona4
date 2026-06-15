@@ -151,9 +151,19 @@ export default function CatalogView({
   const [bundles, setBundles] = useState<ServiceBundle[]>(initialBundles);
   const undo = useUndo();
 
-  // "+ Add" dropdown
+  // "+ Add" dropdown — open state is shared between the desktop
+  // dropdown (top-right, hidden on mobile) and the mobile FAB
+  // (bottom-right, hidden on desktop). Both surfaces need their
+  // OWN ref so the outside-click handler doesn't treat the mobile
+  // surface as "outside" when the desktop one is the one in DOM
+  // it sees. Without the mobile ref, tapping the mobile action
+  // buttons triggers the outside-click handler (target not in
+  // desktop ref) → setAddDropdownOpen(false) → React unmounts
+  // the mobile buttons before the onClick fires → modal never
+  // opens.
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
   const addDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileFabRef = useRef<HTMLDivElement>(null);
 
   // Which category tab is selected ("all" or a category id)
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -186,10 +196,17 @@ export default function CatalogView({
     }
   }
 
-  // Close add dropdown on outside click
+  // Close add dropdown on outside click. Checks BOTH refs (desktop
+  // dropdown + mobile FAB) because the surfaces live in different
+  // parts of the DOM. If we only checked the desktop ref, tapping
+  // a mobile action button would close the dropdown before its
+  // onClick fired, and "nothing would happen."
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      const insideDesktop = addDropdownRef.current?.contains(t);
+      const insideMobile = mobileFabRef.current?.contains(t);
+      if (!insideDesktop && !insideMobile) {
         setAddDropdownOpen(false);
       }
     }
@@ -1050,9 +1067,13 @@ export default function CatalogView({
       {/* ==== MOBILE FAB ==== */}
       {/* Same three actions as the desktop dropdown (Service / Bundle /
           Category), expanded above the FAB. The "+" rotates 45° when
-          open to make a "×" — pure CSS, no extra icon. */}
+          open to make a "×" — pure CSS, no extra icon.
+          The mobileFabRef wraps the whole FAB so the outside-click
+          handler treats taps INSIDE it as "still inside" — otherwise
+          the dropdown closes between mousedown and click, and the
+          action buttons' onClick never fires. */}
       {!isStaff && (
-        <div className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
+        <div ref={mobileFabRef} className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
           {addDropdownOpen && (
             <>
               {/* Backdrop sits BELOW the action buttons. Without an

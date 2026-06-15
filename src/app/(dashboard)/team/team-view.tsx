@@ -115,12 +115,21 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
   const [newDayOffDate, setNewDayOffDate] = useState("");
   const [newDayOffReason, setNewDayOffReason] = useState("");
 
-  // "+" add dropdown
+  // "+" add dropdown. Shared open state between the desktop button
+  // (top-right) and the mobile FAB (bottom-right). The outside-click
+  // handler must consider both refs — otherwise tapping a mobile
+  // FAB action closes the dropdown between mousedown and click and
+  // the action's onClick never fires (same bug previously hit on
+  // /catalog).
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
   const addDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileFabRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      const insideDesktop = addDropdownRef.current?.contains(t);
+      const insideMobile = mobileFabRef.current?.contains(t);
+      if (!insideDesktop && !insideMobile) {
         setAddDropdownOpen(false);
       }
     }
@@ -1019,8 +1028,11 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
 
       {/* ==== MOBILE FAB ==== */}
       {/* Same two actions as the desktop dropdown, expanded above the
-          FAB. The "+" rotates 45° when open to read as a close button. */}
-      <div className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
+          FAB. The "+" rotates 45° when open to read as a close button.
+          mobileFabRef makes the outside-click handler treat taps
+          INSIDE the FAB as "still inside" so action onClicks fire
+          before the dropdown unmounts. */}
+      <div ref={mobileFabRef} className="fixed bottom-[calc(100px+env(safe-area-inset-bottom))] right-6 z-40 sm:hidden">
         {addDropdownOpen && (
           <>
             <div className="fixed inset-0" onClick={() => setAddDropdownOpen(false)} />
