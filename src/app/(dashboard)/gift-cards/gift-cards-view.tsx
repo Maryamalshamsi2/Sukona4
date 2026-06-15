@@ -14,19 +14,26 @@ import {
   getGiftCardDetail,
   type GiftCardStatus,
 } from "./actions";
+import PackagesTab, {
+  type PackageRow,
+  type ServiceOption,
+} from "./packages-tab";
 
 /**
- * /gift-cards — sell, list, inspect, void gift cards. Owner+admin only.
+ * /gift-cards — top-level tabbed wrapper around two prepaid surfaces:
  *
- * Layout:
- *   - Title + filter funnel (status) + "+" → sell modal
- *   - Default shows every card; filter dropdown narrows by status
- *     (Active / Expired / Redeemed / Voided / All)
- *   - List of cards (code, customer, balance, status, sold date)
- *   - Tap a card → detail modal with full tx history + Void / Delete
+ *   - Gift cards tab (this file's GiftCardsTab function below):
+ *     sell / list / inspect / void / delete gift cards. Owner+admin.
+ *   - Packages tab (./packages-tab.tsx): multi-session service
+ *     packages. Owner+admin. Different data model (sessions counted
+ *     against specific services) but the same management actions.
  *
- * Redemption does NOT happen here — it happens in MarkPaidModal at
- * the appointment payment screen.
+ * Each tab is self-contained — its own filter funnel + "+" button
+ * + list + modals. The wrapper just owns the tab state and renders
+ * one or the other. Tabs serve as the page title (no separate h1).
+ *
+ * Redemption — for either gift cards or package sessions — happens
+ * in MarkPaidModal at the appointment payment screen, NOT here.
  */
 
 export interface GiftCardRow {
@@ -104,7 +111,87 @@ function formatDateTime(iso: string) {
   });
 }
 
+// ============================================================
+// Top-level tabbed wrapper
+// ============================================================
+
+type ActiveTab = "gift-cards" | "packages";
+
 export default function GiftCardsView({
+  initialCards,
+  initialClients,
+  initialPackages,
+  initialServices,
+}: {
+  initialCards: GiftCardRow[];
+  initialClients: ClientOption[];
+  initialPackages: PackageRow[];
+  initialServices: ServiceOption[];
+}) {
+  const [tab, setTab] = useState<ActiveTab>("gift-cards");
+
+  return (
+    <div>
+      {/* Tab strip — acts as the page title. Two underlined tabs
+          across the top; the active one has a black underline + bold
+          text. Matches the segmented-tab style used on /reports. */}
+      <div className="-mb-px flex gap-6 border-b border-border">
+        <TabButton active={tab === "gift-cards"} onClick={() => setTab("gift-cards")}>
+          Gift cards
+        </TabButton>
+        <TabButton active={tab === "packages"} onClick={() => setTab("packages")}>
+          Packages
+        </TabButton>
+      </div>
+
+      {/* Tab content */}
+      <div className="mt-4">
+        {tab === "gift-cards" ? (
+          <GiftCardsTab
+            initialCards={initialCards}
+            initialClients={initialClients}
+          />
+        ) : (
+          <PackagesTab
+            initialPackages={initialPackages}
+            initialClients={initialClients}
+            initialServices={initialServices}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative -mb-px border-b-2 pb-3 pt-2 text-title-section font-semibold tracking-tight transition ${
+        active
+          ? "border-text-primary text-text-primary"
+          : "border-transparent text-text-tertiary hover:text-text-secondary"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ============================================================
+// Gift cards tab (sell / list / inspect / void / delete)
+// ============================================================
+
+function GiftCardsTab({
   initialCards,
   initialClients,
 }: {
@@ -187,12 +274,9 @@ export default function GiftCardsView({
 
   return (
     <div>
-      {/* ---- Header — title + filter funnel + "+" ---- */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-title-page font-bold tracking-tight text-text-primary">
-          Gift cards
-        </h1>
-        <div className="flex items-center gap-1 shrink-0">
+      {/* ---- Header — filter funnel + "+" (tab strip in parent
+           wrapper acts as the title) ---- */}
+      <div className="flex items-center justify-end gap-1">
           {/* Status filter funnel — same icon + dropdown shape as
               /expenses for cross-page consistency. Icon highlights
               when a non-default ("all") filter is set. */}
@@ -253,7 +337,6 @@ export default function GiftCardsView({
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
           </button>
-        </div>
       </div>
 
       {/* ---- List of cards ---- */}
