@@ -97,7 +97,7 @@ export interface AppointmentData {
   payments?: Array<{
     id: string;
     amount: number;
-    method: "cash" | "card" | "other" | "gift_card";
+    method: "cash" | "card" | "other" | "gift_card" | "package";
     note: string | null;
     /** Migration-026 array of attachment URLs. New writes go here. */
     receipt_urls?: string[] | null;

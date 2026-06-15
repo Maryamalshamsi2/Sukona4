@@ -9,6 +9,7 @@ import {
 } from "./actions";
 import { getReportRetailSales } from "../sales/actions";
 import { getReportGiftCardSummary } from "../gift-cards/actions";
+import { getReportPackageSummary } from "../gift-cards/packages-actions";
 import { deleteAppointment } from "../calendar/actions";
 import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-modal";
 import type { PaymentMethod } from "@/types";
@@ -219,6 +220,13 @@ export interface ReportsViewProps {
     soldTotal: number;
     outstandingLiability: number;
   };
+  /** Package summary (migration-046). Same shape rationale as gift
+   *  cards — sale-time revenue recognition. */
+  initialPackages: {
+    soldTotal: number;        // revenue from package sales in window
+    sessionsApplied: number;  // count of redemptions in window (audit)
+    outstandingSessions: number; // snapshot of remaining sessions
+  };
 }
 
 export default function ReportsView({
@@ -229,6 +237,7 @@ export default function ReportsView({
   initialTeams,
   initialRetailSales,
   initialGiftCards,
+  initialPackages,
 }: ReportsViewProps) {
   const currency = useCurrency();
   const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
@@ -292,6 +301,7 @@ export default function ReportsView({
   const [reviews, setReviews] = useState<ReportReview[]>(initialReviews);
   const [retailSales, setRetailSales] = useState(initialRetailSales);
   const [giftCards, setGiftCards] = useState(initialGiftCards);
+  const [packages, setPackages] = useState(initialPackages);
 
   // Team filter — null = "All teams" (current behavior). Only shown
   // when the salon has 2+ teams. Expenses are NOT team-scoped (they're
@@ -311,7 +321,7 @@ export default function ReportsView({
     setLoading(true);
     try {
       const { from, to } = getRange();
-      const [appts, pays, exps, revs, retail, gift] = await Promise.all([
+      const [appts, pays, exps, revs, retail, gift, pkg] = await Promise.all([
         getReportAppointments(from, to, teamFilter),
         getReportPayments(from, to, teamFilter),
         getReportExpenses(from, to), // intentionally not team-scoped
@@ -319,9 +329,10 @@ export default function ReportsView({
         // Retail sales aren't team-scoped — they're salon-wide
         // walk-in revenue, not staff-attributed services.
         getReportRetailSales(from, to),
-        // Gift cards — redemption revenue + outstanding liability.
-        // Also salon-wide (not team-scoped).
+        // Gift cards — sale-time revenue. Salon-wide.
         getReportGiftCardSummary(from, to),
+        // Packages — sale-time revenue. Salon-wide.
+        getReportPackageSummary(from, to),
       ]);
       setAppointments(appts as unknown as ReportAppointment[]);
       setPayments(pays as unknown as ReportPayment[]);
@@ -329,6 +340,7 @@ export default function ReportsView({
       setReviews(revs as unknown as ReportReview[]);
       setRetailSales(retail);
       setGiftCards(gift);
+      setPackages(pkg);
     } catch (err) {
       // Don't surface a toast — the page still has its server-seeded
       // initial data, and the user may not be looking. But DO log
@@ -368,24 +380,28 @@ export default function ReportsView({
 
   // ---- Computed stats ----
 
-  // Services revenue (appointment payments) — EXCLUDING gift_card
-  // payments. We recognize gift card revenue at SALE time (when the
-  // cash hits the till), not at redemption. The gift_card payment
-  // row on a redemption-day appointment is just balance being applied
-  // against a service we already booked revenue for; counting it
-  // again here would double-book the same money.
+  // Services revenue (appointment payments) — EXCLUDING gift_card AND
+  // package payments. Both are recognized at SALE time, not at
+  // redemption. Their payment rows on redemption-day appointments are
+  // just balance / sessions being applied against services we already
+  // booked revenue for; counting them again here would double-book
+  // the same money.
   const totalServicesRevenue = payments
-    .filter((p) => p.method !== "gift_card")
+    .filter((p) => p.method !== "gift_card" && p.method !== "package")
     .reduce((s, p) => s + p.amount, 0);
   // Retail revenue (migration-043) — sum of standalone sales in range.
   const totalRetailRevenue = retailSales.total;
-  // Gift card revenue — total cash collected from selling cards in
-  // this window. Recognized at sale, not at redemption. Voided cards
-  // aren't subtracted (no refund movement in v1; salon keeps the cash).
+  // Gift card + package revenue — total cash collected from selling
+  // each in this window. Recognized at sale, not redemption. Voids
+  // don't subtract (no refund movement in v1; salon keeps the cash).
   const totalGiftCardRevenue = giftCards.soldTotal;
+  const totalPackageRevenue = packages.soldTotal;
   // Combined revenue for the headline number + profit math.
   const totalRevenue =
-    totalServicesRevenue + totalRetailRevenue + totalGiftCardRevenue;
+    totalServicesRevenue +
+    totalRetailRevenue +
+    totalGiftCardRevenue +
+    totalPackageRevenue;
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const profit = totalRevenue - totalExpenses;
 
@@ -396,10 +412,12 @@ export default function ReportsView({
   const cashPayments = payments.filter((p) => p.method === "cash");
   const cardPayments = payments.filter((p) => p.method === "card");
   const giftCardPayments = payments.filter((p) => p.method === "gift_card");
+  const packagePayments = payments.filter((p) => p.method === "package");
   const otherPayments = payments.filter((p) => p.method === "other");
   const cashTotal = cashPayments.reduce((s, p) => s + p.amount, 0);
   const cardTotal = cardPayments.reduce((s, p) => s + p.amount, 0);
   const giftCardPayTotal = giftCardPayments.reduce((s, p) => s + p.amount, 0);
+  const packagePayTotal = packagePayments.reduce((s, p) => s + p.amount, 0);
   const otherPayTotal = otherPayments.reduce((s, p) => s + p.amount, 0);
 
   // Expense breakdown by type
@@ -745,7 +763,9 @@ export default function ReportsView({
                                           ? "bg-blue-50 text-blue-700"
                                           : pay.method === "gift_card"
                                             ? "bg-[#F4F0FF] text-[#5B36CC]"
-                                            : "bg-[#FFF8F0] text-[#CC7700]"
+                                            : pay.method === "package"
+                                              ? "bg-[#EAF6FF] text-[#0A5BA8]"
+                                              : "bg-[#FFF8F0] text-[#CC7700]"
                                     }`}>
                                       {pay.method === "cash"
                                         ? "Cash"
@@ -753,7 +773,9 @@ export default function ReportsView({
                                           ? "Card"
                                           : pay.method === "gift_card"
                                             ? "Gift card"
-                                            : "Other"}
+                                            : pay.method === "package"
+                                              ? "Package"
+                                              : "Other"}
                                     </span>
                                     {(() => {
                                       const urls = attachmentsFor(pay);
@@ -818,7 +840,9 @@ export default function ReportsView({
                                       ? "bg-blue-50 text-blue-700"
                                       : pay.method === "gift_card"
                                         ? "bg-[#F4F0FF] text-[#5B36CC]"
-                                        : "bg-[#FFF8F0] text-[#CC7700]"
+                                        : pay.method === "package"
+                                          ? "bg-[#EAF6FF] text-[#0A5BA8]"
+                                          : "bg-[#FFF8F0] text-[#CC7700]"
                                 }`}>
                                   {pay.method === "cash"
                                     ? "Cash"
@@ -826,7 +850,9 @@ export default function ReportsView({
                                       ? "Card"
                                       : pay.method === "gift_card"
                                         ? "Gift card"
-                                        : "Other"}
+                                        : pay.method === "package"
+                                          ? "Package"
+                                          : "Other"}
                                 </span>
                               </div>
                               {(() => {
@@ -876,6 +902,17 @@ export default function ReportsView({
                           <span className="font-semibold text-text-primary">{formatCurrency(giftCardPayTotal)}</span>
                         </div>
                       )}
+                      {packagePayTotal > 0 && (
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-text-secondary">
+                            Package{" "}
+                            <span className="text-text-tertiary text-caption font-normal">
+                              (sessions applied)
+                            </span>
+                          </span>
+                          <span className="font-semibold text-text-primary">{formatCurrency(packagePayTotal)}</span>
+                        </div>
+                      )}
                       {otherPayTotal > 0 && (
                         <div className="mt-1 flex items-center justify-between">
                           <span className="text-text-secondary">Other</span>
@@ -906,10 +943,13 @@ export default function ReportsView({
                     </div>
                     {/* Breakdown: Services vs Sales. "Sales" is the
                         combined non-service revenue — retail sales +
-                        gift card sales. Only shown when there's any
-                        non-service revenue in the window, so a salon
-                        that only does appointments stays clean. */}
-                    {(retailSales.count > 0 || totalGiftCardRevenue > 0) && (
+                        gift card sales + package sales. Only shown
+                        when there's any non-service revenue in the
+                        window, so an appointments-only salon stays
+                        clean. */}
+                    {(retailSales.count > 0 ||
+                      totalGiftCardRevenue > 0 ||
+                      totalPackageRevenue > 0) && (
                       <div className="mt-1.5 space-y-1">
                         <div className="flex items-center justify-between pl-3">
                           <span className="text-caption text-text-tertiary">Services</span>
@@ -917,7 +957,13 @@ export default function ReportsView({
                         </div>
                         <div className="flex items-center justify-between pl-3">
                           <span className="text-caption text-text-tertiary">Sales</span>
-                          <span className="text-caption tabular-nums text-text-tertiary">{formatCurrency(totalRetailRevenue + totalGiftCardRevenue)}</span>
+                          <span className="text-caption tabular-nums text-text-tertiary">
+                            {formatCurrency(
+                              totalRetailRevenue +
+                                totalGiftCardRevenue +
+                                totalPackageRevenue,
+                            )}
+                          </span>
                         </div>
                       </div>
                     )}

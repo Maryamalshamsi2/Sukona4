@@ -7,7 +7,7 @@ import { formatCurrency as fmtCurrency } from "@/lib/currency";
 export type PaymentRow = {
   id: string;
   amount: number;
-  method: "cash" | "card" | "other" | "gift_card";
+  method: "cash" | "card" | "other" | "gift_card" | "package";
   note: string | null;
   receipt_url: string | null;
   created_at: string;
@@ -35,17 +35,19 @@ function formatTime12(time24: string) {
   return `${hour12}:${m} ${period}`;
 }
 
-function methodLabel(m: "cash" | "card" | "other" | "gift_card") {
+function methodLabel(m: "cash" | "card" | "other" | "gift_card" | "package") {
   if (m === "cash") return "Cash";
   if (m === "card") return "Card";
   if (m === "gift_card") return "Gift card";
+  if (m === "package") return "Package";
   return "Other";
 }
 
-function methodColor(m: "cash" | "card" | "other" | "gift_card") {
+function methodColor(m: "cash" | "card" | "other" | "gift_card" | "package") {
   if (m === "cash") return "bg-[#F0FAF2] text-[#1B8736]";
   if (m === "card") return "bg-[#F0F7FF] text-[#0062CC]";
   if (m === "gift_card") return "bg-[#F4F0FF] text-[#5B36CC]";
+  if (m === "package") return "bg-[#EAF6FF] text-[#0A5BA8]";
   return "bg-[#FFF8F0] text-[#CC7700]";
 }
 

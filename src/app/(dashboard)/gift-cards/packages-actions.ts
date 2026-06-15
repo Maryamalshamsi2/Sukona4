@@ -378,6 +378,144 @@ export async function redeemPackageSession(payload: RedeemPayload) {
 }
 
 // ============================================================
+// MarkPaidModal helper — applicable packages for an appointment
+// ============================================================
+
+/** For MarkPaidModal: returns one "applicable line" per appointment
+ *  service where a matching, active, non-expired package item has
+ *  sessions remaining for the appointment's client.
+ *
+ *  Match is by exact service_id (the owner's choice in scoping).
+ *  Auto-picks the package_item to apply when multiple match — uses
+ *  earliest expiry first, then earliest created package. The staff
+ *  can choose whether to apply each line via a checkbox; they don't
+ *  pick between candidate packages for the same service (kept simple
+ *  for v1 — the common case is one active package per service).
+ *
+ *  Returns an array (possibly empty) so the modal can just check
+ *  length to decide whether to render the section. */
+export async function getAppointmentPackageContext(appointmentId: string) {
+  const gate = await requireAuthed();
+  if ("error" in gate) return [];
+  if (!appointmentId) return [];
+
+  const supabase = await createClient();
+
+  // 1. Load the appointment + its service lines + the client_id.
+  const { data: appt, error: apptErr } = await supabase
+    .from("appointments")
+    .select(`
+      id, client_id,
+      appointment_services (
+        id, service_id,
+        services ( id, name, price )
+      )
+    `)
+    .eq("id", appointmentId)
+    .single();
+
+  if (apptErr || !appt || !appt.client_id) {
+    if (apptErr) console.error("getAppointmentPackageContext appt:", apptErr);
+    return [];
+  }
+
+  type ApptSvc = {
+    id: string;
+    service_id: string | null;
+    services: { id: string; name: string; price: number } | null;
+  };
+  const apptServices = (appt.appointment_services ?? []) as unknown as ApptSvc[];
+  if (apptServices.length === 0) return [];
+
+  // 2. Load client's active, non-expired packages with their items.
+  const today = todayISO();
+  const { data: packages, error: pkgErr } = await supabase
+    .from("packages")
+    .select(`
+      id, expires_at, status, created_at,
+      recipient:recipient_client_id ( id, name ),
+      package_items ( id, service_id, sessions_total, sessions_used )
+    `)
+    .eq("recipient_client_id", appt.client_id)
+    .eq("status", "active")
+    .or(`expires_at.is.null,expires_at.gte.${today}`)
+    .order("expires_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  if (pkgErr) {
+    console.error("getAppointmentPackageContext packages:", pkgErr);
+    return [];
+  }
+
+  type PkgRow = {
+    id: string;
+    expires_at: string | null;
+    status: string;
+    created_at: string;
+    recipient: { id: string; name: string } | { id: string; name: string }[] | null;
+    package_items: Array<{
+      id: string;
+      service_id: string;
+      sessions_total: number;
+      sessions_used: number;
+    }>;
+  };
+  const pkgs = (packages ?? []) as unknown as PkgRow[];
+
+  // 3. For each appointment service, find the first matching package
+  //    item with sessions remaining. Track per-item remaining counts
+  //    so we don't over-allocate if the same package can cover
+  //    multiple appointment lines.
+  const remaining: Record<string, number> = {};
+  for (const pkg of pkgs) {
+    for (const it of pkg.package_items) {
+      remaining[it.id] = it.sessions_total - it.sessions_used;
+    }
+  }
+
+  const applicable: Array<{
+    apptServiceId: string;
+    serviceId: string;
+    serviceName: string;
+    servicePrice: number;
+    packageItemId: string;
+    packageId: string;
+    recipientName: string | null;
+    expiresAt: string | null;
+  }> = [];
+
+  for (const apptSvc of apptServices) {
+    if (!apptSvc.service_id || !apptSvc.services) continue;
+    // First package whose items include this service AND has sessions
+    // remaining on that item.
+    for (const pkg of pkgs) {
+      const matchItem = pkg.package_items.find(
+        (it) => it.service_id === apptSvc.service_id && remaining[it.id] > 0,
+      );
+      if (matchItem) {
+        const recipientObj = Array.isArray(pkg.recipient) ? pkg.recipient[0] : pkg.recipient;
+        applicable.push({
+          apptServiceId: apptSvc.id,
+          serviceId: apptSvc.service_id,
+          serviceName: apptSvc.services.name,
+          servicePrice: Number(apptSvc.services.price || 0),
+          packageItemId: matchItem.id,
+          packageId: pkg.id,
+          recipientName: recipientObj?.name ?? null,
+          expiresAt: pkg.expires_at,
+        });
+        // Reserve this session locally so a duplicate appointment
+        // line doesn't double-pick the same item.
+        remaining[matchItem.id] -= 1;
+        break;
+      }
+    }
+  }
+
+  return applicable;
+}
+
+// ============================================================
 // Reports summary
 // ============================================================
 

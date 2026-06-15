@@ -12,6 +12,7 @@ import {
 } from "./actions";
 import { getReportRetailSales } from "../sales/actions";
 import { getReportGiftCardSummary } from "../gift-cards/actions";
+import { getReportPackageSummary } from "../gift-cards/packages-actions";
 import { getTeamGroups } from "../calendar/actions";
 
 function toISODate(d: Date) {
@@ -32,7 +33,7 @@ export default async function ReportsPage() {
   const from = toISODate(fromDate);
   const to = today;
 
-  const [appts, pays, exps, revs, teams, retailSales, giftCards] = await Promise.all([
+  const [appts, pays, exps, revs, teams, retailSales, giftCards, packages] = await Promise.all([
     getReportAppointments(from, to),
     getReportPayments(from, to),
     getReportExpenses(from, to),
@@ -40,6 +41,7 @@ export default async function ReportsPage() {
     getTeamGroups(),
     getReportRetailSales(from, to),
     getReportGiftCardSummary(from, to),
+    getReportPackageSummary(from, to),
   ]);
 
   return (
@@ -54,6 +56,11 @@ export default async function ReportsPage() {
         redeemedTotal: number;
         soldTotal: number;
         outstandingLiability: number;
+      }}
+      initialPackages={packages as {
+        soldTotal: number;
+        sessionsApplied: number;
+        outstandingSessions: number;
       }}
     />
   );

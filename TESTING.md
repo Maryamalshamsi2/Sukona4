@@ -250,6 +250,129 @@ Set the period filter to a month where you've sold AND redeemed:
 - [ ] MarkPaidModal Gift card section reachable above the safe-area on
       smaller phones
 
+## I — Packages (migration-046)
+
+**Setup**: run `supabase/migration-046-packages.sql` in the Supabase
+SQL Editor. The /gift-cards page now has two top tabs:
+**Gift cards | Packages** — testing here means using the Packages tab.
+
+Revenue is **sale-time** — same model as gift cards. The day a
+package is sold, its full price is booked as revenue. Redeeming a
+session later does NOT add to that day's revenue.
+
+### I1 — Sell a single-service package (owner)
+
+- [ ] `/gift-cards` → tap **Packages** tab → "+" → sell modal opens
+- [ ] Pick a recipient client
+- [ ] Add one service line (pick service, enter sessions e.g. 5)
+- [ ] Enter total paid (e.g. AED 250) and payment method
+- [ ] Submit → package appears in the list as "5 / 5 left"
+- [ ] Detail panel shows the one service with "5 of 5 left" and AED 50
+      per-session implied value
+
+### I2 — Sell a mixed bundle (e.g. "Spa Day")
+
+- [ ] Sell modal → add 3 service lines (Mani: 3, Pedi: 3, Facial: 1)
+- [ ] Total paid: AED 600
+- [ ] Submit → list shows the package with combined summary
+      "3 Mani + 3 Pedi + 1 Facial" and "7 / 7 left"
+
+### I3 — Gift package (buyer ≠ recipient)
+
+- [ ] Sell modal → pick a recipient client
+- [ ] Tick "This is a gift — buyer is different from recipient"
+- [ ] Pick a different buyer client
+- [ ] Submit → detail panel shows "Gift from [buyer name]"
+
+### I4 — Redeem a session at appointment payment
+
+- [ ] On `/calendar`, book an appointment for the recipient with a
+      service that matches one of their package items
+- [ ] Mark as Paid → modal opens
+- [ ] **"Use packages?"** section appears at the top with a checkbox
+      "Use 1 session for [service name]"
+- [ ] Tick the checkbox → Amount field drops to the remainder
+- [ ] If full coverage (package covers entire bill), Amount goes to 0
+      and the method picker is essentially unused
+- [ ] Submit → appointment flips to paid
+- [ ] `/gift-cards` Packages → detail panel shows 1 redemption in
+      history, sessions-used incremented
+
+### I5 — Partial coverage (package + cash remainder)
+
+- [ ] Book an appointment with 2 services: one the package covers, one
+      it doesn't (e.g. Manicure + Hair color, package only covers Mani)
+- [ ] Mark as Paid → tick "Use 1 session for Manicure" only
+- [ ] Amount field shows the Hair color price (the remainder)
+- [ ] Pick method = cash, submit
+- [ ] `/payments` shows TWO rows for this appointment:
+      method='package' (Mani price) and method='cash' (remainder)
+
+### I6 — Multi-line appointment, multi-session package
+
+- [ ] Book an appointment with 2 of the same service (e.g. 2 Manicures
+      for two people)
+- [ ] Recipient's package has 5 manicures with 3 left
+- [ ] Mark as Paid shows TWO "Use 1 session for Manicure" rows (one
+      per appointment service line)
+- [ ] Tick both → both are deducted; package's sessions go from 3 to 1
+
+### I7 — Package completion auto-flip
+
+- [ ] Sell a 1-session package
+- [ ] Redeem the single session at an appointment
+- [ ] `/gift-cards` Packages → status now shows **Completed** (auto-
+      flipped by the redeem RPC when the last session drained)
+- [ ] Try to redeem from the same package again → "Package is completed"
+      error in MarkPaidModal
+
+### I8 — Expiry
+
+- [ ] Sell a package with expiry set to yesterday (edit
+      packages.expires_at directly in Supabase if needed for testing)
+- [ ] /gift-cards Packages → list shows the **Expired** badge under
+      the Expired filter
+- [ ] MarkPaidModal: the expired package's sessions do NOT appear
+      in the "Use packages?" section
+
+### I9 — Void + Delete
+
+- [ ] Sell an active package → detail panel → **Void package** with
+      optional reason → status flips to Voided
+- [ ] Voided package's sessions can't be redeemed at MarkPaidModal
+- [ ] Detail panel → **Delete package** → CASCADE removes the row,
+      its items, and its redemptions
+- [ ] Reports for the sold-month → package revenue drops by the
+      sale amount (retroactive — same as gift cards)
+
+### I10 — Reports (sale-time recognition)
+
+Set the period to a month with both package sales AND redemptions:
+
+- [ ] Finance Summary Revenue line includes the SOLD total for
+      packages (not redemptions)
+- [ ] "Services" sub-line excludes method='package' payments
+- [ ] "Sales" sub-line includes package sales + retail + gift card
+      sales
+- [ ] Payments tab footer: a "Package (sessions applied)" row appears
+      with the sum of method='package' payment rows
+- [ ] Payments tab badges: a "Package" pill appears on redemption-day
+      payment rows
+
+### I11 — Cross-salon RLS
+
+- [ ] As staff in salon A, MarkPaidModal does NOT show packages
+      belonging to salon B clients
+- [ ] Direct URL `/gift-cards` redirects to home for staff in salon A
+      (page-level gate)
+
+### I12 — Mobile
+
+- [ ] /gift-cards Packages tab doesn't horizontally scroll
+- [ ] Sell modal: + Add another service works; remove (×) works on
+      every line except the last one (which is required)
+- [ ] Detail panel scrolls without trapping on long history
+
 ---
 
 ## How to test the email cron without waiting

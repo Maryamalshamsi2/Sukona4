@@ -7,6 +7,10 @@ import {
   getGiftCardByCode,
   redeemGiftCard,
 } from "@/app/(dashboard)/gift-cards/actions";
+import {
+  getAppointmentPackageContext,
+  redeemPackageSession,
+} from "@/app/(dashboard)/gift-cards/packages-actions";
 import type { PaymentMethod } from "@/types";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
@@ -110,6 +114,20 @@ export default function MarkPaidModal({
   const [giftCardLookupErr, setGiftCardLookupErr] = useState<string | null>(null);
   const [giftCardLooking, setGiftCardLooking] = useState(false);
   const [remainderMethod, setRemainderMethod] = useState<"cash" | "card" | "other">("cash");
+
+  // ---- Package redemption state. Record mode only.
+  // packageOptions: one entry per appointment_service that has a
+  // matching, active, non-expired package item with sessions left.
+  // appliedSessions: which appointment_service IDs the staff has
+  // ticked to apply via package. Each ticked entry deducts its
+  // service price from the amount due. ----
+  type PackageOption = Awaited<
+    ReturnType<typeof getAppointmentPackageContext>
+  >[number];
+  const [packageOptions, setPackageOptions] = useState<PackageOption[]>([]);
+  const [appliedSessions, setAppliedSessions] = useState<Set<string>>(
+    () => new Set(),
+  );
   // Existing attachments fetched from the saved row (edit mode only).
   // Each has a stable URL — removing one drops it from this array.
   const [existingUrls, setExistingUrls] = useState<string[]>([]);
@@ -158,7 +176,45 @@ export default function MarkPaidModal({
     setGiftCardLookupErr(null);
     setGiftCardLooking(false);
     setRemainderMethod("cash");
+    // Reset package scratch state every open. Loaded below in a
+    // separate effect that depends on appointmentId.
+    setPackageOptions([]);
+    setAppliedSessions(new Set());
   }, [open, defaultAmount, existingPayment]);
+
+  // Fetch applicable package items on open (record mode + has an
+  // appointmentId). Skipped in edit mode since package redemption
+  // isn't editable retroactively.
+  useEffect(() => {
+    if (!open || isEdit || !appointmentId) return;
+    let cancelled = false;
+    (async () => {
+      const opts = await getAppointmentPackageContext(appointmentId);
+      if (cancelled) return;
+      setPackageOptions(opts);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isEdit, appointmentId]);
+
+  // Coverage = sum of selected appointment-service prices. Each
+  // ticked session redeems exactly one session and covers that
+  // line's price.
+  const packageCoverage = packageOptions
+    .filter((o) => appliedSessions.has(o.apptServiceId))
+    .reduce((s, o) => s + o.servicePrice, 0);
+
+  // When package sessions are applied, the amount field reflects
+  // the REMAINDER (what still needs cash/card/etc). Auto-sync as
+  // selections change — staff can still manually override if the
+  // appointment was discounted/etc.
+  useEffect(() => {
+    if (!open || isEdit) return;
+    const baseAmount = Number(defaultAmount || 0);
+    const remainder = Math.max(0, baseAmount - packageCoverage);
+    setAmount(remainder > 0 ? String(remainder) : "0");
+  }, [open, isEdit, defaultAmount, packageCoverage]);
 
   // Auto-look-up the card as soon as a complete code is entered.
   // Prevents the user from having to tap a separate "Look up" button.
@@ -222,6 +278,14 @@ export default function MarkPaidModal({
       return;
     }
 
+    // Block submit when there's no money at all and no package
+    // sessions either — the appointment would flip to paid with
+    // zero rows attached, which is meaningless.
+    if (!isEdit && amt === 0 && appliedSessions.size === 0) {
+      setError("Enter an amount or apply at least one package session.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -272,6 +336,86 @@ export default function MarkPaidModal({
     // payroll calc time.
     const tipStaffToSave =
       tipToSave > 0 && tipToStaffId ? tipToStaffId : null;
+
+    // ---- Package branch (record mode only). Runs FIRST, before
+    //      any remainder via cash/card/gift_card. For each ticked
+    //      session:
+    //        1. Call redeem_package_session RPC (locks the row,
+    //           decrements sessions_used, inserts a redemption log)
+    //        2. Insert a payment row with method='package',
+    //           amount=service price, note=service name. The
+    //           appointment flips to paid on the first row.
+    //
+    //      If a redemption fails (expired / completed / race-condition
+    //      drain) we abort BEFORE writing any payment rows, leaving
+    //      everything in a clean state.
+    //
+    //      Remainder (cash/card/gift_card/other) is handled below as
+    //      usual — `amt` already reflects what's left after coverage. ----
+    if (!isEdit && appliedSessions.size > 0) {
+      if (!appointmentId) {
+        setError("Missing appointment id");
+        setSubmitting(false);
+        return;
+      }
+      const selected = packageOptions.filter((o) =>
+        appliedSessions.has(o.apptServiceId),
+      );
+      for (const opt of selected) {
+        // 1. Redeem the session.
+        const redeem = await redeemPackageSession({
+          packageItemId: opt.packageItemId,
+          appointmentId,
+          notes: opt.serviceName,
+        });
+        if ("error" in redeem && redeem.error) {
+          setError(redeem.error);
+          setSubmitting(false);
+          return;
+        }
+        // 2. Write the package payment row. Tip stays at 0 here —
+        //    if the customer tipped, it goes on the remainder row
+        //    below (or, when there's no remainder, on the LAST
+        //    package row — handled by the lastPackageRow check).
+        const isLastPackageRow =
+          selected.indexOf(opt) === selected.length - 1;
+        const hasRemainder = amt > 0;
+        const tipOnThisRow =
+          !hasRemainder && isLastPackageRow ? tipToSave : 0;
+        const tipStaffOnThisRow =
+          !hasRemainder && isLastPackageRow ? tipStaffToSave : null;
+        // Attachments only attach to the final row written, to avoid
+        // listing the same receipt multiple times against the
+        // appointment. If there's a remainder, the cash/card/other
+        // branch below will write the final row and gets the URLs;
+        // otherwise the last package row gets them.
+        const pkgRowUrls =
+          isLastPackageRow && !hasRemainder ? finalUrls : [];
+        const pkgRes = await recordPayment(
+          appointmentId,
+          opt.servicePrice,
+          "package",
+          `Package · ${opt.serviceName}`,
+          pkgRowUrls,
+          tipOnThisRow,
+          tipStaffOnThisRow,
+        );
+        if (pkgRes.error) {
+          setError(
+            `Session redeemed but recording the package payment failed: ${pkgRes.error}`,
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+      // If no remainder, we're done — appointment is already paid
+      // by the first package row. Skip the remainder flow below.
+      if (amt === 0) {
+        setSubmitting(false);
+        onPaid();
+        return;
+      }
+    }
 
     // ---- Gift card branch (record mode only — edit mode hides the
     //      gift_card method button entirely). Two paths:
@@ -402,6 +546,68 @@ export default function MarkPaidModal({
           <p className="text-body-sm text-text-secondary">
             Editing payment for <span className="font-semibold text-text-primary">{clientName}</span>.
           </p>
+        )}
+
+        {/* Packages — only when record mode AND the client has
+            applicable sessions. One row per appointment service that
+            a matching package can cover. Each checkbox applies one
+            session and deducts that service's price from the
+            amount-due field below. */}
+        {!isEdit && packageOptions.length > 0 && (
+          <div className="space-y-2 rounded-xl bg-neutral-50 ring-1 ring-border px-4 py-3">
+            <p className="text-body-sm font-semibold text-text-primary">
+              Use packages?
+            </p>
+            <ul className="space-y-1.5">
+              {packageOptions.map((o) => {
+                const checked = appliedSessions.has(o.apptServiceId);
+                return (
+                  <li key={o.apptServiceId}>
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-white px-3 py-2 ring-1 ring-border">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setAppliedSessions((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(o.apptServiceId);
+                            else next.delete(o.apptServiceId);
+                            return next;
+                          });
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-primary-100"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-body-sm text-text-primary">
+                          Use 1 session for{" "}
+                          <span className="font-semibold">{o.serviceName}</span>
+                          <span className="text-text-tertiary">
+                            {" "}
+                            ({formatCurrency(o.servicePrice, currency)})
+                          </span>
+                        </p>
+                        {o.recipientName && (
+                          <p className="text-caption text-text-tertiary">
+                            From {o.recipientName}&apos;s package
+                            {o.expiresAt && <> · expires {o.expiresAt}</>}
+                          </p>
+                        )}
+                      </div>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            {packageCoverage > 0 && (
+              <p className="pt-1 text-caption text-text-tertiary">
+                Package covers{" "}
+                <span className="font-semibold text-text-primary tabular-nums">
+                  {formatCurrency(packageCoverage, currency)}
+                </span>
+                . The amount below is the remainder still due.
+              </p>
+            )}
+          </div>
         )}
 
         {/* Payment method. Gift card is hidden in edit mode — you
