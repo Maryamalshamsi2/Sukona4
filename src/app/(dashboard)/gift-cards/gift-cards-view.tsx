@@ -132,10 +132,12 @@ export default function GiftCardsView({
 
   return (
     <div>
-      {/* Tab strip — acts as the page title. Two underlined tabs
-          across the top; the active one has a black underline + bold
-          text. Matches the segmented-tab style used on /reports. */}
-      <div className="-mb-px flex gap-6 border-b border-border">
+      {/* Tab strip — segmented pill grid, matching /reports for
+          cross-page cohesion. Active tab gets a black-filled
+          background; inactive tabs sit on the page's surface-active
+          tone. Two-column grid on every breakpoint since we only
+          have two surfaces here. */}
+      <div className="grid grid-cols-2 gap-2">
         <TabButton active={tab === "gift-cards"} onClick={() => setTab("gift-cards")}>
           Gift cards
         </TabButton>
@@ -172,14 +174,16 @@ function TabButton({
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  // Pill style — copied verbatim from /reports' tab buttons (lines
+  // ~591-603 of reports-view.tsx) so the two surfaces look identical.
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`relative -mb-px border-b-2 pb-3 pt-2 text-title-section font-semibold tracking-tight transition ${
+      className={`rounded-xl px-3 py-3 text-body-sm font-semibold transition-colors ${
         active
-          ? "border-text-primary text-text-primary"
-          : "border-transparent text-text-tertiary hover:text-text-secondary"
+          ? "bg-neutral-900 text-text-inverse"
+          : "bg-surface-active text-text-secondary hover:bg-neutral-100"
       }`}
     >
       {children}
