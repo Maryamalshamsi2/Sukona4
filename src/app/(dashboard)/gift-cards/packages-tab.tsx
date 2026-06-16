@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Modal from "@/components/modal";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
@@ -157,10 +158,14 @@ export default function PackagesTab({
   initialPackages,
   initialClients,
   initialServices,
+  controlsSlot,
 }: {
   initialPackages: PackageRow[];
   initialClients: ClientOption[];
   initialServices: ServiceOption[];
+  /** Parent's portal target above the pill strip. See the equivalent
+   *  prop on GiftCardsTab for the rationale. */
+  controlsSlot: HTMLDivElement | null;
 }) {
   const undo = useUndo();
   const currency = useCurrency();
@@ -230,69 +235,81 @@ export default function PackagesTab({
     setDetailRedemptions([]);
   }
 
-  return (
-    <div>
-      {/* Header — filter funnel + "+" */}
-      <div className="flex items-center justify-end gap-1">
-        <div className="relative" ref={filterRef}>
-          <button
-            onClick={() => setFilterOpen((v) => !v)}
-            aria-label="Filter"
-            className={`rounded-lg p-2 ${
-              statusFilter !== "all"
-                ? "bg-surface-active text-text-primary"
-                : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
-            }`}
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-            </svg>
-          </button>
-          {filterOpen && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
-              <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
-                Status
-              </p>
-              {STATUS_ORDER.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setStatusFilter(s);
-                    setFilterOpen(false);
-                  }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
-                    statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
-                  }`}
-                >
-                  <span className={`flex h-4 w-4 items-center justify-center rounded border ${
-                    statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
-                  }`}>
-                    {statusFilter === s && (
-                      <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                      </svg>
-                    )}
-                  </span>
-                  {STATUS_LABEL[s]}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+  // Header content — filter funnel + "+" button. Portaled into the
+  // parent's controls slot so it renders ABOVE the pill strip.
+  // See the matching block in GiftCardsTab for the rationale.
+  const headerControls = (
+    <>
+      <div className="relative" ref={filterRef}>
         <button
-          type="button"
-          onClick={() => setSellOpen(true)}
-          aria-label="Sell package"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+          onClick={() => setFilterOpen((v) => !v)}
+          aria-label="Filter"
+          className={`rounded-lg p-2 ${
+            statusFilter !== "all"
+              ? "bg-surface-active text-text-primary"
+              : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+          }`}
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
           </svg>
         </button>
+        {filterOpen && (
+          <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+            <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+              Status
+            </p>
+            {STATUS_ORDER.map((s) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setStatusFilter(s);
+                  setFilterOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                  statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
+                }`}
+              >
+                <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                  statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                }`}>
+                  {statusFilter === s && (
+                    <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  )}
+                </span>
+                {STATUS_LABEL[s]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+      <button
+        type="button"
+        onClick={() => setSellOpen(true)}
+        aria-label="Sell package"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </>
+  );
+
+  return (
+    <div>
+      {controlsSlot ? (
+        createPortal(headerControls, controlsSlot)
+      ) : (
+        <div className="mb-3 flex items-center justify-end gap-1">
+          {headerControls}
+        </div>
+      )}
 
       {/* List */}
-      <div className="mt-6 rounded-2xl bg-white ring-1 ring-border">
+      <div className="rounded-2xl bg-white ring-1 ring-border">
         {loading && packages.length === 0 ? (
           <p className="py-12 text-center text-body-sm text-text-tertiary">
             Loading…

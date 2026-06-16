@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Modal from "@/components/modal";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
@@ -130,13 +131,37 @@ export default function GiftCardsView({
 }) {
   const [tab, setTab] = useState<ActiveTab>("gift-cards");
 
+  // Controls slot — the active tab's filter funnel + "+" button get
+  // portaled into this div via React.createPortal so they appear
+  // ABOVE the pill strip (matching /reports' funnel-above-tabs
+  // layout). Without this, the controls would be stuck inside the
+  // tab component's body, BELOW the pills.
+  //
+  // slotEl state instead of just the ref value because the portal
+  // target must be a real DOM node, and refs are null on the first
+  // server render. The useEffect runs only on the client, after
+  // mount, when the ref is populated. Tabs only render the portal
+  // once slotEl is non-null.
+  const controlsSlotRef = useRef<HTMLDivElement>(null);
+  const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    setSlotEl(controlsSlotRef.current);
+  }, []);
+
   return (
     <div>
+      {/* Portal target for the active tab's filter funnel + "+"
+          button. Always rendered, even when there's no content yet,
+          so the ref is available on first mount. min-h preserves
+          vertical space so the page doesn't jump when controls
+          appear after hydration. */}
+      <div
+        ref={controlsSlotRef}
+        className="mb-3 flex min-h-10 items-center justify-end gap-1"
+      />
+
       {/* Tab strip — segmented pill grid, matching /reports for
-          cross-page cohesion. Active tab gets a black-filled
-          background; inactive tabs sit on the page's surface-active
-          tone. Two-column grid on every breakpoint since we only
-          have two surfaces here. */}
+          cross-page cohesion. */}
       <div className="grid grid-cols-2 gap-2">
         <TabButton active={tab === "gift-cards"} onClick={() => setTab("gift-cards")}>
           Gift cards
@@ -152,12 +177,14 @@ export default function GiftCardsView({
           <GiftCardsTab
             initialCards={initialCards}
             initialClients={initialClients}
+            controlsSlot={slotEl}
           />
         ) : (
           <PackagesTab
             initialPackages={initialPackages}
             initialClients={initialClients}
             initialServices={initialServices}
+            controlsSlot={slotEl}
           />
         )}
       </div>
@@ -198,9 +225,16 @@ function TabButton({
 function GiftCardsTab({
   initialCards,
   initialClients,
+  controlsSlot,
 }: {
   initialCards: GiftCardRow[];
   initialClients: ClientOption[];
+  /** DOM node above the pill strip that the parent owns. We portal
+   *  our filter funnel + "+" button into it so they appear ABOVE
+   *  the tabs, matching the /reports layout. null on first render
+   *  (before parent's useEffect runs); we skip the portal in that
+   *  case and let the inline header render briefly. */
+  controlsSlot: HTMLDivElement | null;
 }) {
   const undo = useUndo();
   const currency = useCurrency();
@@ -276,75 +310,88 @@ function GiftCardsTab({
     setDetailTx([]);
   }
 
-  return (
-    <div>
-      {/* ---- Header — filter funnel + "+" (tab strip in parent
-           wrapper acts as the title) ---- */}
-      <div className="flex items-center justify-end gap-1">
-          {/* Status filter funnel — same icon + dropdown shape as
-              /expenses for cross-page consistency. Icon highlights
-              when a non-default ("all") filter is set. */}
-          <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => setFilterOpen((v) => !v)}
-              aria-label="Filter"
-              className={`rounded-lg p-2 ${
-                statusFilter !== "all"
-                  ? "bg-surface-active text-text-primary"
-                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
-              }`}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-              </svg>
-            </button>
+  // Header content — filter funnel + "+" button. Portaled into the
+  // parent's controls slot so it renders ABOVE the pill strip (the
+  // /reports layout). Same JSX as before; only the placement
+  // changed via createPortal.
+  const headerControls = (
+    <>
+      <div className="relative" ref={filterRef}>
+        <button
+          onClick={() => setFilterOpen((v) => !v)}
+          aria-label="Filter"
+          className={`rounded-lg p-2 ${
+            statusFilter !== "all"
+              ? "bg-surface-active text-text-primary"
+              : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+          }`}
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+          </svg>
+        </button>
 
-            {filterOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
-                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
-                  Status
-                </p>
-                {STATUS_ORDER.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => {
-                      setStatusFilter(s);
-                      setFilterOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
-                      statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
-                    }`}
-                  >
-                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${
-                      statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
-                    }`}>
-                      {statusFilter === s && (
-                        <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </span>
-                    {STATUS_LABEL[s]}
-                  </button>
-                ))}
-              </div>
-            )}
+        {filterOpen && (
+          <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+            <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+              Status
+            </p>
+            {STATUS_ORDER.map((s) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setStatusFilter(s);
+                  setFilterOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                  statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
+                }`}
+              >
+                <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                  statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                }`}>
+                  {statusFilter === s && (
+                    <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  )}
+                </span>
+                {STATUS_LABEL[s]}
+              </button>
+            ))}
           </div>
-
-          <button
-            type="button"
-            onClick={() => setSellOpen(true)}
-            aria-label="Sell gift card"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+        )}
       </div>
 
+      <button
+        type="button"
+        onClick={() => setSellOpen(true)}
+        aria-label="Sell gift card"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </>
+  );
+
+  return (
+    <div>
+      {/* Header gets portaled above the pills via the parent's slot.
+          On the very first render (before the parent's useEffect runs)
+          controlsSlot is null and we fall back to inline rendering so
+          the controls are still visible. */}
+      {controlsSlot ? (
+        createPortal(headerControls, controlsSlot)
+      ) : (
+        <div className="mb-3 flex items-center justify-end gap-1">
+          {headerControls}
+        </div>
+      )}
+
       {/* ---- List of cards ---- */}
-      <div className="mt-6 rounded-2xl bg-white ring-1 ring-border">
+      <div className="rounded-2xl bg-white ring-1 ring-border">
         {loading && cards.length === 0 ? (
           <p className="py-12 text-center text-body-sm text-text-tertiary">
             Loading…
