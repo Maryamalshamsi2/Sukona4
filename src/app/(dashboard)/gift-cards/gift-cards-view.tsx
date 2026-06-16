@@ -15,10 +15,6 @@ import {
   getGiftCardDetail,
   type GiftCardStatus,
 } from "./actions";
-import PackagesTab, {
-  type PackageRow,
-  type ServiceOption,
-} from "./packages-tab";
 
 /**
  * /gift-cards — top-level tabbed wrapper around two prepaid surfaces:
@@ -113,128 +109,42 @@ function formatDateTime(iso: string) {
 }
 
 // ============================================================
-// Top-level tabbed wrapper
-// ============================================================
-
-type ActiveTab = "gift-cards" | "packages";
-
-export default function GiftCardsView({
-  initialCards,
-  initialClients,
-  initialPackages,
-  initialServices,
-}: {
-  initialCards: GiftCardRow[];
-  initialClients: ClientOption[];
-  initialPackages: PackageRow[];
-  initialServices: ServiceOption[];
-}) {
-  const [tab, setTab] = useState<ActiveTab>("gift-cards");
-
-  // Controls slot — the active tab's filter funnel + "+" button get
-  // portaled into this div via React.createPortal so they appear
-  // ABOVE the pill strip (matching /reports' funnel-above-tabs
-  // layout). Without this, the controls would be stuck inside the
-  // tab component's body, BELOW the pills.
-  //
-  // slotEl state instead of just the ref value because the portal
-  // target must be a real DOM node, and refs are null on the first
-  // server render. The useEffect runs only on the client, after
-  // mount, when the ref is populated. Tabs only render the portal
-  // once slotEl is non-null.
-  const controlsSlotRef = useRef<HTMLDivElement>(null);
-  const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    setSlotEl(controlsSlotRef.current);
-  }, []);
-
-  return (
-    <div>
-      {/* Portal target for the active tab's filter funnel + "+"
-          button. Always rendered, even when there's no content yet,
-          so the ref is available on first mount. min-h preserves
-          vertical space so the page doesn't jump when controls
-          appear after hydration. */}
-      <div
-        ref={controlsSlotRef}
-        className="mb-3 flex min-h-10 items-center justify-end gap-1"
-      />
-
-      {/* Tab strip — segmented pill grid, matching /reports for
-          cross-page cohesion. */}
-      <div className="grid grid-cols-2 gap-2">
-        <TabButton active={tab === "gift-cards"} onClick={() => setTab("gift-cards")}>
-          Gift cards
-        </TabButton>
-        <TabButton active={tab === "packages"} onClick={() => setTab("packages")}>
-          Packages
-        </TabButton>
-      </div>
-
-      {/* Tab content */}
-      <div className="mt-4">
-        {tab === "gift-cards" ? (
-          <GiftCardsTab
-            initialCards={initialCards}
-            initialClients={initialClients}
-            controlsSlot={slotEl}
-          />
-        ) : (
-          <PackagesTab
-            initialPackages={initialPackages}
-            initialClients={initialClients}
-            initialServices={initialServices}
-            controlsSlot={slotEl}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  // Pill style — copied verbatim from /reports' tab buttons (lines
-  // ~591-603 of reports-view.tsx) so the two surfaces look identical.
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-xl px-3 py-3 text-body-sm font-semibold transition-colors ${
-        active
-          ? "bg-neutral-900 text-text-inverse"
-          : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ============================================================
 // Gift cards tab (sell / list / inspect / void / delete)
+//
+// /gift-cards's old standalone wrapper used to live here and host
+// two tabs (Gift cards / Packages). It's gone — /sales now hosts
+// all three (Retail / Gift cards / Packages) and imports GiftCardsTab
+// + PackagesTab directly. /gift-cards/page.tsx is a redirect into
+// /sales for old bookmarks.
 // ============================================================
 
-function GiftCardsTab({
+export function GiftCardsTab({
   initialCards,
   initialClients,
   controlsSlot,
+  sellOpen,
+  onSellClose,
+  onRequestSell,
 }: {
   initialCards: GiftCardRow[];
   initialClients: ClientOption[];
   /** DOM node above the pill strip that the parent owns. We portal
-   *  our filter funnel + "+" button into it so they appear ABOVE
-   *  the tabs, matching the /reports layout. null on first render
-   *  (before parent's useEffect runs); we skip the portal in that
-   *  case and let the inline header render briefly. */
+   *  our filter funnel into it so it appears ABOVE the tabs,
+   *  matching the /reports layout. null on first render (before
+   *  parent's useEffect runs); we fall back to inline rendering
+   *  in that case. */
   controlsSlot: HTMLDivElement | null;
+  /** Controlled by parent — set to true when the user picks
+   *  "Gift card" from the unified "+" dropdown above the pills. */
+  sellOpen: boolean;
+  /** Called when the user dismisses the sell modal (Cancel /
+   *  backdrop / Done after a successful sale). */
+  onSellClose: () => void;
+  /** Called from the empty-state "Sell your first gift card" CTA.
+   *  Parent should route this to the same handler as the unified
+   *  "+" dropdown's "Gift card" option (switch to this tab + open
+   *  the sell modal). */
+  onRequestSell: () => void;
 }) {
   const undo = useUndo();
   const currency = useCurrency();
@@ -279,8 +189,9 @@ function GiftCardsTab({
     return () => document.removeEventListener("mousedown", handler);
   }, [filterOpen]);
 
-  // Sell modal
-  const [sellOpen, setSellOpen] = useState(false);
+  // Sell modal is controlled by the parent (sellOpen prop, onSellClose
+  // callback) so the unified "+" dropdown above the pills can open it.
+  // No internal state for sellOpen here.
 
   // Detail modal
   const [detailOpen, setDetailOpen] = useState(false);
@@ -310,70 +221,57 @@ function GiftCardsTab({
     setDetailTx([]);
   }
 
-  // Header content — filter funnel + "+" button. Portaled into the
-  // parent's controls slot so it renders ABOVE the pill strip (the
-  // /reports layout). Same JSX as before; only the placement
-  // changed via createPortal.
+  // Status filter funnel — portaled into the parent's controls slot
+  // so it sits ABOVE the pill strip. The "+" button is NOT here
+  // anymore — parent owns a unified "+" dropdown for all three tabs
+  // (Retail / Gift card / Package).
   const headerControls = (
-    <>
-      <div className="relative" ref={filterRef}>
-        <button
-          onClick={() => setFilterOpen((v) => !v)}
-          aria-label="Filter"
-          className={`rounded-lg p-2 ${
-            statusFilter !== "all"
-              ? "bg-surface-active text-text-primary"
-              : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
-          }`}
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-          </svg>
-        </button>
-
-        {filterOpen && (
-          <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
-            <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
-              Status
-            </p>
-            {STATUS_ORDER.map((s) => (
-              <button
-                key={s}
-                onClick={() => {
-                  setStatusFilter(s);
-                  setFilterOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
-                  statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
-                }`}
-              >
-                <span className={`flex h-4 w-4 items-center justify-center rounded border ${
-                  statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
-                }`}>
-                  {statusFilter === s && (
-                    <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                  )}
-                </span>
-                {STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
+    <div className="relative" ref={filterRef}>
       <button
-        type="button"
-        onClick={() => setSellOpen(true)}
-        aria-label="Sell gift card"
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+        onClick={() => setFilterOpen((v) => !v)}
+        aria-label="Filter"
+        className={`rounded-lg p-2 ${
+          statusFilter !== "all"
+            ? "bg-surface-active text-text-primary"
+            : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+        }`}
       >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
         </svg>
       </button>
-    </>
+
+      {filterOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+          <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+            Status
+          </p>
+          {STATUS_ORDER.map((s) => (
+            <button
+              key={s}
+              onClick={() => {
+                setStatusFilter(s);
+                setFilterOpen(false);
+              }}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                statusFilter === s ? "text-text-primary font-semibold" : "text-text-secondary"
+              }`}
+            >
+              <span className={`flex h-4 w-4 items-center justify-center rounded border ${
+                statusFilter === s ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+              }`}>
+                {statusFilter === s && (
+                  <svg className="h-3 w-3 text-text-inverse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                )}
+              </span>
+              {STATUS_LABEL[s]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -408,7 +306,7 @@ function GiftCardsTab({
                 filter, not the absence of cards. */}
             {statusFilter === "all" && (
               <button
-                onClick={() => setSellOpen(true)}
+                onClick={onRequestSell}
                 className="mt-3 text-body-sm font-semibold text-text-primary underline-offset-2 hover:underline"
               >
                 Sell your first gift card
@@ -459,13 +357,14 @@ function GiftCardsTab({
         )}
       </div>
 
-      {/* ---- Sell modal ---- */}
+      {/* ---- Sell modal — open state owned by parent so the unified
+           "+" dropdown above the pills can trigger it. ---- */}
       <SellGiftCardModal
         open={sellOpen}
         clients={clients}
-        onClose={() => setSellOpen(false)}
+        onClose={onSellClose}
         onSold={() => {
-          setSellOpen(false);
+          onSellClose();
           void reload(statusFilter);
         }}
       />

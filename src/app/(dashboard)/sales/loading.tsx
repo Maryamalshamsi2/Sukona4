@@ -1,13 +1,22 @@
-// Skeleton for /sales. Title row + list of sale rows. Matches the
-// shape used by /payments and /expenses for cross-page consistency.
+// Skeleton for /sales. Controls slot (filter + "+") above pills,
+// three pills, list. Mirrors the loaded view so there's no layout
+// shift when the data resolves.
 export default function Loading() {
   return (
     <div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="h-8 w-24 rounded bg-neutral-100 animate-pulse" />
+      {/* Controls bar above pills */}
+      <div className="mb-3 flex min-h-10 items-center justify-end gap-1">
+        <div className="h-9 w-9 rounded-lg bg-neutral-100 animate-pulse" />
         <div className="h-9 w-9 rounded-full bg-neutral-100 animate-pulse" />
       </div>
-      <div className="mt-6 rounded-2xl ring-1 ring-border bg-white divide-y divide-border">
+      {/* Pill strip — 3 tabs */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="h-12 rounded-xl bg-neutral-100 animate-pulse" />
+        <div className="h-12 rounded-xl bg-neutral-100 animate-pulse" />
+        <div className="h-12 rounded-xl bg-neutral-100 animate-pulse" />
+      </div>
+      {/* List */}
+      <div className="mt-4 rounded-2xl ring-1 ring-border bg-white divide-y divide-border">
         {[0, 1, 2, 3, 4].map((i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-6">
             <div className="min-w-0 flex-1 space-y-2">

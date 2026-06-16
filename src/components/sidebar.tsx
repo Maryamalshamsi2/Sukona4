@@ -21,7 +21,6 @@ const ALL_NAV: NavItem[] = [
   { href: "/team",      label: "Team",      icon: "team",     allow: ["owner"] },
   { href: "/payroll",   label: "Payroll",   icon: "payroll",  allow: ["owner"] },
   { href: "/sales",     label: "Sales",     icon: "sales",    allow: ["owner", "admin"] },
-  { href: "/gift-cards", label: "Vouchers",   icon: "gift",   allow: ["owner", "admin"] },
   { href: "/expenses",  label: "Expenses",  icon: "receipt",  allow: ["owner", "admin", "staff"] },
   { href: "/inventory", label: "Inventory", icon: "package",  allow: ["owner", "admin", "staff"] },
   { href: "/reports",   label: "Reports",   icon: "chart",    allow: ["owner"] },

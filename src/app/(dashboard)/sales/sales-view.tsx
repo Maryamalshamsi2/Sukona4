@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Modal from "@/components/modal";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
@@ -11,17 +12,36 @@ import {
   updateRetailSale,
   deleteRetailSale,
 } from "./actions";
+import {
+  GiftCardsTab,
+  type GiftCardRow,
+  type ClientOption as GcClientOption,
+} from "../gift-cards/gift-cards-view";
+import PackagesTab, {
+  type PackageRow,
+  type ServiceOption,
+} from "../gift-cards/packages-tab";
 
 /**
- * /sales — retail sales recording (owner+admin only).
+ * /sales — owner/admin sell-and-track surface, three tabs deep:
  *
- * Shape: list of recent sales with a "+ Add sale" affordance. Each
- * row shows description, date, method badge, optional client + staff
- * tags, and an amount. Tap to edit, trash to delete.
+ *   - Retail tab (this file's RetailTab function below): walk-in
+ *     product sales, one-and-done.
+ *   - Gift cards tab (../gift-cards/gift-cards-view → GiftCardsTab):
+ *     sell / list / void / delete gift cards.
+ *   - Packages tab (../gift-cards/packages-tab → default export):
+ *     multi-session packages, single-service or mixed bundles.
  *
- * Date range filter matches the pattern used on other report-ish
- * pages (Today / 7 days / 30 days / Custom). Defaults to last 30
- * days.
+ * Both prepaid surfaces still live under /app/(dashboard)/gift-cards/
+ * because that's where their server actions and detail modals
+ * were already organized; this view just imports them as tab content.
+ *
+ * One unified "+" dropdown above the pill strip — picks between
+ * Retail / Gift card / Package and opens the corresponding sell modal.
+ * Picking a non-current category switches to that tab first.
+ *
+ * Filter funnel is tab-aware (different filter options per tab) and
+ * lives in a portal slot the parent owns above the pills.
  */
 
 export interface SaleRow {
@@ -107,18 +127,236 @@ function formatDate(iso: string) {
   });
 }
 
+// ============================================================
+// Top-level tabbed wrapper (Retail / Gift cards / Packages)
+// ============================================================
+
+type ActiveTab = "retail" | "gift-cards" | "packages";
+type SellWhich = "retail" | "gift-card" | "package" | null;
+
 export default function SalesView({
   initialSales,
   initialClients,
   initialStaff,
   initialFrom,
   initialTo,
+  initialGiftCards,
+  initialPackages,
+  initialServices,
 }: {
   initialSales: SaleRow[];
   initialClients: ClientOption[];
   initialStaff: StaffOption[];
   initialFrom: string;
   initialTo: string;
+  initialGiftCards: GiftCardRow[];
+  initialPackages: PackageRow[];
+  initialServices: ServiceOption[];
+}) {
+  const [tab, setTab] = useState<ActiveTab>("retail");
+  const [sellWhich, setSellWhich] = useState<SellWhich>(null);
+
+  // "+" dropdown
+  const [addOpen, setAddOpen] = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!addOpen) return;
+    function handler(e: MouseEvent) {
+      if (addRef.current && !addRef.current.contains(e.target as Node)) {
+        setAddOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [addOpen]);
+
+  // Controls slot — active tab portals its filter funnel into this
+  // div above the pill strip. See /gift-cards for the rationale of
+  // the ref → useState pattern (portals need a real DOM node, refs
+  // are null on first server render).
+  const controlsSlotRef = useRef<HTMLDivElement>(null);
+  const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    setSlotEl(controlsSlotRef.current);
+  }, []);
+
+  // Picking a "+" dropdown option: switch to the matching tab AND
+  // mark its sell modal open. The tab component reacts to its
+  // `sellOpen` prop and opens its modal.
+  function handlePickSell(which: NonNullable<SellWhich>) {
+    setAddOpen(false);
+    if (which === "retail") setTab("retail");
+    else if (which === "gift-card") setTab("gift-cards");
+    else if (which === "package") setTab("packages");
+    setSellWhich(which);
+  }
+  // Empty-state CTAs inside each tab route through this same handler.
+  const onRequestSellRetail = useCallback(
+    () => handlePickSell("retail"),
+    [],
+  );
+  const onRequestSellGiftCard = useCallback(
+    () => handlePickSell("gift-card"),
+    [],
+  );
+  const onRequestSellPackage = useCallback(
+    () => handlePickSell("package"),
+    [],
+  );
+
+  return (
+    <div>
+      {/* Controls row above pills — left side is the portal target for
+          the active tab's filter funnel; right side is the unified
+          "+" dropdown. min-h preserves vertical space so the page
+          doesn't jump before hydration when the portal target is null. */}
+      <div className="mb-3 flex min-h-10 items-center justify-end gap-1">
+        <div ref={controlsSlotRef} className="flex items-center gap-1" />
+        <div className="relative" ref={addRef}>
+          <button
+            type="button"
+            onClick={() => setAddOpen((v) => !v)}
+            aria-label="Add"
+            aria-expanded={addOpen}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          {addOpen && (
+            <div className="absolute right-0 top-full z-50 mt-1.5 w-44 rounded-xl border border-border bg-white py-1 shadow-lg">
+              <button
+                onClick={() => handlePickSell("retail")}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                Retail
+              </button>
+              <button
+                onClick={() => handlePickSell("gift-card")}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                Gift card
+              </button>
+              <button
+                onClick={() => handlePickSell("package")}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-body-sm text-text-primary hover:bg-surface-hover"
+              >
+                Package
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Pill strip — same style as /reports for cross-page cohesion. */}
+      <div className="grid grid-cols-3 gap-2">
+        <TabButton active={tab === "retail"} onClick={() => setTab("retail")}>
+          Retail
+        </TabButton>
+        <TabButton active={tab === "gift-cards"} onClick={() => setTab("gift-cards")}>
+          Gift cards
+        </TabButton>
+        <TabButton active={tab === "packages"} onClick={() => setTab("packages")}>
+          Packages
+        </TabButton>
+      </div>
+
+      {/* Tab content */}
+      <div className="mt-4">
+        {tab === "retail" ? (
+          <RetailTab
+            initialSales={initialSales}
+            initialClients={initialClients}
+            initialStaff={initialStaff}
+            initialFrom={initialFrom}
+            initialTo={initialTo}
+            controlsSlot={slotEl}
+            sellOpen={sellWhich === "retail"}
+            onSellClose={() => setSellWhich(null)}
+            onRequestSell={onRequestSellRetail}
+          />
+        ) : tab === "gift-cards" ? (
+          <GiftCardsTab
+            initialCards={initialGiftCards}
+            initialClients={initialClients as GcClientOption[]}
+            controlsSlot={slotEl}
+            sellOpen={sellWhich === "gift-card"}
+            onSellClose={() => setSellWhich(null)}
+            onRequestSell={onRequestSellGiftCard}
+          />
+        ) : (
+          <PackagesTab
+            initialPackages={initialPackages}
+            initialClients={initialClients as GcClientOption[]}
+            initialServices={initialServices}
+            controlsSlot={slotEl}
+            sellOpen={sellWhich === "package"}
+            onSellClose={() => setSellWhich(null)}
+            onRequestSell={onRequestSellPackage}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  // Same pill class set used on /reports and the old /gift-cards
+  // standalone view — copied verbatim for visual identity.
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl px-3 py-3 text-body-sm font-semibold transition-colors ${
+        active
+          ? "bg-neutral-900 text-text-inverse"
+          : "bg-surface-active text-text-secondary hover:bg-neutral-100"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ============================================================
+// Retail tab — walk-in product sales (the original /sales content)
+// ============================================================
+
+function RetailTab({
+  initialSales,
+  initialClients,
+  initialStaff,
+  initialFrom,
+  initialTo,
+  controlsSlot,
+  sellOpen,
+  onSellClose,
+  onRequestSell,
+}: {
+  initialSales: SaleRow[];
+  initialClients: ClientOption[];
+  initialStaff: StaffOption[];
+  initialFrom: string;
+  initialTo: string;
+  /** Parent's portal target above the pill strip for the period
+   *  filter funnel. See SalesView for rationale. */
+  controlsSlot: HTMLDivElement | null;
+  /** Controlled by parent — true when the user picked "Retail" from
+   *  the unified "+" dropdown. */
+  sellOpen: boolean;
+  /** Parent dismisses the add modal. */
+  onSellClose: () => void;
+  /** Empty-state CTA → parent treats this as "+" → Retail. */
+  onRequestSell: () => void;
 }) {
   const undo = useUndo();
   const currency = useCurrency();
@@ -177,23 +415,19 @@ export default function SalesView({
     void loadData();
   }, [loadData]);
 
-  // Add / edit modal state. editing === null → add mode; otherwise
-  // pre-fill from this row.
-  const [modalOpen, setModalOpen] = useState(false);
+  // Add / edit modal. ADD mode is controlled by the parent
+  // (sellOpen prop, set when the user picks Retail from the
+  // unified "+" dropdown). EDIT mode opens from a row click and
+  // is internal — both share the same modal component.
   const [editing, setEditing] = useState<SaleRow | null>(null);
-
-  function openAdd() {
-    setEditing(null);
-    setModalOpen(true);
-  }
   function openEdit(sale: SaleRow) {
     setEditing(sale);
-    setModalOpen(true);
   }
   function closeModal() {
-    setModalOpen(false);
-    setEditing(null);
+    if (editing) setEditing(null);
+    if (sellOpen) onSellClose();
   }
+  const modalOpen = sellOpen || editing !== null;
 
   async function handleDelete(sale: SaleRow) {
     if (!confirm(`Delete "${sale.description}"?`)) return;
@@ -207,66 +441,58 @@ export default function SalesView({
 
   const total = sales.reduce((sum, s) => sum + (s.amount || 0), 0);
 
-  return (
-    <div>
-      {/* ---- Header ---- */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-title-page font-bold tracking-tight text-text-primary">
-          Sales
-        </h1>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Period filter funnel — same icon + pattern as /reports
-              and /expenses for cross-page consistency. */}
-          <div className="relative" ref={filterRef}>
+  // Period filter funnel — portaled into the parent's controls slot.
+  // No "+" button here; the parent's unified "+" dropdown handles
+  // adding sales. No page title either — pills serve as the heading.
+  const headerControls = (
+    <div className="relative" ref={filterRef}>
+      <button
+        onClick={() => setFilterOpen((v) => !v)}
+        aria-label="Filter"
+        className={`rounded-lg p-2 ${
+          preset !== "month"
+            ? "bg-surface-active text-text-primary"
+            : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+        }`}
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+        </svg>
+      </button>
+      {filterOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+          <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+            Period
+          </p>
+          {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
             <button
-              onClick={() => setFilterOpen((v) => !v)}
-              aria-label="Filter"
-              className={`rounded-lg p-2 ${
-                preset !== "month"
-                  ? "bg-surface-active text-text-primary"
-                  : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+              key={p}
+              onClick={() => { setPreset(p); setFilterOpen(false); }}
+              className={`flex w-full items-center px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                preset === p ? "text-text-primary font-semibold" : "text-text-secondary"
               }`}
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-              </svg>
+              {PRESET_LABELS[p]}
             </button>
-            {filterOpen && (
-              <div className="absolute right-0 top-full mt-1 z-30 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
-                <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
-                  Period
-                </p>
-                {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => { setPreset(p); setFilterOpen(false); }}
-                    className={`flex w-full items-center px-3 py-2 text-body-sm hover:bg-surface-hover ${
-                      preset === p ? "text-text-primary font-semibold" : "text-text-secondary"
-                    }`}
-                  >
-                    {PRESET_LABELS[p]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={openAdd}
-            aria-label="Add sale"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
+          ))}
         </div>
-      </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      {controlsSlot ? (
+        createPortal(headerControls, controlsSlot)
+      ) : (
+        <div className="mb-3 flex items-center justify-end gap-1">
+          {headerControls}
+        </div>
+      )}
 
       {/* Custom date pickers */}
       {preset === "custom" && (
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mb-4 flex items-center gap-3">
           <input
             type="date"
             value={customFrom}
@@ -295,7 +521,7 @@ export default function SalesView({
               No sales in this period yet.
             </p>
             <button
-              onClick={openAdd}
+              onClick={onRequestSell}
               className="mt-3 text-body-sm font-semibold text-text-primary underline-offset-2 hover:underline"
             >
               Record your first sale

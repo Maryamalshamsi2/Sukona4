@@ -259,7 +259,7 @@ export async function sellPackage(payload: SellPackagePayload) {
     return { error: itemsErr.message };
   }
 
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return { success: true, packageId: pkg.id } as const;
 }
@@ -306,7 +306,7 @@ export async function voidPackage(id: string, reason: string | null) {
     .eq("id", id);
   if (updErr) return { error: updErr.message };
 
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return { success: true };
 }
@@ -329,7 +329,7 @@ export async function deletePackage(id: string) {
     .eq("id", id);
 
   if (error) return { error: error.message };
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return { success: true };
 }
@@ -366,7 +366,7 @@ export async function redeemPackageSession(payload: RedeemPayload) {
 
   if (error) return { error: error.message };
   const row = Array.isArray(data) ? data[0] : data;
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return {
     success: true,

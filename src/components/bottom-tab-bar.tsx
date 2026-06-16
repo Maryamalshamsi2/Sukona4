@@ -36,12 +36,10 @@ const MORE_ITEMS: MoreItem[] = [
   // The page itself shows the upgrade card on Solo, so we don't need
   // to gate again here — Solo owners can still see + tap the link.
   { href: "/payroll",   label: "Payroll",   icon: "payroll",  allow: ["owner"] },
-  // Retail sales. Staff don't see this (owner+admin only) — matches
-  // the RLS gate from migration-043.
+  // Sales — hosts three tabs (Retail / Gift cards / Packages). Staff
+  // don't see this (owner+admin only) — matches the RLS gates from
+  // migration-043 (retail) and migration-044/046 (cards / packages).
   { href: "/sales",     label: "Sales",     icon: "sales",    allow: ["owner", "admin"] },
-  // Gift cards — same gate as Sales. Sells/voids here, redemption
-  // happens at the appointment payment screen (migration-044).
-  { href: "/gift-cards", label: "Vouchers",   icon: "gift",   allow: ["owner", "admin"] },
   { href: "/catalog",   label: "Catalog",   icon: "catalog",  allow: ["owner", "admin", "staff"] },
   { href: "/inventory", label: "Inventory", icon: "package",  allow: ["owner", "admin", "staff"] },
   { href: "/reports",   label: "Reports",   icon: "chart",    allow: ["owner"] },

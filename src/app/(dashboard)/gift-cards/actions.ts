@@ -277,7 +277,7 @@ export async function sellGiftCard(payload: SellPayload) {
       console.error("sellGiftCard: tx log failed:", txErr);
     }
 
-    revalidatePath("/gift-cards");
+    revalidatePath("/sales");
     revalidatePath("/reports");
     return { success: true, card } as const;
   }
@@ -321,7 +321,7 @@ export async function voidGiftCard(id: string, reason: string | null) {
     });
   if (txErr) console.error("voidGiftCard: tx log failed:", txErr);
 
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return { success: true };
 }
@@ -351,7 +351,7 @@ export async function deleteGiftCard(id: string) {
     .eq("id", id);
 
   if (error) return { error: error.message };
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return { success: true };
 }
@@ -401,7 +401,7 @@ export async function redeemGiftCard(payload: RedeemPayload) {
   }
   // RPC returns a single row: { transaction_id, new_balance }
   const row = Array.isArray(data) ? data[0] : data;
-  revalidatePath("/gift-cards");
+  revalidatePath("/sales");
   revalidatePath("/reports");
   return {
     success: true,
