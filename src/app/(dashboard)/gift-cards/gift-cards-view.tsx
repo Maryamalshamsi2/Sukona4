@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Modal from "@/components/modal";
+import ClientPickerWithAdd from "@/components/client-picker-with-add";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
@@ -120,14 +121,20 @@ function formatDateTime(iso: string) {
 
 export function GiftCardsTab({
   initialCards,
-  initialClients,
+  clients,
+  onClientAdded,
   controlsSlot,
   sellOpen,
   onSellClose,
   onRequestSell,
 }: {
   initialCards: GiftCardRow[];
-  initialClients: ClientOption[];
+  /** Live clients list — owned by /sales so new clients added from
+   *  any sell modal show up here too. */
+  clients: ClientOption[];
+  /** Bubble up a newly-added client so SalesView appends it to its
+   *  state. */
+  onClientAdded: (c: ClientOption) => void;
   /** DOM node above the pill strip that the parent owns. We portal
    *  our filter funnel into it so it appears ABOVE the tabs,
    *  matching the /reports layout. null on first render (before
@@ -150,7 +157,8 @@ export function GiftCardsTab({
   const currency = useCurrency();
 
   const [cards, setCards] = useState<GiftCardRow[]>(initialCards);
-  const [clients] = useState<ClientOption[]>(initialClients);
+  // clients comes from the parent (SalesView) — see this file's
+  // GiftCardsTab signature. No internal copy.
   const [loading, setLoading] = useState(false);
   // Default = "all" — show every card, regardless of status. The
   // initial seed from page.tsx is "active" cards, so we trigger
@@ -362,6 +370,7 @@ export function GiftCardsTab({
       <SellGiftCardModal
         open={sellOpen}
         clients={clients}
+        onClientAdded={onClientAdded}
         onClose={onSellClose}
         onSold={() => {
           onSellClose();
@@ -393,11 +402,13 @@ export function GiftCardsTab({
 function SellGiftCardModal({
   open,
   clients,
+  onClientAdded,
   onClose,
   onSold,
 }: {
   open: boolean;
   clients: ClientOption[];
+  onClientAdded: (c: ClientOption) => void;
   onClose: () => void;
   onSold: (code: string) => void;
 }) {
@@ -542,24 +553,17 @@ function SellGiftCardModal({
             </div>
           </div>
 
-          {/* Buyer (optional client) */}
-          <div>
-            <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-              Buyer <span className="font-normal text-text-tertiary">(optional)</span>
-            </label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-            >
-              <option value="">Walk-in / no client on file</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Buyer — either pick an existing client or add a new
+              one inline. Same component used by Retail and Package
+              sell modals. */}
+          <ClientPickerWithAdd
+            label="Buyer (optional)"
+            value={clientId}
+            onChange={setClientId}
+            clients={clients}
+            onClientAdded={onClientAdded}
+            emptyOptionLabel="Walk-in / no client on file"
+          />
 
           {/* Expiry (optional) */}
           <div>

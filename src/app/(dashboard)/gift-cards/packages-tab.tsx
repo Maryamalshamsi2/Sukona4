@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Modal from "@/components/modal";
+import ClientPickerWithAdd from "@/components/client-picker-with-add";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
@@ -156,7 +157,8 @@ function itemsSummary(p: PackageRow): string {
 
 export default function PackagesTab({
   initialPackages,
-  initialClients,
+  clients,
+  onClientAdded,
   initialServices,
   controlsSlot,
   sellOpen,
@@ -164,7 +166,10 @@ export default function PackagesTab({
   onRequestSell,
 }: {
   initialPackages: PackageRow[];
-  initialClients: ClientOption[];
+  /** Live clients list — owned by /sales so additions propagate. */
+  clients: ClientOption[];
+  /** Bubble up a newly-added client so SalesView appends to state. */
+  onClientAdded: (c: ClientOption) => void;
   initialServices: ServiceOption[];
   /** Parent's portal target above the pill strip. See the equivalent
    *  prop on GiftCardsTab for the rationale. */
@@ -182,7 +187,7 @@ export default function PackagesTab({
   const currency = useCurrency();
 
   const [packages, setPackages] = useState<PackageRow[]>(initialPackages);
-  const [clients] = useState<ClientOption[]>(initialClients);
+  // clients comes from the parent (SalesView). No internal copy.
   const [services] = useState<ServiceOption[]>(initialServices);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<PackageStatus>("all");
@@ -375,6 +380,7 @@ export default function PackagesTab({
       <SellPackageModal
         open={sellOpen}
         clients={clients}
+        onClientAdded={onClientAdded}
         services={services}
         onClose={onSellClose}
         onSold={() => {
@@ -412,12 +418,14 @@ interface ItemDraft {
 function SellPackageModal({
   open,
   clients,
+  onClientAdded,
   services,
   onClose,
   onSold,
 }: {
   open: boolean;
   clients: ClientOption[];
+  onClientAdded: (c: ClientOption) => void;
   services: ServiceOption[];
   onClose: () => void;
   onSold: () => void;
@@ -498,25 +506,16 @@ function SellPackageModal({
   return (
     <Modal open={open} onClose={onClose} title="Sell package">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Recipient */}
-        <div>
-          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-            Recipient * <span className="font-normal text-text-tertiary">(who uses the sessions)</span>
-          </label>
-          <select
-            value={recipientId}
-            onChange={(e) => setRecipientId(e.target.value)}
-            required
-            className="w-full appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-          >
-            <option value="">Select a client</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Recipient — uses the sessions. Required. */}
+        <ClientPickerWithAdd
+          label="Recipient"
+          value={recipientId}
+          onChange={setRecipientId}
+          clients={clients}
+          onClientAdded={onClientAdded}
+          required
+          emptyOptionLabel="Select a client (who uses the sessions)"
+        />
 
         {/* Gift toggle + buyer (when gift) */}
         <div className="space-y-3">
@@ -532,23 +531,14 @@ function SellPackageModal({
             </span>
           </label>
           {isGift && (
-            <div>
-              <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-                Buyer <span className="font-normal text-text-tertiary">(who paid)</span>
-              </label>
-              <select
-                value={buyerId}
-                onChange={(e) => setBuyerId(e.target.value)}
-                className="w-full appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-              >
-                <option value="">Walk-in / no client on file</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ClientPickerWithAdd
+              label="Buyer (optional)"
+              value={buyerId}
+              onChange={setBuyerId}
+              clients={clients}
+              onClientAdded={onClientAdded}
+              emptyOptionLabel="Walk-in / no client on file"
+            />
           )}
         </div>
 

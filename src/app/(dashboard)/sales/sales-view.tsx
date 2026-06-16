@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Modal from "@/components/modal";
+import ClientPickerWithAdd from "@/components/client-picker-with-add";
 import { useUndo } from "@/components/undo-toast";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
@@ -156,6 +157,21 @@ export default function SalesView({
   const [tab, setTab] = useState<ActiveTab>("retail");
   const [sellWhich, setSellWhich] = useState<SellWhich>(null);
 
+  // Clients live here (not inside each tab) so a new client added
+  // from one sell modal — via ClientPickerWithAdd's inline form — is
+  // immediately visible in the other modals' pickers too. Each tab
+  // gets a snapshot via props and an onClientAdded callback.
+  const [clients, setClients] = useState<ClientOption[]>(initialClients);
+  const handleClientAdded = useCallback(
+    (c: { id: string; name: string; phone?: string | null }) => {
+      setClients((prev) => [
+        ...prev,
+        { id: c.id, name: c.name } as ClientOption,
+      ]);
+    },
+    [],
+  );
+
   // "+" dropdown
   const [addOpen, setAddOpen] = useState(false);
   const addRef = useRef<HTMLDivElement>(null);
@@ -267,7 +283,8 @@ export default function SalesView({
         {tab === "retail" ? (
           <RetailTab
             initialSales={initialSales}
-            initialClients={initialClients}
+            clients={clients}
+            onClientAdded={handleClientAdded}
             initialStaff={initialStaff}
             initialFrom={initialFrom}
             initialTo={initialTo}
@@ -279,7 +296,8 @@ export default function SalesView({
         ) : tab === "gift-cards" ? (
           <GiftCardsTab
             initialCards={initialGiftCards}
-            initialClients={initialClients as GcClientOption[]}
+            clients={clients as GcClientOption[]}
+            onClientAdded={handleClientAdded}
             controlsSlot={slotEl}
             sellOpen={sellWhich === "gift-card"}
             onSellClose={() => setSellWhich(null)}
@@ -288,7 +306,8 @@ export default function SalesView({
         ) : (
           <PackagesTab
             initialPackages={initialPackages}
-            initialClients={initialClients as GcClientOption[]}
+            clients={clients as GcClientOption[]}
+            onClientAdded={handleClientAdded}
             initialServices={initialServices}
             controlsSlot={slotEl}
             sellOpen={sellWhich === "package"}
@@ -333,7 +352,8 @@ function TabButton({
 
 function RetailTab({
   initialSales,
-  initialClients,
+  clients,
+  onClientAdded,
   initialStaff,
   initialFrom,
   initialTo,
@@ -343,7 +363,12 @@ function RetailTab({
   onRequestSell,
 }: {
   initialSales: SaleRow[];
-  initialClients: ClientOption[];
+  /** Live clients list from SalesView — used as the dropdown options
+   *  inside the SaleFormModal's ClientPickerWithAdd. */
+  clients: ClientOption[];
+  /** Bubble up when a new client is added so SalesView appends it
+   *  to its `clients` state and all 3 modals see the newcomer. */
+  onClientAdded: (c: ClientOption) => void;
   initialStaff: StaffOption[];
   initialFrom: string;
   initialTo: string;
@@ -362,7 +387,6 @@ function RetailTab({
   const currency = useCurrency();
 
   const [sales, setSales] = useState<SaleRow[]>(initialSales);
-  const [clients] = useState<ClientOption[]>(initialClients);
   const [staff] = useState<StaffOption[]>(initialStaff);
   const [loading, setLoading] = useState(false);
 
@@ -598,6 +622,7 @@ function RetailTab({
         open={modalOpen}
         editing={editing}
         clients={clients}
+        onClientAdded={onClientAdded}
         staff={staff}
         onClose={closeModal}
         onSaved={() => {
@@ -617,6 +642,7 @@ function SaleFormModal({
   open,
   editing,
   clients,
+  onClientAdded,
   staff,
   onClose,
   onSaved,
@@ -624,6 +650,7 @@ function SaleFormModal({
   open: boolean;
   editing: SaleRow | null;
   clients: ClientOption[];
+  onClientAdded: (c: ClientOption) => void;
   staff: StaffOption[];
   onClose: () => void;
   onSaved: () => void;
@@ -766,42 +793,34 @@ function SaleFormModal({
           />
         </div>
 
-        {/* Client + Staff (optional) */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-              Client <span className="font-normal text-text-tertiary">(optional)</span>
-            </label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-            >
-              <option value="">Walk-in / no client</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-              Sold by <span className="font-normal text-text-tertiary">(optional)</span>
-            </label>
+        {/* Client picker — full width because the inline "Add new
+            client" form expands into a multi-field block that
+            wouldn't fit in a 2-col grid next to "Sold by". */}
+        <ClientPickerWithAdd
+          label="Client (optional)"
+          value={clientId}
+          onChange={setClientId}
+          clients={clients}
+          onClientAdded={onClientAdded}
+          emptyOptionLabel="Walk-in / no client"
+        />
+
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+            Sold by <span className="font-normal text-text-tertiary">(optional)</span>
+          </label>
             <select
               value={staffId}
               onChange={(e) => setStaffId(e.target.value)}
               className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             >
-              <option value="">—</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
-            </select>
-          </div>
+            <option value="">—</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.full_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Notes */}
