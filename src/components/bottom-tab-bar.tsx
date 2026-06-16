@@ -41,7 +41,7 @@ const MORE_ITEMS: MoreItem[] = [
   { href: "/sales",     label: "Sales",     icon: "sales",    allow: ["owner", "admin"] },
   // Gift cards — same gate as Sales. Sells/voids here, redemption
   // happens at the appointment payment screen (migration-044).
-  { href: "/gift-cards", label: "Gift cards", icon: "gift",   allow: ["owner", "admin"] },
+  { href: "/gift-cards", label: "Vouchers",   icon: "gift",   allow: ["owner", "admin"] },
   { href: "/catalog",   label: "Catalog",   icon: "catalog",  allow: ["owner", "admin", "staff"] },
   { href: "/inventory", label: "Inventory", icon: "package",  allow: ["owner", "admin", "staff"] },
   { href: "/reports",   label: "Reports",   icon: "chart",    allow: ["owner"] },
