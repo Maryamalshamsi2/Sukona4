@@ -72,32 +72,36 @@ export async function recordPayment(
   tipToStaffId: string | null = null,
 ) {
   const supabase = await createClient();
-  const { error } = await supabase.from("payments").insert({
-    appointment_id: appointmentId,
-    amount,
-    method,
-    note,
-    receipt_urls: receiptUrls,
-    receipt_url: receiptUrls[0] ?? null,
-    tip_amount: tipAmount,
-    tip_to_staff_id: tipToStaffId,
-  });
-  if (error) return { error: error.message };
 
-  // Snapshot current state — need status (to know whether we're
-  // flipping or already paid), review_token (to skip minting if
-  // already set), and client_id (for the activity log message).
-  const { data: current } = await supabase
-    .from("appointments")
-    .select("status, review_token, client_id")
-    .eq("id", appointmentId)
-    .single();
+  // Round 1: INSERT payment + SELECT current appointment state.
+  // These two operations are independent — running them in parallel
+  // halves the round-trip count for this stage from 2 to 1.
+  const [insertRes, currentRes] = await Promise.all([
+    supabase.from("payments").insert({
+      appointment_id: appointmentId,
+      amount,
+      method,
+      note,
+      receipt_urls: receiptUrls,
+      receipt_url: receiptUrls[0] ?? null,
+      tip_amount: tipAmount,
+      tip_to_staff_id: tipToStaffId,
+    }),
+    supabase
+      .from("appointments")
+      .select("status, review_token, client_id")
+      .eq("id", appointmentId)
+      .single(),
+  ]);
 
+  if (insertRes.error) return { error: insertRes.error.message };
+  const current = currentRes.data;
   const shouldFlipPaid = current && current.status !== "paid";
   const needsReviewToken = current && !current.review_token;
 
-  // Single UPDATE carrying both changes (when applicable). Avoids
-  // two round-trips when both are needed.
+  // Round 2: appointment update — this one stays awaited because the
+  // user needs to know if the status flip succeeded (everything else
+  // below is non-critical and idempotent).
   if (shouldFlipPaid || needsReviewToken) {
     const patch: { status?: string; review_token?: string } = {};
     if (shouldFlipPaid) patch.status = "paid";
@@ -107,38 +111,59 @@ export async function recordPayment(
       .update(patch)
       .eq("id", appointmentId);
     if (updErr) {
-      // Payment was already inserted; bubble up so the UI shows the
-      // user that "save partially failed" rather than pretending it
-      // succeeded. With migration-036 in place this should be rare —
-      // it's defensive against future RLS regressions.
+      // Payment was already inserted; bubble up so the UI shows
+      // "save partially failed" rather than pretending it succeeded.
+      // Defensive against future RLS regressions (migration-036
+      // makes this rare in normal flow).
       return { error: `Payment saved but status flip failed: ${updErr.message}` };
     }
   }
 
-  // Mint receipt token + number atomically. The RPC is idempotent —
-  // re-calling for an appointment that already has a token returns the
-  // existing values without bumping the counter, so deposit + balance
-  // payments share one receipt.
-  await supabase.rpc("mint_receipt_for_appointment", {
-    p_appointment_id: appointmentId,
-  });
+  // Everything below runs in the background. The serverless function
+  // instance lingers long enough that these typically finish before
+  // it recycles, but if any of them fails, the user-visible save is
+  // already a success — we just lose a receipt token or activity log
+  // entry that the next page render will surface (or the next save
+  // will re-mint). Trading completeness for ~600ms of latency.
+  void (async () => {
+    try {
+      // Mint receipt token + number. Idempotent — re-calling for an
+      // appointment that already has a token returns the existing
+      // values without bumping the counter.
+      await supabase.rpc("mint_receipt_for_appointment", {
+        p_appointment_id: appointmentId,
+      });
+    } catch (err) {
+      console.error("[recordPayment] background mint_receipt failed:", err);
+    }
+  })();
 
   // Log + notify — only when the status actually transitioned.
   // updatePayment (the edit-existing-payment path) re-calls this
   // function shape but with an already-paid appointment, in which
   // case we don't want to double-log or double-notify.
   if (shouldFlipPaid) {
-    const { data: client } = current?.client_id
-      ? await supabase.from("clients").select("name").eq("id", current.client_id).single()
-      : { data: null };
-    await logActivity(
-      supabase,
-      appointmentId,
-      "status_updated",
-      `Status · ${client?.name || "Unknown"} → paid`,
-      current?.status,
-      "paid",
-    );
+    void (async () => {
+      try {
+        const { data: client } = current?.client_id
+          ? await supabase
+              .from("clients")
+              .select("name")
+              .eq("id", current.client_id)
+              .single()
+          : { data: null };
+        await logActivity(
+          supabase,
+          appointmentId,
+          "status_updated",
+          `Status · ${client?.name || "Unknown"} → paid`,
+          current?.status,
+          "paid",
+        );
+      } catch (err) {
+        console.error("[recordPayment] background activity log failed:", err);
+      }
+    })();
     void dispatchPaymentPaid(appointmentId);
   }
 
