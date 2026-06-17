@@ -442,26 +442,37 @@ export default function HomeView({
                   <button
                     key={appt.id}
                     onClick={() => openDetail(appt)}
-                    className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-hover sm:px-6 ${
+                    className={`grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 px-5 py-4 text-left transition-colors hover:bg-surface-hover sm:gap-x-4 sm:px-6 ${
                       i > 0 ? "border-t border-gray-100/80" : ""
                     } ${
                       isStaff && isMine ? "border-l-[3px] border-l-primary-500" : ""
                     } ${isPaid ? "opacity-35" : ""}`}
                   >
-                    {/* Time range. Fixed width sized for the worst-case
-                        range ("10:15 AM – 11:30 PM" ≈ 19 chars) so client
-                        name + location below align across every row.
-                        tabular-nums keeps digit widths consistent so the
-                        column doesn't visually shift between rows. */}
-                    <div className="w-[130px] shrink-0 sm:w-[140px]">
+                    {/* Three-column grid that re-flows for breakpoint:
+                          mobile: row 1 = [time] [(spacer)] [status]
+                                  row 2 = [client + location, spanning all 3]
+                          desktop: single row = [time] [client + location] [status]
+                        The client name no longer competes with the time range
+                        for horizontal space on small phones — fixes a visible
+                        overlap when both are wide (e.g. "11:15 AM – 12:15 PM"
+                        + "Aisha Al Hosani"). */}
+
+                    {/* Time + duration — top-left on mobile, leftmost on desktop */}
+                    <div className="col-start-1 row-start-1 shrink-0 sm:w-[140px]">
                       <p className="whitespace-nowrap text-body-sm font-semibold tabular-nums text-text-primary">
                         {formatTime12Short(appt.time)} – {formatTime12Short(endTime)}
                       </p>
                       <p className="mt-0.5 text-caption text-text-tertiary">{formatDuration(duration)}</p>
                     </div>
 
-                    {/* Info */}
-                    <div className="min-w-0 flex-1">
+                    {/* Status badge — top-right on mobile, rightmost on desktop */}
+                    <span className={`col-start-3 row-start-1 shrink-0 self-start rounded-full px-2.5 py-0.5 text-caption font-medium sm:self-center ${statusColor(appt.status)}`}>
+                      {statusLabel(appt.status)}
+                    </span>
+
+                    {/* Client name + location — second row spanning all 3
+                        cols on mobile; middle column on desktop. */}
+                    <div className="col-span-3 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
                       <p className="truncate text-body-sm font-semibold text-text-primary">
                         {appt.clients?.name || "Unknown"}
                       </p>
@@ -469,11 +480,6 @@ export default function HomeView({
                         <p className="mt-0.5 truncate text-caption text-text-tertiary">{location}</p>
                       )}
                     </div>
-
-                    {/* Status badge */}
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-caption font-medium ${statusColor(appt.status)}`}>
-                      {statusLabel(appt.status)}
-                    </span>
                   </button>
                 );
               })}
