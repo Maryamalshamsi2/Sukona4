@@ -3,6 +3,8 @@
 import { Fragment, useState, useEffect } from "react";
 import PhoneInput from "@/components/phone-input";
 import { useCurrency } from "@/lib/user-context";
+import type { ClientLocation } from "@/types";
+import { listClientLocations } from "@/app/(dashboard)/clients/client-locations-actions";
 
 // ---- Types ----
 
@@ -82,6 +84,19 @@ export interface AppointmentData {
   status: string;
   notes: string | null;
   duration_override: number | null;
+  /** Migration-047: the client_locations row this appointment is
+   *  pinned to. null on legacy appointments and on new appointments
+   *  where the client has no saved locations. */
+  location_id?: string | null;
+  /** Optionally joined client_locations row (from
+   *  `location:location_id(...)` shape). Read sites prefer this
+   *  over clients.address; falls back to clients.address when null. */
+  location?: {
+    id: string;
+    label: string;
+    address: string | null;
+    map_link: string | null;
+  } | null;
   // Review request fields. Populated by recordPayment() — null until then.
   review_token?: string | null;
   review_sent_at?: string | null;
@@ -374,6 +389,41 @@ export function getServiceName(s: ServiceItem) {
   return catName ? `${catName} — ${s.name}` : s.name;
 }
 
+/**
+ * Resolve the address / map_link / label to display for an appointment.
+ * Migration-047: appointments now pin to a specific client_location row.
+ * Prefer the pinned location; fall back to the client's legacy single
+ * address/map_link columns when the appointment was created before
+ * migration-047 or its client has no saved locations.
+ *
+ * The legacy fallback means historical records still show *something*
+ * even though it isn't the snapshot we'd ideally have. Once every
+ * appointment has been re-saved post-migration, the fallback could be
+ * dropped — but legacy reads stay correct until then.
+ */
+export function getApptLocation(appt: {
+  location?: {
+    id: string;
+    label: string;
+    address: string | null;
+    map_link: string | null;
+  } | null;
+  clients?: { address: string | null; map_link: string | null } | null;
+}): { label: string | null; address: string | null; map_link: string | null } {
+  if (appt.location) {
+    return {
+      label: appt.location.label || null,
+      address: appt.location.address,
+      map_link: appt.location.map_link,
+    };
+  }
+  return {
+    label: null,
+    address: appt.clients?.address ?? null,
+    map_link: appt.clients?.map_link ?? null,
+  };
+}
+
 // ---- DetailView Component ----
 
 export function DetailView({
@@ -560,22 +610,36 @@ export function DetailView({
               )}
             </div>
           )}
-          {appointment.clients?.address && (
-            <p className="text-text-secondary">{appointment.clients.address}</p>
-          )}
-          {appointment.clients?.map_link && (
-            <a
-              href={appointment.clients.map_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
-            >
-              Open in Maps
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-            </a>
-          )}
+          {(() => {
+            const loc = getApptLocation(appointment);
+            return (
+              <>
+                {loc.address && (
+                  <p className="text-text-secondary">
+                    {loc.label && loc.label !== loc.address && (
+                      <span className="font-semibold text-text-primary">
+                        {loc.label}:{" "}
+                      </span>
+                    )}
+                    {loc.address}
+                  </p>
+                )}
+                {loc.map_link && (
+                  <a
+                    href={loc.map_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary hover:underline underline-offset-2 transition-colors"
+                  >
+                    Open in Maps
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                  </a>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -1118,6 +1182,7 @@ export function AppointmentForm({
     notes: string,
     entries: ServiceEntry[],
     adjustments: AppointmentAdjustments,
+    locationId: string | null,
   ) => Promise<void>;
   onNewClient: (name: string, phone: string, address: string, mapLink: string, notes: string) => Promise<ClientItem | null>;
   onCancel: () => void;
@@ -1136,6 +1201,9 @@ export function AppointmentForm({
      *  totals line shows this as the end time instead of summing
      *  service durations. */
     duration_override?: number | null;
+    /** Migration-047 — the client_locations row this appointment is
+     *  pinned to. null = no pinned location (legacy appointments). */
+    location_id?: string | null;
   };
   prefillTime?: string | null;
   prefillStaffId?: string | null;
@@ -1164,6 +1232,14 @@ export function AppointmentForm({
     return `${hh}:${mm}`;
   });
   const [notes, setNotes] = useState(defaultValues?.notes || "");
+  // Migration-047: which saved client_location this appointment is
+  // pinned to. Auto-syncs to the client's default when the client
+  // changes in add mode; edit mode keeps the persisted value unless
+  // the user picks a different one.
+  const [locationId, setLocationId] = useState<string | null>(
+    defaultValues?.location_id ?? null,
+  );
+  const [clientLocations, setClientLocations] = useState<ClientLocation[]>([]);
   const [serviceEntries, setServiceEntries] = useState<ServiceEntry[]>(
     defaultValues?.serviceEntries?.length
       ? defaultValues.serviceEntries
@@ -1228,6 +1304,39 @@ export function AppointmentForm({
   useEffect(() => {
     if (prefillTime) setTime(prefillTime);
   }, [prefillTime]);
+
+  // Pull the picked client's saved locations whenever the selection
+  // changes. In ADD mode we auto-select the client's default; in EDIT
+  // mode we leave locationId alone (the appointment already has one).
+  useEffect(() => {
+    if (!selectedClientId) {
+      setClientLocations([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const data = (await listClientLocations(selectedClientId)) as ClientLocation[];
+      if (cancelled) return;
+      setClientLocations(data);
+      if (!defaultValues) {
+        // Add mode: pre-select the default so the new appointment lands
+        // on the right address out of the box.
+        const def = data.find((l) => l.is_default);
+        setLocationId(def?.id ?? null);
+      } else if (
+        defaultValues.location_id &&
+        !data.some((l) => l.id === defaultValues.location_id)
+      ) {
+        // Edit mode but the saved location was deleted under our feet —
+        // fall back to the client's default rather than orphaning the form.
+        const def = data.find((l) => l.is_default);
+        setLocationId(def?.id ?? null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClientId, defaultValues]);
 
   useEffect(() => {
     if (prefillStaffId && !defaultValues) {
@@ -1442,7 +1551,7 @@ export function AppointmentForm({
       total_override: totalOverride.trim() === "" ? null : parseFloat(totalOverride) || null,
     };
 
-    await onSubmit(clientId, date, time, notes, validEntries, adjustments);
+    await onSubmit(clientId, date, time, notes, validEntries, adjustments, locationId);
     setSubmitting(false);
   }
 
@@ -1526,6 +1635,39 @@ export function AppointmentForm({
           </div>
         )}
       </div>
+
+      {/* Migration-047 location picker. Hidden when the client has
+          no saved locations (legacy clients pre-migration, or fresh
+          inline-added clients with no address): the appointment goes
+          through with location_id=null and the read sites fall back
+          to clients.address. Hidden in "new client" mode too — the
+          inline address inputs above feed the new client's Home row
+          and the appointment picks it up after the next save. */}
+      {clientMode === "existing" && selectedClientId && clientLocations.length > 0 && (
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary">Location</label>
+          <select
+            value={locationId ?? ""}
+            onChange={(e) => setLocationId(e.target.value || null)}
+            className="mt-1 block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          >
+            {clientLocations.map((loc) => {
+              const head = loc.label || loc.address || "Location";
+              const tail =
+                loc.address && loc.label && loc.address !== loc.label
+                  ? ` — ${loc.address}`
+                  : "";
+              return (
+                <option key={loc.id} value={loc.id}>
+                  {head}
+                  {tail}
+                  {loc.is_default ? " (default)" : ""}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
 
       {/* min-w-0 + appearance-none keep the inputs the same width as
           the <select> fields above/below on mobile. Without

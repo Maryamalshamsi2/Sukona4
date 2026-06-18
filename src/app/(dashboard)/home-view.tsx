@@ -17,6 +17,7 @@ import {
   getApptTotalDuration,
   getApptTotal,
   getApptEndTime,
+  getApptLocation,
   formatDuration,
   DetailView,
   AppointmentForm,
@@ -435,7 +436,7 @@ export default function HomeView({
                 const duration = getApptTotalDuration(appt);
                 const endTime = getApptEndTime(appt);
                 const isMine = isMyAppointment(appt);
-                const location = appt.clients?.address;
+                const location = getApptLocation(appt).address;
                 const isPaid = appt.status === "paid";
 
                 return (
@@ -637,8 +638,8 @@ export default function HomeView({
             staff={staff}
             bundles={bundles}
             staffSchedules={staffScheduleMap}
-            onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-                        const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
+            onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
+              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments, locationId);
               if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
@@ -659,6 +660,7 @@ export default function HomeView({
               date: selectedAppointment.date,
               time: selectedAppointment.time,
               notes: selectedAppointment.notes || "",
+              location_id: selectedAppointment.location_id ?? null,
               transportation_charge: selectedAppointment.transportation_charge ?? null,
               discount_type: selectedAppointment.discount_type ?? null,
               discount_value: selectedAppointment.discount_value ?? null,

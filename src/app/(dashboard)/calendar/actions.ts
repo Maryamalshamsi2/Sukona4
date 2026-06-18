@@ -41,6 +41,7 @@ export async function getAppointmentsForDate(date: string) {
     .select(`
       *,
       clients ( id, name, phone, address, map_link ),
+      location:location_id ( id, label, address, map_link ),
       appointment_services (
         id,
         service_id,
@@ -290,7 +291,12 @@ export async function createAppointment(
   time: string,
   notes: string,
   serviceEntries: ServiceEntry[],
-  adjustments?: AppointmentAdjustments
+  adjustments?: AppointmentAdjustments,
+  /** Migration-047: pins the appointment to a specific client_location.
+   *  null is accepted (clients with no saved locations, or staff who
+   *  skipped the picker). The picker on the form defaults to the
+   *  client's default location whenever one exists. */
+  locationId?: string | null,
 ) {
   const supabase = await createClient();
 
@@ -317,6 +323,7 @@ export async function createAppointment(
       // Manual end-time set in the form's totals line. null → falls
       // back to summing service durations at render time.
       duration_override: adjustments?.duration_override ?? null,
+      location_id: locationId ?? null,
     })
     .select()
     .single();
@@ -394,7 +401,10 @@ export async function updateAppointment(
   time: string,
   notes: string,
   serviceEntries: ServiceEntry[],
-  adjustments?: AppointmentAdjustments
+  adjustments?: AppointmentAdjustments,
+  /** Migration-047 — location_id for the appointment. Pass undefined
+   *  to leave the existing location_id untouched; pass null to clear it. */
+  locationId?: string | null,
 ) {
   const supabase = await createClient();
 
@@ -439,6 +449,8 @@ export async function updateAppointment(
         total_override: adjustments.total_override,
         duration_override: adjustments.duration_override,
       }),
+      // undefined → no key written → existing value kept. null → cleared.
+      ...(locationId !== undefined && { location_id: locationId }),
     })
     .eq("id", id);
 

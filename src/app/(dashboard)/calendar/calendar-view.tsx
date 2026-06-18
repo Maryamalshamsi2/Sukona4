@@ -21,6 +21,7 @@ import {
   getServiceTimings,
   getApptTotalDuration,
   getApptTotal,
+  getApptLocation,
   getStaffServiceBlocks,
   getServiceName,
   DetailView,
@@ -1598,9 +1599,10 @@ export default function CalendarView({
                           style={{ top: `${displayTop}px`, height: `${displayHeight}px` }}
                         >
                           <p className="font-semibold truncate">{appt.clients?.name || "Unknown"}</p>
-                          {appt.clients?.address && (
-                            <p className="truncate opacity-70">{appt.clients.address}</p>
-                          )}
+                          {(() => {
+                            const addr = getApptLocation(appt).address;
+                            return addr ? <p className="truncate opacity-70">{addr}</p> : null;
+                          })()}
                           <p className="opacity-80 font-semibold">
                             {formatTime12Short(blockStartTime)} - {formatTime12Short(blockEndTime)} ({formatDuration(blockDuration)})
                           </p>
@@ -1750,8 +1752,8 @@ export default function CalendarView({
           staffSchedules={staffScheduleMap}
           prefillTime={prefillTime}
           prefillStaffId={prefillStaffId}
-          onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-            const result = await createAppointment(clientId, date, time, notes, entries, adjustments);
+          onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
+            const result = await createAppointment(clientId, date, time, notes, entries, adjustments, locationId);
             if (result.error) { undo.error(result.error); return; }
             setAddModalOpen(false);
             setPrefillTime(null);
@@ -1854,8 +1856,8 @@ export default function CalendarView({
             staff={teamScopedStaff}
             bundles={bundles}
             staffSchedules={staffScheduleMap}
-            onSubmit={async (clientId, date, time, notes, entries, adjustments) => {
-                        const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments);
+            onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
+              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments, locationId);
               if (result.error) { undo.error(result.error); return; }
               setEditModalOpen(false);
               setSelectedAppointment(null);
@@ -1874,6 +1876,7 @@ export default function CalendarView({
               date: selectedAppointment.date,
               time: selectedAppointment.time,
               notes: selectedAppointment.notes || "",
+              location_id: selectedAppointment.location_id ?? null,
               serviceEntries: selectedAppointment.appointment_services
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((as2) => ({

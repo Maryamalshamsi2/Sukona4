@@ -157,6 +157,7 @@ export async function getTodayAppointments(date: string) {
     .select(`
       *,
       clients ( id, name, phone, address, map_link ),
+      location:location_id ( id, label, address, map_link ),
       appointment_services (
         id,
         service_id,
