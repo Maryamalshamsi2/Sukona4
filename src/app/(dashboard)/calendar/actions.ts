@@ -236,6 +236,25 @@ export async function addClientQuick(name: string, phone: string, address: strin
     .single();
 
   if (error) return { error: error.message };
+
+  // Migration-047: if the caller provided an address or map link,
+  // record it as the client's first saved location (label "Home",
+  // marked default). Fire-and-forget — the clients.address/map_link
+  // columns still hold the value, so failure here just means the
+  // appointment form picker has nothing to show for this client
+  // until the next manual add.
+  if (data && (address || mapLink)) {
+    void supabase
+      .from("client_locations")
+      .insert({
+        client_id: data.id,
+        label: "Home",
+        address: address || null,
+        map_link: mapLink || null,
+        is_default: true,
+      });
+  }
+
   return { success: true, client: data };
 }
 

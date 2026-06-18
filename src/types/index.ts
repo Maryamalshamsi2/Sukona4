@@ -167,6 +167,22 @@ export interface Expense {
 }
 
 /**
+ * Migration-047 — one saved address per row. A client can have
+ * many; exactly one is the default (partial unique index enforces).
+ * Appointments link via appointments.location_id.
+ */
+export interface ClientLocation {
+  id: string;
+  salon_id: string;
+  client_id: string;
+  label: string;
+  address: string | null;
+  map_link: string | null;
+  is_default: boolean;
+  created_at: string;
+}
+
+/**
  * Migration-043 — standalone retail sale (product, walk-in
  * merchandise, etc.) not tied to an appointment. Owner+admin only;
  * staff don't see this surface. Counts toward Reports' Revenue
