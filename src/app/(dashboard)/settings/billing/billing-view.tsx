@@ -177,7 +177,7 @@ export default function BillingView({ initial }: { initial: BillingState | null 
           Want to switch plans?
         </p>
         <Link
-          href="/landing#pricing"
+          href="/landing?from=app#pricing"
           className="mt-1 inline-block text-body-sm font-semibold text-primary-600 hover:text-primary-700"
           target="_blank"
           rel="noopener noreferrer"

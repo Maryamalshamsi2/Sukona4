@@ -75,10 +75,17 @@ export async function updateSession(request: NextRequest) {
 
   // Authed user lands on /landing? Bounce them to their dashboard so
   // they don't see marketing chrome on top of their actual app.
+  //
+  // Exception: explicit deep links from inside the app (e.g. the
+  // "Compare all plans" link on /settings/billing) carry ?from=app
+  // so they pass through. Anchors (e.g. #pricing) survive the
+  // pass-through and the user lands at the right section.
   if (user && request.nextUrl.pathname.startsWith("/landing")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
+    if (request.nextUrl.searchParams.get("from") !== "app") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Onboarding + subscription + role guard. We fetch the profile (joined
