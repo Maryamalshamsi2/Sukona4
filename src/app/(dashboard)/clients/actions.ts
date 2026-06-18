@@ -59,52 +59,61 @@ export async function addClient(formData: FormData) {
 export async function updateClient(id: string, formData: FormData) {
   const supabase = await createClient();
 
-  const address = (formData.get("address") as string) || null;
-  const mapLink = (formData.get("map_link") as string) || null;
+  // Only patch the fields the form actually submitted. Once Phase 3
+  // lands the locations list on the edit modal, the address /
+  // map_link inputs are removed from the form — we must not
+  // silently NULL the legacy columns when the form didn't touch
+  // them. The locations actions keep the legacy mirror in sync
+  // via their own writes.
+  const updates: Record<string, unknown> = {
+    name: formData.get("name") as string,
+    phone: (formData.get("phone") as string) || null,
+    notes: (formData.get("notes") as string) || null,
+  };
+  const hasAddress = formData.has("address");
+  const hasMapLink = formData.has("map_link");
+  const address = hasAddress ? (formData.get("address") as string) || null : null;
+  const mapLink = hasMapLink ? (formData.get("map_link") as string) || null : null;
+  if (hasAddress) updates.address = address;
+  if (hasMapLink) updates.map_link = mapLink;
 
   const { error } = await supabase
     .from("clients")
-    .update({
-      name: formData.get("name") as string,
-      phone: (formData.get("phone") as string) || null,
-      address,
-      map_link: mapLink,
-      notes: (formData.get("notes") as string) || null,
-    })
+    .update(updates)
     .eq("id", id);
-
   if (error) return { error: error.message };
 
-  // Migration-047: keep the default saved location in sync with the
-  // legacy single-address edit form. Until Phase 3 lands the proper
-  // locations UI on /clients, owners still edit address here — the
-  // value needs to propagate to client_locations or the appointment-
-  // form picker shows stale data.
-  void (async () => {
-    const { data: defaultLoc } = await supabase
-      .from("client_locations")
-      .select("id")
-      .eq("client_id", id)
-      .eq("is_default", true)
-      .maybeSingle();
-    if (defaultLoc) {
-      // Existing default — patch its address/map_link.
-      await supabase
+  // Legacy form mode (Add modal still uses the single address+map_link
+  // inputs): propagate to the client's default saved location so the
+  // appointment-form picker doesn't show stale data. Skipped silently
+  // when the form didn't carry these fields (Edit modal in Phase 3+).
+  if (hasAddress || hasMapLink) {
+    void (async () => {
+      const { data: defaultLoc } = await supabase
         .from("client_locations")
-        .update({ address, map_link: mapLink })
-        .eq("id", defaultLoc.id);
-    } else if (address || mapLink) {
-      // No default yet (client originally created without an
-      // address, now getting one). Create the first location.
-      await supabase.from("client_locations").insert({
-        client_id: id,
-        label: "Home",
-        address,
-        map_link: mapLink,
-        is_default: true,
-      });
-    }
-  })();
+        .select("id")
+        .eq("client_id", id)
+        .eq("is_default", true)
+        .maybeSingle();
+      if (defaultLoc) {
+        const patch: Record<string, string | null> = {};
+        if (hasAddress) patch.address = address;
+        if (hasMapLink) patch.map_link = mapLink;
+        await supabase
+          .from("client_locations")
+          .update(patch)
+          .eq("id", defaultLoc.id);
+      } else if (address || mapLink) {
+        await supabase.from("client_locations").insert({
+          client_id: id,
+          label: "Home",
+          address,
+          map_link: mapLink,
+          is_default: true,
+        });
+      }
+    })();
+  }
 
   revalidatePath("/clients");
   return { success: true };

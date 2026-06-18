@@ -9,6 +9,7 @@ import { useCurrency } from "@/lib/user-context";
 import { useCurrentUser } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
 import { getClients, addClient, updateClient, deleteClient, getClientAppointments } from "./actions";
+import ClientLocationsList from "./client-locations-list";
 import {
   getStaffMembers,
   getClients as getClientsForForm,
@@ -593,23 +594,35 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
               <PhoneInput value={phoneValue} onChange={setPhoneValue} required />
             </div>
           </div>
-          <div>
-            <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Location *</label>
-            <div className="space-y-6 rounded-xl ring-1 ring-border p-4 bg-surface-hover">
-              <div>
-                <label htmlFor="address" className="block text-caption font-semibold text-text-secondary mb-1">Address (Area, Street, House/Floor/Apt) *</label>
-                <input id="address" name="address" type="text" required defaultValue={editing?.address ?? ""}
-                  placeholder="e.g. Al Reem Island, Tower 3, Floor 12, Apt 1204"
-                  className="block w-full rounded-lg border border-neutral-200 px-4 py-2.5 text-body-sm text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-100 sm:py-2" />
-              </div>
-              <div>
-                <label htmlFor="map_link" className="block text-caption font-semibold text-text-secondary mb-1">Google Maps Link (pin location)</label>
-                <input id="map_link" name="map_link" type="url" defaultValue={editing?.map_link ?? ""}
-                  placeholder="https://maps.google.com/..."
-                  className="block w-full rounded-lg border border-neutral-200 px-4 py-2.5 text-body-sm text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-100 sm:py-2" />
+          {/* Locations.
+              Add mode: single Location block (creates the "Home"
+              default via addClient → its client_locations insert).
+              Edit mode: full LocationsList with add / rename /
+              mark-default / remove. Each action commits immediately
+              to the server (independent of the modal's Save button,
+              which only handles name/phone/notes). */}
+          {editing ? (
+            <ClientLocationsList clientId={editing.id} />
+          ) : (
+            <div>
+              <label className="block text-body-sm font-semibold text-text-primary mb-1.5">Location *</label>
+              <div className="space-y-6 rounded-xl ring-1 ring-border p-4 bg-surface-hover">
+                <div>
+                  <label htmlFor="address" className="block text-caption font-semibold text-text-secondary mb-1">Address (Area, Street, House/Floor/Apt) *</label>
+                  {/* Add mode only — `editing` is null here. */}
+                  <input id="address" name="address" type="text" required
+                    placeholder="e.g. Al Reem Island, Tower 3, Floor 12, Apt 1204"
+                    className="block w-full rounded-lg border border-neutral-200 px-4 py-2.5 text-body-sm text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-100 sm:py-2" />
+                </div>
+                <div>
+                  <label htmlFor="map_link" className="block text-caption font-semibold text-text-secondary mb-1">Google Maps Link (pin location)</label>
+                  <input id="map_link" name="map_link" type="url"
+                    placeholder="https://maps.google.com/..."
+                    className="block w-full rounded-lg border border-neutral-200 px-4 py-2.5 text-body-sm text-text-primary focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-100 sm:py-2" />
+                </div>
               </div>
             </div>
-          </div>
+          )}
           <div>
             <label htmlFor="notes" className="block text-body-sm font-semibold text-text-primary">Notes</label>
             <textarea id="notes" name="notes" rows={2} defaultValue={editing?.notes ?? ""}
