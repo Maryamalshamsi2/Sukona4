@@ -1016,7 +1016,7 @@ function ShareSection({
 
   // Compose ONE message body. If the review's already in, drop the review
   // line — no point asking again.
-  const messageLines: string[] = [`Hi ${firstName}! Thanks for visiting today.`];
+  const messageLines: string[] = [`Hi ${firstName}! We hope you enjoyed your service.`];
   if (receiptUrl) messageLines.push(`Your receipt: ${receiptUrl}`);
   if (reviewUrl && !review) {
     messageLines.push(`We'd love your feedback — it only takes a moment: ${reviewUrl}`);
