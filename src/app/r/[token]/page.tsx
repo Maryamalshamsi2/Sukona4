@@ -8,13 +8,18 @@ import type { ReviewContext } from "@/types";
 /**
  * Public review page — accessible to anyone with the token, no login.
  *
- * Flow:
- *   1. Resolve token → ReviewContext (salon brand + appointment summary).
- *   2. Customer taps a star (1–5) and optionally writes a comment.
- *   3. On submit:
- *      - 4–5 stars + salon has public_review_url → redirect outward,
- *        record the rating internally for analytics.
- *      - Otherwise → save internally and show a thank-you screen.
+ * Two modes, chosen by whether the salon has set public_review_url:
+ *
+ *   A. URL set (Google / Yelp / etc.) — skip the picker entirely and
+ *      bounce the customer straight to that platform. We don't log
+ *      anything internally; the customer's review lives on the
+ *      external platform. The legacy 4-star gate inside
+ *      submit_review_by_token becomes unreachable in this mode (we
+ *      never reach the form), which is intentional.
+ *
+ *   B. No URL — show the internal star picker. Ratings 1–3 require a
+ *      comment so we get actionable feedback; 4–5 capture comment
+ *      optionally and show the thank-you screen.
  */
 export default function ReviewPage({
   params,
@@ -25,6 +30,10 @@ export default function ReviewPage({
   const [ctx, setCtx] = useState<ReviewContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Skip-picker mode — set when the salon has a public_review_url so
+  // the page shows a short "Redirecting…" beat before bouncing the
+  // customer to the external platform.
+  const [redirecting, setRedirecting] = useState(false);
 
   // Form state
   const [rating, setRating] = useState(0);
@@ -44,7 +53,17 @@ export default function ReviewPage({
         setNotFound(true);
       } else {
         setCtx(data);
-        if (data.already_submitted) setSubmitted(true);
+        if (data.already_submitted) {
+          setSubmitted(true);
+        } else if (data.public_review_url && data.public_review_url.trim()) {
+          // Skip-picker mode. Brief delay so the customer sees the
+          // salon name + redirect notice before the navigation —
+          // otherwise the bounce reads as a phishing redirect.
+          setRedirecting(true);
+          window.setTimeout(() => {
+            window.location.href = data.public_review_url!;
+          }, 600);
+        }
       }
       setLoading(false);
     }
@@ -112,6 +131,19 @@ export default function ReviewPage({
   if (!ctx) return null;
 
   const brand = ctx.brand_color || "#171717";
+
+  if (redirecting) {
+    return (
+      <Shell brandColor={brand}>
+        <h1 className="text-title-section font-semibold text-text-primary">
+          Thanks for visiting {ctx.salon_name}!
+        </h1>
+        <p className="mt-2 text-body-sm text-text-secondary">
+          Redirecting you to leave a review…
+        </p>
+      </Shell>
+    );
+  }
 
   if (submitted) {
     return (
