@@ -120,14 +120,63 @@ export async function updateService(id: string, formData: FormData) {
   return { success: true };
 }
 
+/**
+ * Smart-delete a service.
+ *
+ *   - If no appointment_services / bundle_items reference it →
+ *     hard DELETE (the service was never used; safe to remove).
+ *   - Otherwise → soft-delete via `is_active = false`. The service
+ *     disappears from the catalog UI and the appointment-form
+ *     picker, but historical appointments keep their service
+ *     breakdown and bundle items aren't orphaned. Reports stay
+ *     accurate.
+ *
+ * The old hard-DELETE relied on ON DELETE CASCADE to silently
+ * remove appointment_services rows — wiping the historical
+ * service detail off every past appointment and any bundle items
+ * that referenced the service. A salon owner cleaning up their
+ * catalog could erase months of revenue history with one click.
+ *
+ * Returns a `mode` discriminator so the UI can confirm what
+ * happened ("Service removed" vs "Service hidden from catalog").
+ */
 export async function deleteService(id: string) {
   const supabase = await createClient();
 
-  const { error } = await supabase.from("services").delete().eq("id", id);
+  // count: "exact" + head: true returns the count without fetching
+  // rows — cheaper than .select("id") for a binary "in use?" check.
+  const [{ count: apptUses }, { count: bundleUses }] = await Promise.all([
+    supabase
+      .from("appointment_services")
+      .select("id", { count: "exact", head: true })
+      .eq("service_id", id),
+    supabase
+      .from("service_bundle_items")
+      .select("id", { count: "exact", head: true })
+      .eq("service_id", id),
+  ]);
 
+  const inUse = (apptUses ?? 0) > 0 || (bundleUses ?? 0) > 0;
+
+  if (inUse) {
+    const { error } = await supabase
+      .from("services")
+      .update({ is_active: false })
+      .eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/catalog");
+    return {
+      success: true,
+      mode: "soft" as const,
+      apptUses: apptUses ?? 0,
+      bundleUses: bundleUses ?? 0,
+    };
+  }
+
+  const { error } = await supabase.from("services").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/catalog");
-  return { success: true };
+  return { success: true, mode: "hard" as const };
 }
 
 // ---- BUNDLES ----

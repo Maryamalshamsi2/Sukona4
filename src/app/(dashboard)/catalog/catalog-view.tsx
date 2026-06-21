@@ -302,11 +302,27 @@ export default function CatalogView({
   }
 
   async function handleDeleteService(id: string) {
+    // Two-stage confirm. First pass = plain "Delete this service?" —
+    // most attempts are for services that were never used and a
+    // hard-delete is fine. If the service IS referenced by past
+    // appointments or live bundles, the server soft-deletes (sets
+    // is_active=false) and tells us via result.mode='soft' so we
+    // can explain what happened without erasing history.
     if (!confirm("Delete this service?")) return;
     const result = await deleteService(id);
     if (result.error) {
       undo.error(result.error);
       return;
+    }
+    if ("mode" in result && result.mode === "soft") {
+      const apptN = result.apptUses ?? 0;
+      const bundleN = result.bundleUses ?? 0;
+      const parts: string[] = [];
+      if (apptN > 0) parts.push(`${apptN} past appointment${apptN === 1 ? "" : "s"}`);
+      if (bundleN > 0) parts.push(`${bundleN} bundle${bundleN === 1 ? "" : "s"}`);
+      undo.error(
+        `Hidden from the catalog instead of deleted — it's still used by ${parts.join(" and ")}.`,
+      );
     }
     loadData();
   }
@@ -1027,7 +1043,20 @@ export default function CatalogView({
         title={editingBundle ? "Edit Bundle" : "Create Bundle"}
       >
         <BundleForm
-          services={services.filter((s) => s.is_active)}
+          // Filter to active services PLUS any inactive ones already
+          // on the bundle being edited. Without the union, a service
+          // that was deactivated after the bundle was created would
+          // silently disappear from the picker on save — leaving the
+          // bundle one service shorter than the owner intended.
+          services={(() => {
+            const active = services.filter((s) => s.is_active);
+            if (!editingBundle) return active;
+            const activeIds = new Set(active.map((s) => s.id));
+            const inactiveOnBundle = (editingBundle.service_bundle_items ?? [])
+              .map((bi) => bi.services)
+              .filter((s): s is NonNullable<typeof s> => !!s && !activeIds.has(s.id));
+            return [...active, ...inactiveOnBundle];
+          })()}
           categories={categories}
           editingBundle={editingBundle}
           onSubmit={async (data) => {
@@ -1269,6 +1298,11 @@ function BundleForm({
         <div className="max-h-48 overflow-y-auto rounded-xl border-[1.5px] border-gray-200 divide-y divide-border">
           {services.map((svc) => {
             const isSelected = selectedServiceIds.includes(svc.id);
+            // Inactive services only appear in this list when they're
+            // already on the bundle being edited (see the union in
+            // the BundleForm props). Tag them so the owner sees why
+            // a familiar service is here and can decide to deselect.
+            const isInactive = !svc.is_active;
             return (
               <label
                 key={svc.id}
@@ -1283,7 +1317,14 @@ function BundleForm({
                   className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-body-sm text-text-primary truncate">{svc.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-body-sm text-text-primary truncate">{svc.name}</p>
+                    {isInactive && (
+                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-caption font-semibold text-text-tertiary">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
                   <p className="text-caption text-text-secondary">
                     {svc.duration_minutes} min &middot; {formatCurrency(svc.price, currency)}
                   </p>
