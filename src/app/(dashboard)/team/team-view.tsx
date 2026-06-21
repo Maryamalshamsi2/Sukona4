@@ -763,9 +763,16 @@ export default function TeamView({ initialMembers, initialGroups }: TeamViewProp
               name="role"
               value={memberRole}
               onChange={(e) => setMemberRole(e.target.value)}
-              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:py-2.5"
+              // "Owner" is never a selectable option — there's only
+              // one owner per salon. Show it only when the row being
+              // edited IS the owner (self-edit), in which case the
+              // dropdown is locked so they can't accidentally demote
+              // themselves and lose /team access. Ownership transfer
+              // will eventually need its own flow.
+              disabled={editingSelf && memberRole === "owner"}
+              className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 text-body text-text-primary transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:opacity-60 sm:py-2.5"
             >
-              <option value="owner">Owner</option>
+              {memberRole === "owner" && <option value="owner">Owner</option>}
               <option value="admin">Admin</option>
               <option value="staff">Staff</option>
             </select>

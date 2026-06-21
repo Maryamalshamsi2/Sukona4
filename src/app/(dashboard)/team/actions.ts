@@ -144,8 +144,13 @@ export async function addTeamMember(formData: FormData) {
   // Caller's salon — the new member is attached to this salon.
   const inviter = await getCurrentProfile();
   if (!inviter) return { error: "Not authenticated" };
-  if (inviter.role !== "owner" && inviter.role !== "admin") {
-    return { error: "Not authorized" };
+  // Owner-only. Middleware already restricts /team to owners; this is
+  // the server-side fence so an admin can't POST directly to this
+  // action (server actions are routable). Previously this allowed
+  // admins, which combined with the unchecked `requestedRole` below
+  // let an admin add another admin (or worse, an owner).
+  if (inviter.role !== "owner") {
+    return { error: "Only the salon owner can add team members" };
   }
 
   const adminResult = await getAdminClient();
@@ -189,6 +194,12 @@ export async function addTeamMember(formData: FormData) {
   const password = ((formData.get("password") as string) || "").trim();
   const fullName = ((formData.get("full_name") as string) || "").trim();
   const requestedRole = ((formData.get("role") as string) || "staff").trim();
+  // Hard cap to admin/staff. The "one-owner-per-salon" invariant is
+  // enforced by ownership transfer happening through a dedicated flow
+  // (which doesn't exist yet) — never through team add/update.
+  if (requestedRole !== "admin" && requestedRole !== "staff") {
+    return { error: "Role must be admin or staff" };
+  }
 
   // Validation — phone + password + name are always required, email optional.
   if (!fullName) return { error: "Full name is required" };
@@ -321,6 +332,14 @@ export async function updateTeamMember(id: string, formData: FormData) {
 
   // Profile-only fields. These are always editable.
   const newRole = formData.get("role") as string;
+  // No path through this action can mint a new owner. Owner role is
+  // transferred through a dedicated flow (not yet built); blocking it
+  // here means an admin who somehow reached this endpoint, or an
+  // owner who fat-fingered the form, can't accidentally crown a
+  // second owner.
+  if (newRole !== "admin" && newRole !== "staff") {
+    return { error: "Role must be admin or staff" };
+  }
   const appearsOnCalendar = (formData.get("appears_on_calendar") as string) !== "false";
   // Migration-038: commission_percent (0..100), clamped here so the
   // DB CHECK constraint can never reject a slightly out-of-range value.

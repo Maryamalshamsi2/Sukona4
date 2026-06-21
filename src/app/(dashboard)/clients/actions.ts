@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getTeamScope } from "@/lib/auth-server";
+import { validateWebUrl } from "@/lib/url-validation";
 
 export async function getClients() {
   const supabase = await createClient();
@@ -18,14 +19,28 @@ export async function getClients() {
 export async function addClient(formData: FormData) {
   const supabase = await createClient();
 
+  // Defense in depth: the form input has required+pattern, but a
+  // direct POST / accessibility tooling / Safari autofill quirk can
+  // still slip through without a phone. WhatsApp dispatch then
+  // silently fails for that client forever, so enforce server-side.
+  const name = ((formData.get("name") as string) || "").trim();
+  const phone = ((formData.get("phone") as string) || "").trim();
+  if (!name) return { error: "Name is required" };
+  if (!phone) return { error: "Phone is required" };
+
   const address = (formData.get("address") as string) || null;
-  const mapLink = (formData.get("map_link") as string) || null;
+  const mapLinkResult = validateWebUrl(
+    (formData.get("map_link") as string) || null,
+    "Map link",
+  );
+  if ("error" in mapLinkResult) return { error: mapLinkResult.error };
+  const mapLink = mapLinkResult.value;
 
   const { data: client, error } = await supabase
     .from("clients")
     .insert({
-      name: formData.get("name") as string,
-      phone: (formData.get("phone") as string) || null,
+      name,
+      phone,
       address,
       map_link: mapLink,
       notes: (formData.get("notes") as string) || null,
@@ -59,6 +74,11 @@ export async function addClient(formData: FormData) {
 export async function updateClient(id: string, formData: FormData) {
   const supabase = await createClient();
 
+  const name = ((formData.get("name") as string) || "").trim();
+  const phone = ((formData.get("phone") as string) || "").trim();
+  if (!name) return { error: "Name is required" };
+  if (!phone) return { error: "Phone is required" };
+
   // Only patch the fields the form actually submitted. Once Phase 3
   // lands the locations list on the edit modal, the address /
   // map_link inputs are removed from the form — we must not
@@ -66,14 +86,22 @@ export async function updateClient(id: string, formData: FormData) {
   // them. The locations actions keep the legacy mirror in sync
   // via their own writes.
   const updates: Record<string, unknown> = {
-    name: formData.get("name") as string,
-    phone: (formData.get("phone") as string) || null,
+    name,
+    phone,
     notes: (formData.get("notes") as string) || null,
   };
   const hasAddress = formData.has("address");
   const hasMapLink = formData.has("map_link");
   const address = hasAddress ? (formData.get("address") as string) || null : null;
-  const mapLink = hasMapLink ? (formData.get("map_link") as string) || null : null;
+  let mapLink: string | null = null;
+  if (hasMapLink) {
+    const r = validateWebUrl(
+      (formData.get("map_link") as string) || null,
+      "Map link",
+    );
+    if ("error" in r) return { error: r.error };
+    mapLink = r.value;
+  }
   if (hasAddress) updates.address = address;
   if (hasMapLink) updates.map_link = mapLink;
 

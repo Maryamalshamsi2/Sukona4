@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getTeamScope } from "@/lib/auth-server";
+import { validateWebUrl } from "@/lib/url-validation";
 import {
   dispatchAppointmentConfirmation,
   dispatchAppointmentUpdated,
@@ -224,13 +225,25 @@ export async function getCalendarBlocks(date: string) {
 export async function addClientQuick(name: string, phone: string, address: string, mapLink: string, notes: string) {
   const supabase = await createClient();
 
+  // Server-side trims + required fields, mirroring clients/actions.ts
+  // addClient. The inline modal validates client-side but a direct
+  // server-action invocation could still bypass that.
+  const cleanName = (name || "").trim();
+  const cleanPhone = (phone || "").trim();
+  if (!cleanName) return { error: "Name is required" };
+  if (!cleanPhone) return { error: "Phone is required" };
+
+  const mapLinkResult = validateWebUrl(mapLink || null, "Map link");
+  if ("error" in mapLinkResult) return { error: mapLinkResult.error };
+  const cleanMapLink = mapLinkResult.value;
+
   const { data, error } = await supabase
     .from("clients")
     .insert({
-      name,
-      phone: phone || null,
+      name: cleanName,
+      phone: cleanPhone,
       address: address || null,
-      map_link: mapLink || null,
+      map_link: cleanMapLink,
       notes: notes || null,
     })
     .select()
@@ -244,14 +257,14 @@ export async function addClientQuick(name: string, phone: string, address: strin
   // columns still hold the value, so failure here just means the
   // appointment form picker has nothing to show for this client
   // until the next manual add.
-  if (data && (address || mapLink)) {
+  if (data && (address || cleanMapLink)) {
     void supabase
       .from("client_locations")
       .insert({
         client_id: data.id,
         label: "Home",
         address: address || null,
-        map_link: mapLink || null,
+        map_link: cleanMapLink,
         is_default: true,
       });
   }

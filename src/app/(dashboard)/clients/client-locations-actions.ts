@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { validateWebUrl } from "@/lib/url-validation";
 
 /**
  * Multi-location client server actions (migration-047).
@@ -84,6 +85,14 @@ function validateLocation(p: {
   // meaningless.
   if (!p.label.trim() && !(p.address ?? "").trim()) {
     return "Enter a label or an address";
+  }
+  // map_link gets rendered as <a href={...}> on the appointment
+  // detail and possibly redirected from the public review page. Lock
+  // it to http/https so an owner can't paste a javascript: URL that
+  // would fire on the customer's device.
+  if (p.mapLink !== null && p.mapLink.trim()) {
+    const r = validateWebUrl(p.mapLink, "Map link");
+    if ("error" in r) return r.error;
   }
   return null;
 }
