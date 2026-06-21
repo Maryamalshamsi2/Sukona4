@@ -64,18 +64,49 @@ export async function POST(req: NextRequest) {
   // Stripe customer is created once per salon and reused for all
   // future checkout/portal sessions. Owners with no customer ID yet
   // (their first time at billing) get one created and persisted.
+  //
+  // Two failure modes guarded here:
+  //   1. stripe.customers.create throws (Stripe outage / rate limit).
+  //      The bare `await` previously bubbled a raw 500 with no
+  //      context; wrap so we can return a user-readable message.
+  //   2. The .update of salons.stripe_customer_id silently fails
+  //      (RLS, network blip). Without verifying the persist, we'd
+  //      hand the customer to Stripe Checkout — payment succeeds,
+  //      webhook arrives with a customer_id that doesn't exist in
+  //      our DB, sync drifts forever. Abort before creating the
+  //      session if the write didn't land.
   const stripe = getStripe();
   let customerId = salon.stripe_customer_id;
   if (!customerId) {
-    const customer = await stripe.customers.create({
-      name: salon.name ?? undefined,
-      metadata: { salon_id: salon.id },
-    });
+    let customer;
+    try {
+      customer = await stripe.customers.create({
+        name: salon.name ?? undefined,
+        metadata: { salon_id: salon.id },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Stripe customer creation failed";
+      console.error("stripe.customers.create failed:", msg);
+      return NextResponse.json(
+        { error: "Couldn't start checkout — try again in a moment." },
+        { status: 502 },
+      );
+    }
     customerId = customer.id;
-    await supabase
+    const { error: persistErr, count: persistCount } = await supabase
       .from("salons")
-      .update({ stripe_customer_id: customerId })
+      .update({ stripe_customer_id: customerId }, { count: "exact" })
       .eq("id", salon.id);
+    if (persistErr || (persistCount ?? 0) === 0) {
+      console.error(
+        `salons.stripe_customer_id persist failed for salon=${salon.id}, customer=${customerId}:`,
+        persistErr?.message ?? "0 rows updated",
+      );
+      return NextResponse.json(
+        { error: "Couldn't save your billing profile — try again." },
+        { status: 500 },
+      );
+    }
   }
 
   // Honor the in-progress trial. Stripe accepts a unix timestamp

@@ -49,11 +49,49 @@ export async function POST(req: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, secret);
   } catch (err) {
-    console.error("Stripe webhook signature verification failed:", err);
+    // Log only the message — the full error object carries the raw
+    // stripe-signature header + payload, which serverless log search
+    // tools should not have indexed copies of.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Stripe webhook signature verification failed:", msg);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   const admin = createAdminClient();
+
+  // Idempotency fence — Stripe retries aggressively on any timeout
+  // or 5xx, and we MUST process each event_id exactly once. Insert
+  // first; if the row already exists (conflict on PK) we return 200
+  // immediately and skip the handler body. The 0-row outcome is the
+  // signal that we've seen this event before.
+  //
+  // Inserting BEFORE handling means a handler crash doesn't mark
+  // the event as processed — we want Stripe to retry in that case.
+  // The narrow risk is "insert succeeded but handler crashed mid-way
+  // and left partial state": for our handlers each is a single
+  // .update on salons, so partial state isn't possible.
+  const { error: dedupErr, count: insertedCount } = await admin
+    .from("stripe_events")
+    .insert(
+      { event_id: event.id, event_type: event.type },
+      { count: "exact" },
+    );
+  if (dedupErr) {
+    // 23505 = unique_violation → duplicate event, ack and skip.
+    // PostgREST surfaces it as code "23505" on the error object.
+    if ((dedupErr as { code?: string }).code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    // Any other DB error: log and 500 so Stripe retries.
+    console.error("stripe_events insert failed:", dedupErr.message);
+    return NextResponse.json({ error: "Idempotency table unavailable" }, { status: 500 });
+  }
+  // Belt-and-braces: PostgREST sometimes returns no error AND no
+  // count on conflict-ignore configurations. Treat 0-row insert as
+  // dup too.
+  if (insertedCount === 0) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
 
   try {
     switch (event.type) {
@@ -70,15 +108,26 @@ export async function POST(req: NextRequest) {
         // the subscription_id but keep the customer_id so the
         // owner can re-subscribe without going through Customer
         // creation again.
+        //
+        // count: "exact" so we can detect when the update affected
+        // 0 rows (salons row missing for that customer_id — sync
+        // drift). Throwing returns 500, Stripe retries; in the
+        // meantime we have an obvious log line to investigate.
         const sub = event.data.object as Stripe.Subscription;
-        await admin
+        const { error: updErr, count } = await admin
           .from("salons")
           .update({
             stripe_subscription_id: null,
             subscription_status: "canceled",
             updated_at: new Date().toISOString(),
-          })
+          }, { count: "exact" })
           .eq("stripe_customer_id", sub.customer as string);
+        if (updErr) throw updErr;
+        if ((count ?? 0) === 0) {
+          throw new Error(
+            `subscription.deleted: no salon matched stripe_customer_id=${sub.customer}`,
+          );
+        }
         break;
       }
 
@@ -146,13 +195,27 @@ async function syncSubscription(
         ? "past_due"
         : sub.status;
 
-  await admin
+  // count: "exact" lets us detect 0-row updates. A 0-row outcome
+  // means the salons table has no row for this stripe_customer_id
+  // — either we never persisted it during checkout (race / failure)
+  // or the row was deleted manually. Either way the silent no-op
+  // would leave Stripe and our DB permanently out of sync. Throw
+  // so the webhook returns 500 and Stripe retries; if the salon
+  // row appears later (e.g. the checkout completion finally
+  // persists), the retry succeeds.
+  const { error: updErr, count } = await admin
     .from("salons")
     .update({
       stripe_subscription_id: sub.id,
       subscription_status: status,
       current_period_end: currentPeriodEnd,
       updated_at: new Date().toISOString(),
-    })
+    }, { count: "exact" })
     .eq("stripe_customer_id", sub.customer as string);
+  if (updErr) throw updErr;
+  if ((count ?? 0) === 0) {
+    throw new Error(
+      `syncSubscription: no salon matched stripe_customer_id=${sub.customer} (subscription=${sub.id})`,
+    );
+  }
 }
