@@ -21,8 +21,11 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, {
               ...options,
-              // Allow cookies over plain HTTP (local dev via IP address)
-              secure: false,
+              // Only require HTTPS-only cookies in production. Local dev
+              // (HTTP via IP) still needs secure: false; production must
+              // never ship secure: false or sessions become MITM-able on
+              // any shared network.
+              secure: process.env.NODE_ENV === "production",
               sameSite: "lax",
             })
           );

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
+import { APP_URL } from "@/lib/constants";
 
 export async function POST(request: NextRequest) {
   const response = NextResponse.json({ url: "" });
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, {
               ...options,
-              secure: false,
+              secure: process.env.NODE_ENV === "production",
               sameSite: "lax",
             });
           });
@@ -25,8 +26,10 @@ export async function POST(request: NextRequest) {
     }
   );
 
-  // Determine the origin from the request
-  const origin = request.headers.get("origin") || new URL(request.url).origin;
+  // Use the deploy-pinned APP_URL constant rather than the spoofable
+  // Origin header. A malicious client passing Origin: evil.com would
+  // otherwise get the OAuth code redirected to an attacker domain.
+  const origin = APP_URL;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",

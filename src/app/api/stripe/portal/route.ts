@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { APP_URL } from "@/lib/constants";
 
 /**
  * POST /api/stripe/portal
@@ -43,7 +44,10 @@ export async function POST(req: NextRequest) {
   }
 
   const stripe = getStripe();
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  // Use the deploy-pinned APP_URL constant rather than the spoofable
+  // Origin header. Otherwise a crafted Origin would set return_url to
+  // an attacker domain after portal interactions.
+  const origin = APP_URL;
 
   try {
     const session = await stripe.billingPortal.sessions.create({

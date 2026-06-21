@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { stripePriceIdFor } from "@/lib/stripe-prices";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { APP_URL } from "@/lib/constants";
 import type { Plan, BillingPeriod } from "@/lib/plan";
 
 /**
@@ -83,7 +84,10 @@ export async function POST(req: NextRequest) {
   const trialMs = salon.trial_ends_at ? new Date(salon.trial_ends_at).getTime() : null;
   const useTrial = trialMs !== null && trialMs > Date.now();
 
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  // Use the deploy-pinned APP_URL constant rather than the spoofable
+  // Origin header. A spoofed Origin would otherwise redirect the user
+  // post-payment to attacker-controlled URLs.
+  const origin = APP_URL;
 
   let session;
   try {

@@ -31,8 +31,10 @@ export async function POST(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, {
               ...options,
-              // Ensure cookies work on non-HTTPS (local dev over IP)
-              secure: false,
+              // Local dev over IP needs secure: false; production HTTPS
+              // must NEVER ship secure: false — sessions become MITM-able
+              // on any shared wifi.
+              secure: process.env.NODE_ENV === "production",
               sameSite: "lax",
             });
           });
