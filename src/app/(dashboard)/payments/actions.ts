@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth-server";
 import { dispatchPaymentPaid } from "@/lib/whatsapp/dispatch";
 import type { PaymentMethod } from "@/types";
 
@@ -190,7 +191,41 @@ export async function updatePayment(
   tipAmount: number = 0,
   tipToStaffId: string | null = null,
 ) {
+  // Owner/admin only — staff shouldn't be able to silently rewrite
+  // historical receipts. Mirrors the gate on deletePayment below.
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner" && profile.role !== "admin") {
+    return { error: "Not authorized" };
+  }
+
   const supabase = await createClient();
+
+  // Fetch existing for tenancy + method-change validation. A bare id
+  // update with no fetch would silently no-op on a cross-salon row
+  // (RLS hides it), and a method change away from gift_card / package
+  // would leave the underlying card balance or package sessions in
+  // the wrong state — the redeem path is the only place that
+  // bookkeeps those, so changing the method here would mask fraud
+  // or break reporting. Block the conversion either way.
+  const { data: existing } = await supabase
+    .from("payments")
+    .select("salon_id, method")
+    .eq("id", paymentId)
+    .maybeSingle();
+  if (!existing || existing.salon_id !== profile.salon_id) {
+    return { error: "Payment not found" };
+  }
+  const wasRedemption =
+    existing.method === "gift_card" || existing.method === "package";
+  const becomesRedemption = method === "gift_card" || method === "package";
+  if (wasRedemption !== becomesRedemption || (wasRedemption && existing.method !== method)) {
+    return {
+      error:
+        "Gift card and package payments can't be converted to another method here. Void the payment and re-record it instead.",
+    };
+  }
+
   const { error } = await supabase
     .from("payments")
     .update({

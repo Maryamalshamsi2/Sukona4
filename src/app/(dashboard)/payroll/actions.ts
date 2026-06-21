@@ -728,6 +728,21 @@ export async function addStaffAdjustment(
   }
 
   const supabase = await createClient();
+
+  // Confirm the target staff actually belongs to this salon before
+  // writing the adjustment. RLS on staff_adjustments would let the
+  // insert succeed regardless of staff_id (salon_id is set from the
+  // gate, not from the staff row), so without this check an owner
+  // could attribute a bonus to a profile in another tenant.
+  const { data: staffRow } = await supabase
+    .from("profiles")
+    .select("salon_id")
+    .eq("id", staffId)
+    .maybeSingle();
+  if (!staffRow || staffRow.salon_id !== gate.profile.salon_id) {
+    return { error: "Staff member not found" };
+  }
+
   const { error } = await supabase.from("staff_adjustments").insert({
     salon_id: gate.profile.salon_id,
     staff_id: staffId,
@@ -767,16 +782,24 @@ export async function deleteStaffAdjustment(id: string) {
   // activity log message. Without this, the bell would show
   // "Deleted adjustment" with no context. ON DELETE removes the row,
   // so a post-delete fetch wouldn't give us the data.
+  // salon_id selected for the tenancy fence on the delete below.
   const { data: before } = await supabase
     .from("staff_adjustments")
-    .select("type, staff_id, reason")
+    .select("type, staff_id, reason, salon_id")
     .eq("id", id)
     .single();
+  if (before && before.salon_id !== gate.profile.salon_id) {
+    return { error: "Adjustment not found" };
+  }
 
   const { error } = await supabase
     .from("staff_adjustments")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    // Tenancy fence — mirrors updateStaffAdjustment. RLS already
+    // blocks cross-salon delete, but the explicit clause makes the
+    // 0-row outcome distinguishable from a "successful" no-op.
+    .eq("salon_id", gate.profile.salon_id);
 
   if (error) return { error: error.message };
 

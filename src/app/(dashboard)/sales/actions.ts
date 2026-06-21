@@ -139,6 +139,20 @@ export async function updateRetailSale(id: string, payload: SalePayload) {
   if (v) return { error: v };
 
   const supabase = await createClient();
+
+  // Defense-in-depth tenancy check + existence confirmation. Without
+  // this an update with a foreign id returns "success" (RLS turns a
+  // cross-salon row into 0 rows; .update reports no error) and the
+  // UI shows the toast as if the change landed.
+  const { data: existing } = await supabase
+    .from("retail_sales")
+    .select("salon_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing || existing.salon_id !== gate.profile.salon_id) {
+    return { error: "Sale not found" };
+  }
+
   const { error } = await supabase
     .from("retail_sales")
     .update({
@@ -163,6 +177,18 @@ export async function deleteRetailSale(id: string) {
   if ("error" in gate) return { error: gate.error };
 
   const supabase = await createClient();
+
+  // Same tenancy fence as updateRetailSale — a 0-row delete would
+  // otherwise look like a successful deletion to the caller.
+  const { data: existing } = await supabase
+    .from("retail_sales")
+    .select("salon_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing || existing.salon_id !== gate.profile.salon_id) {
+    return { error: "Sale not found" };
+  }
+
   const { error } = await supabase
     .from("retail_sales")
     .delete()

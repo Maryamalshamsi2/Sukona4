@@ -185,13 +185,20 @@ export async function updateClientLocation(
   const supabase = await createClient();
 
   // Fetch first so we know the client_id + whether this row is the
-  // current default (for the legacy mirror update below).
+  // current default (for the legacy mirror update below). Pull
+  // salon_id too so we can defense-in-depth tenancy check below —
+  // RLS already blocks cross-salon writes, but an explicit assertion
+  // means a future RLS misconfiguration during a migration doesn't
+  // immediately become a tenancy bypass.
   const { data: existing, error: fetchErr } = await supabase
     .from("client_locations")
-    .select("client_id, is_default")
+    .select("client_id, is_default, salon_id")
     .eq("id", id)
     .single();
   if (fetchErr || !existing) return { error: "Location not found" };
+  if (existing.salon_id !== gate.profile.salon_id) {
+    return { error: "Location not found" };
+  }
 
   const { error: updErr } = await supabase
     .from("client_locations")
@@ -230,6 +237,19 @@ export async function setDefaultLocation(clientId: string, locationId: string) {
   if (!clientId || !locationId) return { error: "Missing ids" };
 
   const supabase = await createClient();
+
+  // Tenancy fence: confirm the client belongs to the caller's salon
+  // before we mutate any of their locations. RLS catches it too, but
+  // an explicit check returns a clean "Client not found" instead of
+  // a confusing 0-row update that silently succeeds.
+  const { data: clientRow } = await supabase
+    .from("clients")
+    .select("salon_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (!clientRow || clientRow.salon_id !== gate.profile.salon_id) {
+    return { error: "Client not found" };
+  }
 
   // 1. Clear the existing default (if any).
   const { error: clearErr } = await supabase
@@ -277,12 +297,16 @@ export async function deleteClientLocation(id: string) {
   const supabase = await createClient();
 
   // Snapshot so we know whether to promote a replacement default.
+  // salon_id selected for the defense-in-depth tenancy assertion.
   const { data: existing, error: fetchErr } = await supabase
     .from("client_locations")
-    .select("client_id, is_default")
+    .select("client_id, is_default, salon_id")
     .eq("id", id)
     .single();
   if (fetchErr || !existing) return { error: "Location not found" };
+  if (existing.salon_id !== gate.profile.salon_id) {
+    return { error: "Location not found" };
+  }
 
   const { error: delErr } = await supabase
     .from("client_locations")
