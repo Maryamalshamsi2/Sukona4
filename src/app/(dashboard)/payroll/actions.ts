@@ -538,10 +538,20 @@ export async function getPayrollSummary(
 }
 
 /** Drill-down — list every service / tip / adjustment for one staff
- *  in the given month, plus the rolled-up totals. */
+ *  in the given month, plus the rolled-up totals.
+ *
+ *  Multi-Team v1.7: optional `teamId` mirrors getPayrollSummary so
+ *  the drill-down obeys the same scope the summary uses. Without
+ *  this, an owner viewing the team-X summary could craft a request
+ *  with a staffId from team Y and see that staff's full pay
+ *  breakdown — bypassing what the UI presents as a hard team
+ *  boundary. The owner has the underlying right to see all staff
+ *  pay, but the UX promise of "I'm scoped to team X" must hold
+ *  consistently on both surfaces, or the team scope is theatre. */
 export async function getStaffPayrollDetail(
   staffId: string,
   month: string,
+  teamId?: string | null,
 ): Promise<{ detail: PayrollDetail | null; error?: string }> {
   const gate = await requireOwner();
   if ("error" in gate) return { detail: null, error: gate.error };
@@ -558,6 +568,12 @@ export async function getStaffPayrollDetail(
 
   const profile = data.profiles.find((p) => p.id === staffId);
   if (!profile) return { detail: null, error: "Staff not found" };
+  // Reject staff outside the requested team scope. Returning the
+  // same "Staff not found" message rather than a distinct error
+  // means a probe can't tell whether the staff exists at all.
+  if (teamId && profile.group_id !== teamId) {
+    return { detail: null, error: "Staff not found" };
+  }
 
   const services: PayrollServiceLine[] = [];
   const tips: PayrollTipLine[] = [];

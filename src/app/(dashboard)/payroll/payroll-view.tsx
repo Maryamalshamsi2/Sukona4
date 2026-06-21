@@ -102,7 +102,10 @@ export default function PayrollView({
     setOpenStaffId(staffId);
     setDetail(null);
     setDetailLoading(true);
-    const res = await getStaffPayrollDetail(staffId, month);
+    // Pass the active teamFilter so the backend rejects a staff id
+    // from another team — keeps the drawer consistent with the
+    // summary's scope.
+    const res = await getStaffPayrollDetail(staffId, month, teamFilter);
     if (res.error) setError(res.error);
     setDetail(res.detail);
     setDetailLoading(false);
@@ -117,7 +120,7 @@ export default function PayrollView({
     if (openStaffId) {
       const [s, d] = await Promise.all([
         getPayrollSummary(month, teamFilter),
-        getStaffPayrollDetail(openStaffId, month),
+        getStaffPayrollDetail(openStaffId, month, teamFilter),
       ]);
       setRows(s.rows);
       setDetail(d.detail);

@@ -541,6 +541,11 @@ export async function getReportPackageSummary(from: string, to: string) {
     supabase
       .from("packages")
       .select("total_paid")
+      // Exclude voided packages — they were refunded and shouldn't
+      // count as revenue. Without this filter a single accidental
+      // void looks like a phantom sale in the monthly report and
+      // bakes a wrong revenue figure into the owner's tax records.
+      .neq("status", "void")
       .gte("created_at", `${from}T00:00:00`)
       .lte("created_at", `${to}T23:59:59`),
     supabase

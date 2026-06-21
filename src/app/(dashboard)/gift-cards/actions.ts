@@ -435,12 +435,18 @@ export async function getReportGiftCardSummary(from: string, to: string) {
   const supabase = await createClient();
   const today = todayISO();
   const [txRes, liabRes] = await Promise.all([
+    // Join to the parent card so we can drop sales/redemptions whose
+    // card was later voided. Without this filter, a sold-then-voided
+    // card stays in soldTotal forever even though the salon refunded
+    // it off-platform — the monthly revenue figure is permanently
+    // inflated by every void.
     supabase
       .from("gift_card_transactions")
-      .select("type, amount")
+      .select("type, amount, gift_cards!inner(status)")
       .gte("created_at", `${from}T00:00:00`)
       .lte("created_at", `${to}T23:59:59`)
-      .in("type", ["sale", "redemption"]),
+      .in("type", ["sale", "redemption"])
+      .neq("gift_cards.status", "void"),
     // Outstanding liability = currently usable cards only. Expired
     // cards aren't a liability anymore — the salon kept the cash and
     // the customer forfeited the service. Same "no expiry OR
