@@ -55,16 +55,25 @@ export async function addClient(formData: FormData) {
   // default). Fire-and-forget — failure here only means the picker
   // shows nothing until the next manual add; the legacy columns
   // still hold the value for backward-compat reads.
+  //
+  // Wrapped in try/catch via .then so a Supabase RLS/constraint
+  // failure logs instead of vanishing as an unhandled rejection.
   if (address || mapLink) {
-    void supabase
-      .from("client_locations")
-      .insert({
-        client_id: client.id,
-        label: "Home",
-        address,
-        map_link: mapLink,
-        is_default: true,
-      });
+    void (async () => {
+      try {
+        await supabase
+          .from("client_locations")
+          .insert({
+            client_id: client.id,
+            label: "Home",
+            address,
+            map_link: mapLink,
+            is_default: true,
+          });
+      } catch (err) {
+        console.error("[addClient] location mirror insert failed:", err);
+      }
+    })();
   }
 
   revalidatePath("/clients");
@@ -115,30 +124,39 @@ export async function updateClient(id: string, formData: FormData) {
   // inputs): propagate to the client's default saved location so the
   // appointment-form picker doesn't show stale data. Skipped silently
   // when the form didn't carry these fields (Edit modal in Phase 3+).
+  //
+  // try/catch around the IIFE so a constraint/RLS failure here doesn't
+  // become an unhandled rejection — and at least lands in serverless
+  // logs. The legacy clients.address column above still has the value
+  // so reads stay correct even if this mirror write fails.
   if (hasAddress || hasMapLink) {
     void (async () => {
-      const { data: defaultLoc } = await supabase
-        .from("client_locations")
-        .select("id")
-        .eq("client_id", id)
-        .eq("is_default", true)
-        .maybeSingle();
-      if (defaultLoc) {
-        const patch: Record<string, string | null> = {};
-        if (hasAddress) patch.address = address;
-        if (hasMapLink) patch.map_link = mapLink;
-        await supabase
+      try {
+        const { data: defaultLoc } = await supabase
           .from("client_locations")
-          .update(patch)
-          .eq("id", defaultLoc.id);
-      } else if (address || mapLink) {
-        await supabase.from("client_locations").insert({
-          client_id: id,
-          label: "Home",
-          address,
-          map_link: mapLink,
-          is_default: true,
-        });
+          .select("id")
+          .eq("client_id", id)
+          .eq("is_default", true)
+          .maybeSingle();
+        if (defaultLoc) {
+          const patch: Record<string, string | null> = {};
+          if (hasAddress) patch.address = address;
+          if (hasMapLink) patch.map_link = mapLink;
+          await supabase
+            .from("client_locations")
+            .update(patch)
+            .eq("id", defaultLoc.id);
+        } else if (address || mapLink) {
+          await supabase.from("client_locations").insert({
+            client_id: id,
+            label: "Home",
+            address,
+            map_link: mapLink,
+            is_default: true,
+          });
+        }
+      } catch (err) {
+        console.error("[updateClient] location mirror write failed:", err);
       }
     })();
   }

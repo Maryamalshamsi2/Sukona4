@@ -129,13 +129,28 @@ export async function updateSession(request: NextRequest) {
         (p) => pathname === p || pathname.startsWith(p + "/")
       );
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select(
           "role, salons!inner(is_onboarded, subscription_status, trial_ends_at, is_exempt)"
         )
         .eq("id", user.id)
         .single();
+
+      // If the profile fetch failed (network, RLS misconfig, Supabase
+      // outage), the role/subscription guards below all silently
+      // skipped — letting a request that we couldn't authorize sail
+      // through to a protected route. Bounce to /login instead so
+      // the next render gets a fresh auth context. Better a single
+      // re-login than a quiet authorization bypass. The `if (user)`
+      // / `if (!isBypassed)` scope already excludes login/signup/auth/
+      // api paths so this can't loop.
+      if (profileErr) {
+        console.error("[middleware] profile fetch failed:", profileErr.message);
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        return NextResponse.redirect(url);
+      }
 
       if (profile) {
         // @ts-expect-error — supabase-js types salons!inner as an array

@@ -15,6 +15,7 @@ import MarkPaidModal, { type ExistingPayment } from "@/components/mark-paid-moda
 import type { PaymentMethod } from "@/types";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency as fmtCurrency } from "@/lib/currency";
+import { useUndo } from "@/components/undo-toast";
 
 // ---- Types ----
 
@@ -241,6 +242,7 @@ export default function ReportsView({
 }: ReportsViewProps) {
   const currency = useCurrency();
   const formatCurrency = (n: number) => fmtCurrency(n, currency, { decimals: 2 });
+  const undo = useUndo();
   const [tab, setTab] = useState<TabKey>("expenses");
   const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState("");
@@ -342,15 +344,16 @@ export default function ReportsView({
       setGiftCards(gift);
       setPackages(pkg);
     } catch (err) {
-      // Don't surface a toast — the page still has its server-seeded
-      // initial data, and the user may not be looking. But DO log
-      // to console so a debugging session catches it instead of
-      // wondering why the date/team filter "did nothing."
+      // Owner is making money decisions on these numbers — failing
+      // silently means they trust the stale period's data. Toast
+      // makes the failure explicit; the page still shows what's
+      // currently in state, but the user knows it isn't fresh.
       console.error("Reports data fetch failed:", err);
+      undo.error("Couldn't refresh reports — showing previous data");
     } finally {
       setLoading(false);
     }
-  }, [getRange, teamFilter]);
+  }, [getRange, teamFilter, undo]);
 
   // Skip the very first run because the server already seeded the initial
   // period's data. Subsequent preset/customFrom/customTo/teamFilter changes
@@ -369,7 +372,7 @@ export default function ReportsView({
     if (!confirm("Delete this appointment? It will be removed from records and reports. This cannot be undone.")) return;
     const result = await deleteAppointment(id);
     if (result.error) {
-      alert(result.error);
+      undo.error(result.error);
       return;
     }
     // Optimistic in-memory update so the row disappears immediately,
