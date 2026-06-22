@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
   //    There's a tiny race window between the availability check and this
   //    call — if it loses, Supabase will return a duplicate-key error and
   //    we surface a generic message below.
-  const { error: createError } = await adminSupabase.auth.admin.createUser({
+  const { data: createData, error: createError } = await adminSupabase.auth.admin.createUser({
     email,
     phone,
     password,
@@ -133,6 +133,30 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json({ error: createError.message }, { status: 400 });
+  }
+
+  // 2.5 Wait for the handle_new_user() trigger to materialize the
+  //     profile + salon rows. signInWithPassword runs synchronously
+  //     and middleware reads the profile on the very next request;
+  //     if the trigger hasn't caught up, the user gets bounced to
+  //     /login with no error. Worst observed: brand-new customer
+  //     stuck looping between signup and login.
+  //
+  //     Poll up to ~1s (5 × 200ms). If we still don't see a profile
+  //     row by then, fall through and let signInWithPassword run —
+  //     the next request will either find it or middleware will
+  //     bounce cleanly with an error.
+  const newUserId = createData?.user?.id;
+  if (newUserId) {
+    for (let i = 0; i < 5; i++) {
+      const { data: profileCheck } = await adminSupabase
+        .from("profiles")
+        .select("id")
+        .eq("id", newUserId)
+        .maybeSingle();
+      if (profileCheck?.id) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
   }
 
   // 3. Sign the user in to establish the session cookies.

@@ -145,6 +145,11 @@ export default function HomeView({
   const [editPaymentOpen, setEditPaymentOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentData | null>(null);
+  // Tracks whether the background fetch for booking-form data
+  // (staff / clients / services / bundles) failed. When true the
+  // Edit modal renders a "Form data couldn't load — Retry" banner
+  // instead of opening with empty dropdowns the user can't fill in.
+  const [formDataError, setFormDataError] = useState(false);
 
   const undo = useUndo();
   const today = formatDate(new Date());
@@ -199,24 +204,37 @@ export default function HomeView({
   // dashboard wait on data the user wasn't seeing yet. Now the
   // visible content (Today + Activity) appears immediately and
   // this fills in within ~300 ms after first paint.
+  const loadFormData = useCallback(async () => {
+    setFormDataError(false);
+    try {
+      const [s, c, sv, b] = await Promise.all([
+        getStaffMembers(),
+        getClients(),
+        getServices(),
+        getBundlesForBooking(),
+      ]);
+      setStaff(s as StaffMember[]);
+      setClients(c as ClientItem[]);
+      setServices(sv as ServiceItem[]);
+      setBundles(b as unknown as BundleForBooking[]);
+    } catch (err) {
+      console.error("[home-view] booking form data fetch failed:", err);
+      setFormDataError(true);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      getStaffMembers(),
-      getClients(),
-      getServices(),
-      getBundlesForBooking(),
-    ])
-      .then(([s, c, sv, b]) => {
-        if (cancelled) return;
-        setStaff(s as StaffMember[]);
-        setClients(c as ClientItem[]);
-        setServices(sv as ServiceItem[]);
-        setBundles(b as unknown as BundleForBooking[]);
-      })
-      .catch(() => { /* dropdowns stay empty; user can retry by reopening the modal */ });
+    void (async () => {
+      await loadFormData();
+      if (cancelled) {
+        // discard any state writes after unmount — loadFormData's
+        // setters are harmless on unmount in React 18+ but cancelled
+        // keeps the side effect lid clean.
+      }
+    })();
     return () => { cancelled = true; };
-  }, []);
+  }, [loadFormData]);
 
   // Check if an appointment is assigned to the current staff user
   function isMyAppointment(appt: AppointmentData) {
@@ -630,6 +648,24 @@ export default function HomeView({
 
       {/* ==== EDIT MODAL (same as calendar) ==== */}
       <Modal open={editModalOpen} onClose={() => { setEditModalOpen(false); setSelectedAppointment(null); }} title="Edit Appointment">
+        {formDataError && (
+          <div className="mb-4 rounded-xl bg-error-50 px-4 py-3 ring-1 ring-error-200">
+            <p className="text-body-sm font-semibold text-error-800">
+              Couldn&apos;t load form data
+            </p>
+            <p className="mt-1 text-caption text-error-700">
+              Staff, clients, or services failed to fetch. The dropdowns
+              below may be empty until you retry.
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadFormData()}
+              className="mt-2 rounded-lg bg-error-700 px-3 py-1.5 text-caption font-semibold text-white hover:bg-error-800"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {selectedAppointment && (
           <AppointmentForm
             dateStr={selectedAppointment.date}
