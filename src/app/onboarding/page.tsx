@@ -284,7 +284,14 @@ export default function OnboardingPage() {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center px-4 py-8 bg-gradient-to-br from-violet-50 via-white to-violet-100/60">
-      <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white/70 px-6 py-8 shadow-xl backdrop-blur-xl sm:px-10 sm:py-12">
+      <div className="relative w-full max-w-md rounded-3xl border border-white/60 bg-white/70 px-6 py-8 shadow-xl backdrop-blur-xl sm:px-10 sm:py-12">
+        {/* Sign out escape hatch — middleware redirects unfinished
+            onboarders away from every other page that has signOut,
+            so without this a user who signed up with the wrong
+            account would be stuck. Top-right corner keeps it
+            visible but quiet. */}
+        <SignOutLink />
+
         {/* Logo */}
         <div className="flex justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -356,6 +363,45 @@ export default function OnboardingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Sign out — escape hatch on the onboarding panel
+// ============================================================
+
+/**
+ * Small top-right corner link. Posts to /api/auth/signout (which
+ * clears the Supabase auth cookies via the SSR adapter) and then
+ * hard-reloads to /login so middleware re-evaluates with a fresh
+ * unauthenticated request.
+ *
+ * Hard reload rather than next/router.push because the auth
+ * cookies are httpOnly — the client-side Supabase singleton still
+ * thinks it has a session until the next full page load. Without
+ * the reload the next page render would try to use a stale token.
+ */
+function SignOutLink() {
+  async function handleSignOut() {
+    try {
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch {
+      // Even if the request fails, navigate to /login — the cookies
+      // are httpOnly so we can't clear them client-side, but the
+      // /login page itself bounces signed-in users elsewhere only
+      // when they're onboarded, so we'd at least get back to a
+      // form the user can interact with.
+    }
+    window.location.href = "/login";
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleSignOut}
+      className="absolute right-4 top-4 text-caption text-text-tertiary transition hover:text-text-secondary sm:right-6 sm:top-6"
+    >
+      Sign out
+    </button>
   );
 }
 
