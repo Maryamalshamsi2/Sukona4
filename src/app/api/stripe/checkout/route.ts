@@ -75,6 +75,18 @@ export async function POST(req: NextRequest) {
   //      webhook arrives with a customer_id that doesn't exist in
   //      our DB, sync drifts forever. Abort before creating the
   //      session if the write didn't land.
+  // Stripe-customer creation is the classic check-then-act race:
+  // two concurrent checkouts both see stripe_customer_id=NULL, both
+  // hit stripe.customers.create, and the second UPDATE overwrites
+  // the first — leaving one customer orphaned in Stripe (no salon
+  // row references it). Migration 052 adds a partial UNIQUE index
+  // on salons.stripe_customer_id so the UPDATE becomes an atomic
+  // claim: only one writer can succeed, the other gets 23505 and
+  // re-fetches to use the winning id. The losing request's
+  // customer is left behind as a one-off orphan in Stripe — we'd
+  // need a cleanup job to delete it, but a single orphan is a
+  // recoverable bookkeeping issue, not the silent billing drift
+  // the prior code allowed.
   const stripe = getStripe();
   let customerId = salon.stripe_customer_id;
   if (!customerId) {
@@ -93,19 +105,53 @@ export async function POST(req: NextRequest) {
       );
     }
     customerId = customer.id;
+    // Atomic claim — only writes if stripe_customer_id is still
+    // NULL on the row. A concurrent checkout that won the race
+    // gets count=0 here and we fall through to the re-fetch.
     const { error: persistErr, count: persistCount } = await supabase
       .from("salons")
       .update({ stripe_customer_id: customerId }, { count: "exact" })
-      .eq("id", salon.id);
+      .eq("id", salon.id)
+      .is("stripe_customer_id", null);
+    if (persistErr) {
+      // 23505 = unique_violation. Could happen if a duplicate from
+      // a previous race attempt is still in Stripe and matches our
+      // partial UNIQUE index. Same recovery path as a 0-row
+      // update — re-fetch the winning id.
+      const isDuplicate = (persistErr as { code?: string }).code === "23505";
+      if (!isDuplicate) {
+        console.error(
+          `salons.stripe_customer_id persist failed for salon=${salon.id}, customer=${customerId}:`,
+          persistErr.message,
+        );
+        return NextResponse.json(
+          { error: "Couldn't save your billing profile — try again." },
+          { status: 500 },
+        );
+      }
+    }
     if (persistErr || (persistCount ?? 0) === 0) {
-      console.error(
-        `salons.stripe_customer_id persist failed for salon=${salon.id}, customer=${customerId}:`,
-        persistErr?.message ?? "0 rows updated",
+      // Lost the race. The other checkout's customer is the real
+      // one; ours is an orphan in Stripe. Log it (a future cleanup
+      // job can sweep stripe.customers.list metadata.salon_id and
+      // delete strays) and continue with the persisted value.
+      console.warn(
+        `[stripe.checkout] lost create-customer race for salon=${salon.id}; orphan Stripe customer=${customerId} (winner will be re-fetched).`,
       );
-      return NextResponse.json(
-        { error: "Couldn't save your billing profile — try again." },
-        { status: 500 },
-      );
+      const { data: refetched } = await supabase
+        .from("salons")
+        .select("stripe_customer_id")
+        .eq("id", salon.id)
+        .single();
+      if (!refetched?.stripe_customer_id) {
+        // Should not happen — if our update returned 0 rows there's
+        // either a winning row OR the salon row is gone. Defensive.
+        return NextResponse.json(
+          { error: "Couldn't load your billing profile — try again." },
+          { status: 500 },
+        );
+      }
+      customerId = refetched.stripe_customer_id;
     }
   }
 
