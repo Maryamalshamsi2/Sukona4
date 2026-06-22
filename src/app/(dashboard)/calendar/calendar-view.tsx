@@ -649,11 +649,18 @@ export default function CalendarView({
     setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; });
 
   // ---- Block position helpers ----
+  // The min-height floor here is the touch-target floor for the tile.
+  // iOS HIG and WCAG both call for ~44px minimum tap target. A 15-min
+  // appointment naturally renders at HOUR_HEIGHT/4 (~20px) which is
+  // basically un-tappable on mobile — staff end up opening adjacent
+  // appointments by mistake. 44px floors here mean tiny appointments
+  // visually overflow into the next slot, but that's preferable to a
+  // tile the user can't reliably tap.
   function getBlockStyleFromMinutes(startMin: number, endMin: number) {
     const startOffset = startMin - START_HOUR * 60;
     const duration = endMin - startMin;
     const top = (startOffset / 60) * HOUR_HEIGHT;
-    const height = Math.max((duration / 60) * HOUR_HEIGHT - 2, 28);
+    const height = Math.max((duration / 60) * HOUR_HEIGHT - 2, 44);
     return { top, height };
   }
 
@@ -661,7 +668,10 @@ export default function CalendarView({
     const startMin = timeToMinutes(block.start_time) - START_HOUR * 60;
     const endMin = timeToMinutes(block.end_time) - START_HOUR * 60;
     const top = (startMin / 60) * HOUR_HEIGHT;
-    const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT - 2, 20);
+    // Calendar blocks (breaks / travel / personal) — slightly smaller
+    // floor (40px) since they're not interactive in the same way as
+    // appointments, but still tappable to edit.
+    const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT - 2, 40);
     return { top: `${top}px`, height: `${height}px` };
   }
 

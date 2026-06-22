@@ -26,6 +26,14 @@ export const metadata: Metadata = {
  */
 export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
+  // `cover` lets the layout extend into the notch / Dynamic Island
+  // / home-indicator areas on iPhone X+. WITHOUT this the browser
+  // shrinks the viewport so the page never reaches under the status
+  // bar — and env(safe-area-inset-*) all return 0, so the dashboard
+  // header can't pad itself out of the notch. With viewportFit:cover
+  // + pt-[env(safe-area-inset-top)] on the header (next edit), the
+  // status bar sits on top of the brand bar instead of overlapping.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

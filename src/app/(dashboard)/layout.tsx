@@ -116,8 +116,16 @@ export default function DashboardLayout({
     <UserContext.Provider value={currentUser}>
     <UndoToastProvider>
       <div className="flex h-[100dvh] flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="relative flex h-16 shrink-0 items-center bg-[#F5F5F7]/80 px-3 sm:h-20 sm:px-4">
+        {/* Top bar. pt-[env(safe-area-inset-top)] keeps the brand
+            and avatar OFF the notch on iPhone X+ now that root
+            layout opts into viewport-fit:cover. min-h preserves the
+            base bar height; the inset adds ON TOP so notched devices
+            push the bar down by ~44px-ish. Desktop/non-notched
+            devices report inset=0 and behave exactly as before. */}
+        <header
+          className="relative flex min-h-16 shrink-0 items-center bg-[#F5F5F7]/80 px-3 sm:min-h-20 sm:px-4"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
           {/* Logo — left-aligned on every breakpoint now that mobile
               navigation lives in the bottom tab bar (no more hamburger
               taking the top-left slot). Click returns to dashboard. */}

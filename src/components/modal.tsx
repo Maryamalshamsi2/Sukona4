@@ -81,7 +81,11 @@ export default function Modal({
           <h2 className="min-w-0 text-title-section font-semibold tracking-tight text-text-primary">{title}</h2>
           <button
             onClick={onClose}
-            className="shrink-0 rounded-lg p-2 text-text-tertiary hover:bg-surface-active hover:text-text-secondary -mr-1 -mt-1"
+            aria-label="Close"
+            // p-3 + h/w-5 icon = ~44px hit target. Was p-2 (~36px)
+            // which is below iOS/WCAG minimum and leads to mis-taps
+            // on mobile.
+            className="shrink-0 rounded-lg p-3 text-text-tertiary hover:bg-surface-active hover:text-text-secondary -mr-2 -mt-2"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
