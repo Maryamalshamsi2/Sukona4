@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
 import { todayISO } from "@/lib/gift-card-code";
+import { finalizeAppointmentAfterPayment } from "@/lib/payment-finalization";
 
 /**
  * Packages — server actions.
@@ -374,6 +375,78 @@ export async function redeemPackageSession(payload: RedeemPayload) {
     sessionsUsed: Number(row?.sessions_used ?? 0),
     sessionsRemaining: Number(row?.sessions_remaining ?? 0),
     packageCompleted: !!row?.package_completed,
+  } as const;
+}
+
+interface RedeemWithPaymentPayload {
+  packageItemId: string;
+  appointmentId: string;
+  amount: number;
+  note: string;
+  tipAmount: number;
+  tipToStaffId: string | null;
+  receiptUrls: string[];
+}
+
+/**
+ * Atomic redeem + payment insert for a single package session.
+ * Migration-051 RPC bundles both writes into one transaction so we
+ * can't end up in the "session consumed but no payment row" failure
+ * mode that the pre-launch audit flagged.
+ *
+ * After the RPC returns, runs the same post-payment side effects
+ * recordPayment runs (status flip / review token / receipt mint /
+ * activity log / WhatsApp). All idempotent — safe to retry, but
+ * not bundled in the transaction because they're not the
+ * money-correctness path.
+ */
+export async function redeemPackageSessionWithPayment(payload: RedeemWithPaymentPayload) {
+  const gate = await requireAuthed();
+  if ("error" in gate) return { error: gate.error };
+
+  if (!payload.packageItemId || !payload.appointmentId) {
+    return { error: "Missing package item or appointment id" };
+  }
+  if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
+    return { error: "Amount must be positive" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "redeem_package_session_with_payment",
+    {
+      p_package_item_id: payload.packageItemId,
+      p_appointment_id: payload.appointmentId,
+      p_amount: payload.amount,
+      p_note: payload.note,
+      p_tip_amount: payload.tipAmount || 0,
+      p_tip_to_staff_id: payload.tipToStaffId,
+      p_receipt_urls: payload.receiptUrls,
+    },
+  );
+
+  if (error) return { error: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+
+  // Post-payment side effects. The payment row is already in. If
+  // the status flip fails (RLS, etc.), surface a partial-success
+  // error message — the redemption + payment are safe, the
+  // appointment just shows pre-paid state.
+  const finalize = await finalizeAppointmentAfterPayment(supabase, payload.appointmentId);
+  if (finalize.error) return { error: finalize.error };
+
+  revalidatePath("/sales");
+  revalidatePath("/reports");
+  revalidatePath("/calendar");
+  revalidatePath("/payroll");
+  revalidatePath("/");
+  return {
+    success: true,
+    paymentId: row?.out_payment_id as string,
+    redemptionId: row?.out_redemption_id as string,
+    sessionsUsed: Number(row?.out_sessions_used ?? 0),
+    sessionsRemaining: Number(row?.out_sessions_remaining ?? 0),
+    packageCompleted: !!row?.out_package_completed,
   } as const;
 }
 

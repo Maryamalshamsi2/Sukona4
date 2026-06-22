@@ -4,6 +4,7 @@ import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth-server";
+import { finalizeAppointmentAfterPayment } from "@/lib/payment-finalization";
 import {
   CODE_ALPHABET,
   CODE_LENGTH,
@@ -407,6 +408,77 @@ export async function redeemGiftCard(payload: RedeemPayload) {
     success: true,
     transactionId: row?.transaction_id as string,
     newBalance: Number(row?.new_balance ?? 0),
+  } as const;
+}
+
+interface RedeemGiftCardWithPaymentPayload {
+  code: string;
+  amount: number;
+  appointmentId: string;
+  note: string;
+  tipAmount: number;
+  tipToStaffId: string | null;
+  receiptUrls: string[];
+}
+
+/**
+ * Atomic redeem + payment insert for a gift card. Migration-051 RPC
+ * locks the card, debits the balance, writes the redemption log,
+ * and inserts the matching `payments` row all in one transaction.
+ *
+ * Closes the "card debited but payment row never written" failure
+ * mode the pre-launch audit flagged. The remainder (when the card
+ * doesn't cover the full amount) is still handled as a separate
+ * payment row in the caller — if that remainder fails AFTER the
+ * card portion is atomically saved, the customer's card debit
+ * matches at least one payment row, so reconciliation is just
+ * "the cash/card portion didn't land, please re-record."
+ *
+ * Post-payment side effects (status flip / mint / activity /
+ * WhatsApp) run AFTER the RPC, via finalizeAppointmentAfterPayment.
+ */
+export async function redeemGiftCardWithPayment(payload: RedeemGiftCardWithPaymentPayload) {
+  const gate = await requireAuthed();
+  if ("error" in gate) return { error: gate.error };
+
+  if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
+    return { error: "Amount must be greater than 0" };
+  }
+  const code = (normalizeCode(payload.code)).trim();
+  if (code.length !== CODE_LENGTH) {
+    return { error: "Invalid code format" };
+  }
+  if (!payload.appointmentId) {
+    return { error: "Missing appointment id" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("redeem_gift_card_with_payment", {
+    p_code: code,
+    p_amount: payload.amount,
+    p_appointment_id: payload.appointmentId,
+    p_note: payload.note,
+    p_tip_amount: payload.tipAmount || 0,
+    p_tip_to_staff_id: payload.tipToStaffId,
+    p_receipt_urls: payload.receiptUrls,
+  });
+
+  if (error) return { error: error.message };
+  const row = Array.isArray(data) ? data[0] : data;
+
+  const finalize = await finalizeAppointmentAfterPayment(supabase, payload.appointmentId);
+  if (finalize.error) return { error: finalize.error };
+
+  revalidatePath("/sales");
+  revalidatePath("/reports");
+  revalidatePath("/calendar");
+  revalidatePath("/payroll");
+  revalidatePath("/");
+  return {
+    success: true,
+    paymentId: row?.out_payment_id as string,
+    transactionId: row?.out_transaction_id as string,
+    newBalance: Number(row?.out_new_balance ?? 0),
   } as const;
 }
 

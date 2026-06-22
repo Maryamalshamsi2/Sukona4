@@ -5,11 +5,11 @@ import Modal from "@/components/modal";
 import { recordPayment, updatePayment, uploadReceipt } from "@/app/(dashboard)/payments/actions";
 import {
   getGiftCardByCode,
-  redeemGiftCard,
+  redeemGiftCardWithPayment,
 } from "@/app/(dashboard)/gift-cards/actions";
 import {
   getAppointmentPackageContext,
-  redeemPackageSession,
+  redeemPackageSessionWithPayment,
 } from "@/app/(dashboard)/gift-cards/packages-actions";
 import type { PaymentMethod } from "@/types";
 import { useCurrency } from "@/lib/user-context";
@@ -338,20 +338,18 @@ export default function MarkPaidModal({
       tipToSave > 0 && tipToStaffId ? tipToStaffId : null;
 
     // ---- Package branch (record mode only). Runs FIRST, before
-    //      any remainder via cash/card/gift_card. For each ticked
-    //      session:
-    //        1. Call redeem_package_session RPC (locks the row,
-    //           decrements sessions_used, inserts a redemption log)
-    //        2. Insert a payment row with method='package',
-    //           amount=service price, note=service name. The
-    //           appointment flips to paid on the first row.
+    //      any remainder via cash/card/gift_card. Each ticked
+    //      session is redeemed AND its matching payment row inserted
+    //      in a single atomic RPC (migration-051) so we can't end
+    //      up with a consumed session and no payment row.
     //
-    //      If a redemption fails (expired / completed / race-condition
-    //      drain) we abort BEFORE writing any payment rows, leaving
-    //      everything in a clean state.
+    //      Per-session atomicity, not whole-loop atomicity — if
+    //      session 3 fails, sessions 1 and 2 are already paid+
+    //      redeemed consistently. The user sees a clear error
+    //      and only session 3's payment is missing.
     //
-    //      Remainder (cash/card/gift_card/other) is handled below as
-    //      usual — `amt` already reflects what's left after coverage. ----
+    //      Remainder (cash/card/gift_card/other) is handled below
+    //      as usual — `amt` already reflects what's left. ----
     if (!isEdit && appliedSessions.size > 0) {
       if (!appointmentId) {
         setError("Missing appointment id");
@@ -362,54 +360,37 @@ export default function MarkPaidModal({
         appliedSessions.has(o.apptServiceId),
       );
       for (const opt of selected) {
-        // 1. Redeem the session.
-        const redeem = await redeemPackageSession({
-          packageItemId: opt.packageItemId,
-          appointmentId,
-          notes: opt.serviceName,
-        });
-        if ("error" in redeem && redeem.error) {
-          setError(redeem.error);
-          setSubmitting(false);
-          return;
-        }
-        // 2. Write the package payment row. Tip stays at 0 here —
-        //    if the customer tipped, it goes on the remainder row
-        //    below (or, when there's no remainder, on the LAST
-        //    package row — handled by the lastPackageRow check).
         const isLastPackageRow =
           selected.indexOf(opt) === selected.length - 1;
         const hasRemainder = amt > 0;
+        // Tip only goes on the LAST package row when there's no
+        // remainder; otherwise the remainder row carries the tip.
         const tipOnThisRow =
           !hasRemainder && isLastPackageRow ? tipToSave : 0;
         const tipStaffOnThisRow =
           !hasRemainder && isLastPackageRow ? tipStaffToSave : null;
-        // Attachments only attach to the final row written, to avoid
-        // listing the same receipt multiple times against the
-        // appointment. If there's a remainder, the cash/card/other
-        // branch below will write the final row and gets the URLs;
-        // otherwise the last package row gets them.
+        // Attachments only on the final row written; the remainder
+        // branch picks them up when there is one.
         const pkgRowUrls =
           isLastPackageRow && !hasRemainder ? finalUrls : [];
-        const pkgRes = await recordPayment(
+        const res = await redeemPackageSessionWithPayment({
+          packageItemId: opt.packageItemId,
           appointmentId,
-          opt.servicePrice,
-          "package",
-          `Package · ${opt.serviceName}`,
-          pkgRowUrls,
-          tipOnThisRow,
-          tipStaffOnThisRow,
-        );
-        if (pkgRes.error) {
-          setError(
-            `Session redeemed but recording the package payment failed: ${pkgRes.error}`,
-          );
+          amount: opt.servicePrice,
+          note: `Package · ${opt.serviceName}`,
+          tipAmount: tipOnThisRow,
+          tipToStaffId: tipStaffOnThisRow,
+          receiptUrls: pkgRowUrls,
+        });
+        if ("error" in res && res.error) {
+          setError(res.error);
           setSubmitting(false);
           return;
         }
       }
       // If no remainder, we're done — appointment is already paid
-      // by the first package row. Skip the remainder flow below.
+      // by the first package row's status flip. Skip the remainder
+      // flow below.
       if (amt === 0) {
         setSubmitting(false);
         onPaid();
@@ -421,20 +402,17 @@ export default function MarkPaidModal({
     //      gift_card method button entirely). Two paths:
     //
     //        Full coverage (balance >= amount):
-    //          - Redeem `amt` from the card
-    //          - Insert one payment row, method='gift_card'
+    //          - Single atomic RPC: redeem `amt` + insert one
+    //            payment row, method='gift_card'.
     //
     //        Partial coverage (balance < amount):
-    //          - Redeem `balance` from the card
-    //          - Insert one payment row, method='gift_card', amount=balance
-    //          - Insert a second payment row, method=remainderMethod,
-    //            amount=amt-balance, for the remainder
-    //
-    //      The redemption goes FIRST. If it fails (expired, voided,
-    //      gone) we abort before touching `payments`. If the payment
-    //      INSERTs fail after the redemption succeeded, the card is
-    //      already debited — surface a precise error so the user knows
-    //      to record the payment row manually. ----
+    //          - Atomic RPC for the `balance` portion (card debit
+    //            + gift_card payment row, one transaction).
+    //          - Then a separate `recordPayment` for the remainder.
+    //            If THAT fails, the card portion is still cleanly
+    //            consistent — the customer just has an unsettled
+    //            remainder to re-record manually, not a debited
+    //            card with no matching payment row.
     if (!isEdit && method === "gift_card") {
       if (!appointmentId) {
         setError("Missing appointment id");
@@ -449,44 +427,32 @@ export default function MarkPaidModal({
       const cardAmount = Math.min(amt, giftCard.balance);
       const remainder = +(amt - cardAmount).toFixed(2);
 
-      // 1. Redeem from the card.
-      const redeem = await redeemGiftCard({
+      // Tip goes on the REMAINDER row when there is one (tip is
+      // rarely on the card); otherwise it goes on the card row.
+      const tipOnCard = remainder > 0 ? 0 : tipToSave;
+      const tipStaffOnCard = remainder > 0 ? null : tipStaffToSave;
+
+      const cardRes = await redeemGiftCardWithPayment({
         code: normalizeCode(giftCardCode),
         amount: cardAmount,
         appointmentId,
-        notes: noteToSave,
-      });
-      if ("error" in redeem && redeem.error) {
-        setError(redeem.error);
-        setSubmitting(false);
-        return;
-      }
-
-      // 2. Record the gift_card payment row. Tip goes on the
-      //    REMAINDER row when there is one (tip is rarely on the
-      //    card); otherwise it goes here.
-      const tipOnCard = remainder > 0 ? 0 : tipToSave;
-      const tipStaffOnCard = remainder > 0 ? null : tipStaffToSave;
-      const giftRes = await recordPayment(
-        appointmentId,
-        cardAmount,
-        "gift_card",
         // Embed the displayed code as a note so the receipt shows
         // "Gift card · ABCD-EF23-XYZ9" without needing a join.
-        `Gift card · ${formatGiftCardCode(giftCardCode)}`,
-        finalUrls,
-        tipOnCard,
-        tipStaffOnCard,
-      );
-      if (giftRes.error) {
-        setError(
-          `Gift card was redeemed (${formatCurrency(cardAmount, currency)}) but recording the payment failed: ${giftRes.error}`,
-        );
+        note: `Gift card · ${formatGiftCardCode(giftCardCode)}`,
+        tipAmount: tipOnCard,
+        tipToStaffId: tipStaffOnCard,
+        receiptUrls: finalUrls,
+      });
+      if ("error" in cardRes && cardRes.error) {
+        setError(cardRes.error);
         setSubmitting(false);
         return;
       }
 
-      // 3. If there's a remainder, record a second payment row.
+      // Remainder, if any, as a normal recordPayment. NOT atomic
+      // with the card portion — but the card portion is now safely
+      // committed, so the failure mode is "remainder needs to be
+      // re-recorded" instead of "card debited with no record."
       if (remainder > 0) {
         const remainderNote =
           remainderMethod === "other" ? (note.trim() || null) : null;
@@ -495,8 +461,7 @@ export default function MarkPaidModal({
           remainder,
           remainderMethod,
           remainderNote,
-          // Receipts attached to first row only — Supabase storage
-          // dedup isn't a concern here, just avoids double-listing.
+          // Receipts attached to first row only — avoid double-listing.
           [],
           tipToSave,
           tipStaffToSave,
