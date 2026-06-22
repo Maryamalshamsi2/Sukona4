@@ -727,7 +727,8 @@ export default function CalendarView({
     if (resizePending.current && resizeApptId) {
       const durationMinutes = Math.round((resizeCurrentHeight / HOUR_HEIGHT) * 60);
       const snappedDuration = Math.max(SNAP_MINUTES, snapMinutes(durationMinutes));
-      await updateAppointmentDuration(resizeApptId, snappedDuration);
+      const resRes = await updateAppointmentDuration(resizeApptId, snappedDuration);
+      if (resRes?.error) undo.error(resRes.error);
       setResizeApptId(null);
       resizePending.current = false;
       // Only the appointment row changed — skip refetching blocks +
@@ -774,7 +775,12 @@ export default function CalendarView({
         return;
       }
 
-      await updateAppointmentTime(draggedId, newTime);
+      const moveRes = await updateAppointmentTime(draggedId, newTime);
+      if (moveRes?.error) {
+        // Surface the conflict / RLS / network error instead of
+        // silently snapping back as if the move succeeded.
+        undo.error(moveRes.error);
+      }
       reloadAppointments();
       return;
     }
@@ -2036,7 +2042,8 @@ export default function CalendarView({
                 onClick={async () => {
                   const { apptId, newTime } = pendingMove;
                   setPendingMove(null);
-                  await updateAppointmentTime(apptId, newTime);
+                  const res = await updateAppointmentTime(apptId, newTime);
+                  if (res?.error) undo.error(res.error);
                   reloadAppointments();
                 }}
                 className="flex-1 rounded-xl bg-neutral-900 px-4 py-2.5 text-body-sm font-semibold text-text-inverse transition hover:bg-neutral-800 active:scale-[0.98]"

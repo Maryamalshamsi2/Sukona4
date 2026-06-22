@@ -722,7 +722,91 @@ export async function deleteAppointment(id: string) {
 
 export async function updateAppointmentTime(id: string, newTime: string) {
   const supabase = await createClient();
-  const { data: current } = await supabase.from("appointments").select("time, client_id").eq("id", id).single();
+
+  // Pull the appointment + its assigned staff + services so we can
+  // compute a duration window and check for same-staff conflicts.
+  // Without this check, an owner can drag an appointment on top of
+  // another staff's existing booking with zero warning — the audit
+  // flagged this as Major #1 of the launch readiness review.
+  const { data: current } = await supabase
+    .from("appointments")
+    .select(
+      `time, date, client_id, duration_override,
+       appointment_services ( staff_id, services:service_id ( duration_minutes ) )`,
+    )
+    .eq("id", id)
+    .single();
+
+  if (current) {
+    type SvcRow = { staff_id: string | null; services: { duration_minutes: number } | { duration_minutes: number }[] | null };
+    const svcRows = (current.appointment_services ?? []) as SvcRow[];
+    const sumServiceMins = svcRows.reduce((acc, s) => {
+      const svc = Array.isArray(s.services) ? s.services[0] : s.services;
+      return acc + (svc?.duration_minutes ?? 0);
+    }, 0);
+    const durationMin =
+      current.duration_override ?? (sumServiceMins > 0 ? sumServiceMins : 60);
+    const newStartMin =
+      Number(newTime.slice(0, 2)) * 60 + Number(newTime.slice(3, 5));
+    const newEndMin = newStartMin + durationMin;
+    const staffIds = Array.from(
+      new Set(svcRows.map((s) => s.staff_id).filter((s): s is string => !!s)),
+    );
+
+    if (staffIds.length > 0 && current.date) {
+      // Fetch other appointments same date that share any of the
+      // staff. Cancelled/no_show don't count — they no longer hold
+      // the slot.
+      const { data: peers } = await supabase
+        .from("appointments")
+        .select(
+          `id, time, duration_override,
+           clients ( name ),
+           appointment_services ( staff_id, services:service_id ( duration_minutes ) )`,
+        )
+        .eq("date", current.date)
+        .neq("id", id)
+        .not("status", "in", "(cancelled,no_show)");
+
+      for (const peer of (peers ?? []) as Array<{
+        id: string;
+        time: string;
+        duration_override: number | null;
+        clients: { name: string } | { name: string }[] | null;
+        appointment_services: SvcRow[];
+      }>) {
+        const peerStaff = new Set(
+          (peer.appointment_services ?? [])
+            .map((s) => s.staff_id)
+            .filter((s): s is string => !!s),
+        );
+        const overlap = staffIds.some((sid) => peerStaff.has(sid));
+        if (!overlap) continue;
+        const peerSumMins = (peer.appointment_services ?? []).reduce(
+          (acc, s) => {
+            const svc = Array.isArray(s.services) ? s.services[0] : s.services;
+            return acc + (svc?.duration_minutes ?? 0);
+          },
+          0,
+        );
+        const peerDur =
+          peer.duration_override ?? (peerSumMins > 0 ? peerSumMins : 60);
+        const peerStart =
+          Number(peer.time.slice(0, 2)) * 60 + Number(peer.time.slice(3, 5));
+        const peerEnd = peerStart + peerDur;
+        const conflicts = newStartMin < peerEnd && newEndMin > peerStart;
+        if (conflicts) {
+          const peerClient = Array.isArray(peer.clients)
+            ? peer.clients[0]?.name
+            : peer.clients?.name;
+          return {
+            error: `Conflicts with ${peerClient ?? "another appointment"} at ${peer.time.slice(0, 5)} on the same staff.`,
+          };
+        }
+      }
+    }
+  }
+
   const { error } = await supabase.from("appointments").update({ time: newTime }).eq("id", id);
   if (error) return { error: error.message };
 
