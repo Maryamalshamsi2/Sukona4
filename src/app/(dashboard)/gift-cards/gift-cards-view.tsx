@@ -43,9 +43,13 @@ export interface GiftCardRow {
   purchase_method: "cash" | "card" | "other";
   expires_at: string | null;
   client_id: string | null;
+  /** Migration-053. Often differs from client_id when one person
+   *  buys a card for someone else. */
+  recipient_client_id?: string | null;
   notes: string | null;
   created_at: string;
   clients?: { id: string; name: string; phone?: string | null } | null;
+  recipient?: { id: string; name: string; phone?: string | null } | null;
   created_by_profile?: { id: string; full_name: string } | null;
 }
 
@@ -418,6 +422,9 @@ function SellGiftCardModal({
   const [amount, setAmount] = useState("");
   const [purchaseMethod, setPurchaseMethod] = useState<"cash" | "card" | "other">("cash");
   const [clientId, setClientId] = useState("");
+  // Migration-053. Separate from buyer because gift cards are
+  // usually purchased by one person FOR another.
+  const [recipientClientId, setRecipientClientId] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -432,6 +439,7 @@ function SellGiftCardModal({
     setAmount("");
     setPurchaseMethod("cash");
     setClientId("");
+    setRecipientClientId("");
     setExpiresAt("");
     setNotes("");
     setError(null);
@@ -447,6 +455,7 @@ function SellGiftCardModal({
       amount: parseFloat(amount) || 0,
       purchaseMethod,
       clientId: clientId || null,
+      recipientClientId: recipientClientId || null,
       expiresAt: expiresAt || null,
       notes: notes.trim() || null,
     });
@@ -563,6 +572,21 @@ function SellGiftCardModal({
             clients={clients}
             onClientAdded={onClientAdded}
             emptyOptionLabel="Walk-in / no client on file"
+          />
+
+          {/* Recipient — who the card is FOR. Often differs from
+              the buyer (typical "gift" use case). Bearer card if
+              left blank. The card stays redeemable by anyone with
+              the code — the recipient link is informational so the
+              salon can search "cards bought for Maya" and so future
+              notification flows can target the right person. */}
+          <ClientPickerWithAdd
+            label="Recipient (optional)"
+            value={recipientClientId}
+            onChange={setRecipientClientId}
+            clients={clients}
+            onClientAdded={onClientAdded}
+            emptyOptionLabel="Same as buyer / bearer card"
           />
 
           {/* Expiry (optional) */}
@@ -731,6 +755,15 @@ function GiftCardDetailModal({
             {card.clients.name}
             {card.clients.phone && (
               <span className="text-text-tertiary"> · {card.clients.phone}</span>
+            )}
+          </div>
+        )}
+        {card.recipient?.name && (
+          <div className="text-body-sm text-text-secondary">
+            <span className="text-text-tertiary">Recipient: </span>
+            {card.recipient.name}
+            {card.recipient.phone && (
+              <span className="text-text-tertiary"> · {card.recipient.phone}</span>
             )}
           </div>
         )}

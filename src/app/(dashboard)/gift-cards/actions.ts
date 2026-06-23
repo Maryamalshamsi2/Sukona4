@@ -80,8 +80,9 @@ export async function listGiftCards(
     .from("gift_cards")
     .select(`
       id, code, initial_amount, balance, status, expires_at,
-      client_id, notes, created_by, created_at,
-      clients ( id, name ),
+      client_id, recipient_client_id, notes, created_by, created_at,
+      clients:client_id ( id, name ),
+      recipient:recipient_client_id ( id, name ),
       created_by_profile:created_by ( id, full_name )
     `)
     .order("created_at", { ascending: false });
@@ -123,7 +124,8 @@ export async function getGiftCardDetail(id: string) {
       .from("gift_cards")
       .select(`
         *,
-        clients ( id, name, phone ),
+        clients:client_id ( id, name, phone ),
+        recipient:recipient_client_id ( id, name, phone ),
         created_by_profile:created_by ( id, full_name )
       `)
       .eq("id", id)
@@ -191,7 +193,11 @@ export async function getGiftCardByCode(rawCode: string) {
 interface SellPayload {
   amount: number;
   purchaseMethod: "cash" | "card" | "other";
+  /** The buyer — who PAID for the card. */
   clientId: string | null;
+  /** Migration-053: who the card is FOR. Often different from
+   *  the buyer (gift). NULL = bearer card or buyer-is-recipient. */
+  recipientClientId: string | null;
   expiresAt: string | null; // YYYY-MM-DD or null
   notes: string | null;
 }
@@ -245,6 +251,7 @@ export async function sellGiftCard(payload: SellPayload) {
         purchase_method: payload.purchaseMethod,
         expires_at: payload.expiresAt || null,
         client_id: payload.clientId,
+        recipient_client_id: payload.recipientClientId,
         notes: payload.notes?.trim() || null,
         created_by: profile.id,
       })
