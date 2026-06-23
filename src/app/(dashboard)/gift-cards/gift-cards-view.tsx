@@ -45,7 +45,7 @@ export interface GiftCardRow {
   client_id: string | null;
   notes: string | null;
   created_at: string;
-  clients?: { id: string; name: string } | null;
+  clients?: { id: string; name: string; phone?: string | null } | null;
   created_by_profile?: { id: string; full_name: string } | null;
 }
 
@@ -62,7 +62,7 @@ interface TransactionRow {
   created_at: string;
   appointment_id: string | null;
   created_by_profile?: { id: string; full_name: string } | null;
-  appointments?: { id: string; scheduled_at: string } | null;
+  appointments?: { id: string; date: string; time: string } | null;
 }
 
 const STATUS_LABEL: Record<GiftCardStatus, string> = {
@@ -729,6 +729,9 @@ function GiftCardDetailModal({
           <div className="text-body-sm text-text-secondary">
             <span className="text-text-tertiary">Buyer: </span>
             {card.clients.name}
+            {card.clients.phone && (
+              <span className="text-text-tertiary"> · {card.clients.phone}</span>
+            )}
           </div>
         )}
         {card.notes && (

@@ -126,7 +126,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
   appointment_cancelled: "cancellation",
   staff_on_the_way: "on-the-way",
   staff_arrived: "arrived",
-  payment_paid: "receipt + review",
+  payment_paid: "review",
 };
 
 /**

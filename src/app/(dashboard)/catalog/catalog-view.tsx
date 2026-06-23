@@ -761,18 +761,11 @@ export default function CatalogView({
               </SortableContext>
             </DndContext>
           )}
-          {uncategorizedCount > 0 && (
-            <button
-              onClick={() => setActiveTab("uncategorized")}
-              className={`shrink-0 rounded-full px-4 py-2 text-body-sm font-semibold transition-colors ${
-                activeTab === "uncategorized"
-                  ? "bg-neutral-900 text-text-inverse"
-                  : "bg-surface-active text-text-secondary hover:bg-neutral-100"
-              }`}
-            >
-              Uncategorized ({uncategorizedCount})
-            </button>
-          )}
+          {/* Uncategorized pill removed — services without a category
+              already appear under "All". A separate pill was redundant
+              and added clutter to the tab row, especially for salons
+              that don't use categories at all (every service was both
+              under "All" and "Uncategorized"). */}
       </div>
 
       {/* Category actions (edit/delete) when a category is selected */}
@@ -1001,22 +994,25 @@ export default function CatalogView({
             </div>
           </div>
 
-          {editingService && (
-            <div className="flex items-center gap-2">
-              <input type="hidden" name="is_active" value="false" />
-              <input
-                id="svc-active"
-                name="is_active"
-                type="checkbox"
-                value="true"
-                defaultChecked={editingService.is_active}
-                className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
-              />
-              <label htmlFor="svc-active" className="text-body-sm text-text-primary">
-                Active
-              </label>
-            </div>
-          )}
+          {/* Active toggle, shown on both create + edit. Defaults to
+              checked (true) on create so the most common case
+              ("add service → it shows up immediately") doesn't
+              require an extra tap. Hidden mirror input lets the
+              owner deselect to add an inactive draft. */}
+          <div className="flex items-center gap-2">
+            <input type="hidden" name="is_active" value="false" />
+            <input
+              id="svc-active"
+              name="is_active"
+              type="checkbox"
+              value="true"
+              defaultChecked={editingService ? editingService.is_active : true}
+              className="h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
+            />
+            <label htmlFor="svc-active" className="text-body-sm text-text-primary">
+              Active
+            </label>
+          </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <button

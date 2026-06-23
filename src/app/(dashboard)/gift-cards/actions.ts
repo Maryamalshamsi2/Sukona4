@@ -123,7 +123,7 @@ export async function getGiftCardDetail(id: string) {
       .from("gift_cards")
       .select(`
         *,
-        clients ( id, name ),
+        clients ( id, name, phone ),
         created_by_profile:created_by ( id, full_name )
       `)
       .eq("id", id)
@@ -133,7 +133,7 @@ export async function getGiftCardDetail(id: string) {
       .select(`
         *,
         created_by_profile:created_by ( id, full_name ),
-        appointments ( id, scheduled_at )
+        appointments ( id, date, time )
       `)
       .eq("gift_card_id", id)
       .order("created_at", { ascending: false }),

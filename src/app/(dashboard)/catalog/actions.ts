@@ -86,12 +86,21 @@ export async function addService(formData: FormData) {
     .maybeSingle();
   const nextOrder = (maxRow?.sort_order ?? -1) + 1;
 
+  // is_active: explicit even though the column defaults to true,
+  // so behaviour stays deterministic if anyone adjusts the default
+  // in a future migration. The form's checkbox defaults to checked
+  // (true) — owners can deselect to add an inactive draft service.
+  const isActive = formData.has("is_active")
+    ? formData.get("is_active") === "true"
+    : true;
+
   const { error } = await supabase.from("services").insert({
     name: formData.get("name") as string,
     price: parseFloat(formData.get("price") as string) || 0,
     duration_minutes: parseInt(formData.get("duration_minutes") as string) || 60,
     category_id: categoryId || null,
     sort_order: nextOrder,
+    is_active: isActive,
   });
 
   if (error) return { error: error.message };
