@@ -76,13 +76,16 @@ export async function listGiftCards(
 
   const supabase = await createClient();
   const today = todayISO();
+  // Two FKs to clients (client_id + recipient_client_id from
+  // migration-053) tripped PostgREST's embed auto-resolution and
+  // various `!fk_column` syntaxes also failed in this codebase's
+  // Supabase version. Bypass with two queries + JS merge — slower
+  // by one round-trip but bulletproof and easy to reason about.
   let query = supabase
     .from("gift_cards")
     .select(`
       id, code, initial_amount, balance, status, expires_at,
       client_id, recipient_client_id, notes, created_by, created_at,
-      clients:client_id ( id, name ),
-      recipient:recipient_client_id ( id, name ),
       created_by_profile:created_by ( id, full_name )
     `)
     .order("created_at", { ascending: false });
@@ -107,10 +110,32 @@ export async function listGiftCards(
 
   const { data, error } = await query;
   if (error) {
-    console.error("listGiftCards failed:", error);
+    console.error("listGiftCards failed:", error.message, error.code, error.details, error.hint);
     return [];
   }
-  return data ?? [];
+  const cards = data ?? [];
+
+  // Resolve buyer + recipient client rows in one batched lookup.
+  // Avoids N round-trips and also avoids the PostgREST two-FK
+  // embed ambiguity we hit when this was inlined as joins.
+  const clientIds = new Set<string>();
+  for (const card of cards) {
+    if (card.client_id) clientIds.add(card.client_id);
+    if (card.recipient_client_id) clientIds.add(card.recipient_client_id);
+  }
+  let clientMap = new Map<string, { id: string; name: string }>();
+  if (clientIds.size > 0) {
+    const { data: cs } = await supabase
+      .from("clients")
+      .select("id, name")
+      .in("id", [...clientIds]);
+    clientMap = new Map((cs ?? []).map((c) => [c.id, c]));
+  }
+  return cards.map((c) => ({
+    ...c,
+    clients: c.client_id ? clientMap.get(c.client_id) ?? null : null,
+    recipient: c.recipient_client_id ? clientMap.get(c.recipient_client_id) ?? null : null,
+  }));
 }
 
 /** Single card + full transaction history. For the detail panel. */
@@ -120,12 +145,12 @@ export async function getGiftCardDetail(id: string) {
 
   const supabase = await createClient();
   const [cardRes, txRes] = await Promise.all([
+    // Same two-FK embed ambiguity as listGiftCards — fetch the card
+    // without client embeds, then look up buyer + recipient below.
     supabase
       .from("gift_cards")
       .select(`
         *,
-        clients:client_id ( id, name, phone ),
-        recipient:recipient_client_id ( id, name, phone ),
         created_by_profile:created_by ( id, full_name )
       `)
       .eq("id", id)
@@ -145,8 +170,31 @@ export async function getGiftCardDetail(id: string) {
     console.error("getGiftCardDetail card failed:", cardRes.error);
     return null;
   }
+  const card = cardRes.data as
+    | (typeof cardRes.data & { client_id?: string | null; recipient_client_id?: string | null })
+    | null;
+  if (!card) return null;
+
+  // Resolve buyer + recipient via a single batched query (see
+  // listGiftCards for why we don't inline these as PostgREST embeds).
+  const clientIds = [card.client_id, card.recipient_client_id].filter(
+    (id): id is string => !!id,
+  );
+  let clientMap = new Map<string, { id: string; name: string; phone: string | null }>();
+  if (clientIds.length > 0) {
+    const { data: cs } = await supabase
+      .from("clients")
+      .select("id, name, phone")
+      .in("id", clientIds);
+    clientMap = new Map((cs ?? []).map((c) => [c.id, c]));
+  }
+
   return {
-    card: cardRes.data,
+    card: {
+      ...card,
+      clients: card.client_id ? clientMap.get(card.client_id) ?? null : null,
+      recipient: card.recipient_client_id ? clientMap.get(card.recipient_client_id) ?? null : null,
+    },
     transactions: txRes.data ?? [],
   };
 }
