@@ -4,14 +4,19 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, getTeamScope } from "@/lib/auth-server";
 import { validateWebUrl } from "@/lib/url-validation";
-import {
-  dispatchAppointmentConfirmation,
-  dispatchAppointmentUpdated,
-  dispatchAppointmentCancelled,
-  dispatchStaffOnTheWay,
-  dispatchStaffArrived,
-  dispatchPaymentPaid,
-} from "@/lib/whatsapp/dispatch";
+
+// Auto WhatsApp Cloud API dispatches are disabled for v1. Meta's
+// setup (Business Portfolio + WABA + verified business + approved
+// templates + long-lived tokens + ~60-day rotation) was too much
+// onboarding friction for non-technical salon owners. Manual share
+// via the wa.me deep link in DetailView (post-payment "Send to
+// client") still works and covers the most common need.
+//
+// To re-enable later: restore the imports from
+// "@/lib/whatsapp/dispatch" and add back the `void dispatchXxx(...)`
+// call sites in addClient, updateAppointment, updateStatus,
+// cancelAppointment, and updateAppointmentTime. The dispatcher
+// code itself is still in tree.
 
 // Helper to log activity
 async function logActivity(
@@ -397,10 +402,6 @@ export async function createAppointment(
     `New appointment · ${client?.name || "Unknown"}`,
   );
 
-  // Fire-and-forget WhatsApp confirmation. Awaited so the send_log row
-  // is written before we return — but failures don't fail the action.
-  void dispatchAppointmentConfirmation(appointment.id);
-
   revalidatePath("/calendar");
   return { success: true };
 }
@@ -424,26 +425,6 @@ export async function updateAppointment(
   if (serviceEntries.length === 0 || serviceEntries.some((e) => !e.staff_id)) {
     return { error: "Each service must have a staff member assigned" };
   }
-
-  // Snapshot the BEFORE state so we can detect material changes (date,
-  // time, or service list) and only fire the "updated" WhatsApp on a
-  // real change. Pure note edits don't notify the customer.
-  const { data: before } = await supabase
-    .from("appointments")
-    .select("date, time, appointment_services(service_id)")
-    .eq("id", id)
-    .single();
-  const beforeServiceIds = (before?.appointment_services ?? [])
-    .map((r: { service_id: string }) => r.service_id)
-    .sort();
-  const afterServiceIds = serviceEntries
-    .map((e) => e.service_id)
-    .sort();
-  const materialChange =
-    !before ||
-    before.date !== date ||
-    before.time !== time ||
-    JSON.stringify(beforeServiceIds) !== JSON.stringify(afterServiceIds);
 
   const { error } = await supabase
     .from("appointments")
@@ -533,10 +514,6 @@ export async function updateAppointment(
     } catch { /* log failures don't matter to the user */ }
   })();
 
-  if (materialChange) {
-    void dispatchAppointmentUpdated(id);
-  }
-
   revalidatePath("/calendar");
   return { success: true };
 }
@@ -574,20 +551,6 @@ export async function updateAppointmentStatus(id: string, status: string) {
     status,
   );
 
-  // Status-driven WhatsApp notifications. Only fire on transition (not
-  // when the status is re-set to the same value).
-  if (current?.status !== status) {
-    if (status === "on_the_way") {
-      void dispatchStaffOnTheWay(id);
-    } else if (status === "arrived") {
-      void dispatchStaffArrived(id);
-    } else if (status === "paid") {
-      // recordPayment() should have minted both tokens by now, but the
-      // dispatcher guards against missing tokens just in case.
-      void dispatchPaymentPaid(id);
-    }
-  }
-
   revalidatePath("/calendar");
   return { success: true };
 }
@@ -616,12 +579,6 @@ export async function cancelAppointment(id: string) {
     "cancelled",
     `Cancelled · ${client?.name || "Unknown"}'s appointment`,
   );
-
-  // Only notify on the cancellation *transition* — re-cancelling an
-  // already-cancelled appointment shouldn't double-send.
-  if (current?.status !== "cancelled") {
-    void dispatchAppointmentCancelled(id);
-  }
 
   revalidatePath("/calendar");
   return { success: true };
@@ -821,11 +778,6 @@ export async function updateAppointmentTime(id: string, newTime: string) {
     current?.time,
     newTime,
   );
-
-  // Drag-to-reschedule is a material change — notify the customer.
-  if (current?.time !== newTime) {
-    void dispatchAppointmentUpdated(id);
-  }
 
   revalidatePath("/calendar");
   return { success: true };

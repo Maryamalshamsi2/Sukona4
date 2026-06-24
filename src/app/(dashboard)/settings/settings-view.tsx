@@ -73,13 +73,22 @@ export default function SettingsView({ initialProfile, initialSalon }: SettingsV
     }
   }, []);
 
-  // Salon / WhatsApp / Email tabs are owner-only — staff/admin don't see them.
+  // Salon / Email tabs are owner-only — staff/admin don't see them.
+  //
+  // The WhatsApp tab is hidden for v1. Cloud API setup (Meta
+  // Business Portfolio + WABA + verified business + approved
+  // templates + system user tokens with ~60-day rotation) is too
+  // much onboarding friction for non-technical salon owners.
+  // Manual share via the wa.me deep link in DetailView ("Send to
+  // client" after Mark-as-Paid) still works and covers the
+  // common need. The WhatsAppSection component is intact below
+  // and re-enabling is one line — re-add { key: "whatsapp",
+  // label: "WhatsApp" } to the array.
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: "profile", label: "Profile" },
     ...(isOwner
       ? ([
           { key: "salon", label: "Salon" },
-          { key: "whatsapp", label: "WhatsApp" },
           { key: "email", label: "Email" },
         ] as const)
       : []),

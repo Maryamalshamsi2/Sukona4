@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import type { createClient } from "./supabase/server";
-import { dispatchPaymentPaid } from "./whatsapp/dispatch";
+
+// Auto WhatsApp Cloud API dispatches disabled for v1 — see comment
+// in calendar/actions.ts. Staff still share the receipt + review
+// link manually via the wa.me deep link in DetailView.
 
 /**
  * Side-effects that fire after a payment row has been inserted for
@@ -97,7 +100,10 @@ export async function finalizeAppointmentAfterPayment(
         console.error("[finalizePayment] background activity log failed:", err);
       }
     })();
-    void dispatchPaymentPaid(appointmentId);
+    // Auto WhatsApp "payment paid" disabled for v1 — staff shares
+    // the receipt + review link manually via the wa.me button in
+    // DetailView. To re-enable: import dispatchPaymentPaid above
+    // and add `void dispatchPaymentPaid(appointmentId);` here.
   }
 
   return { success: true };
