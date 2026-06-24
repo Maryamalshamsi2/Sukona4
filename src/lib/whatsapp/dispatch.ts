@@ -40,6 +40,16 @@ function adminClient() {
   );
 }
 
+/** Per-salon automation flags loaded alongside the appointment
+ *  context. Mirrors the boolean columns added by migration-054 —
+ *  the master `enabled` plus one per template name. Each
+ *  dispatchXxx reads `automation.send.<label>` (defaulting to
+ *  true if absent so existing salons keep current behaviour). */
+interface AutomationFlags {
+  enabled: boolean;
+  send: Record<string, boolean>;
+}
+
 interface AppointmentContext {
   appointmentId: string;
   salonId: string;
@@ -52,6 +62,7 @@ interface AppointmentContext {
   services: Array<{ name: string }>;
   receiptToken: string | null;
   reviewToken: string | null;
+  automation: AutomationFlags;
 }
 
 /**
@@ -93,10 +104,21 @@ async function getAppointmentContext(
   if (!client?.phone) return null;
 
   // Fetch the salon name + display phone in a second query (cheap, and
-  // keeps the appointments select simple).
+  // keeps the appointments select simple). Also pulls the migration-054
+  // automation flags here so the per-template short-circuit doesn't
+  // need a third round-trip.
   const { data: salon } = await supabase
     .from("salons")
-    .select("name, contact_phone")
+    .select(`
+      name, contact_phone,
+      whatsapp_enabled,
+      whatsapp_send_appointment_confirmation,
+      whatsapp_send_appointment_updated,
+      whatsapp_send_appointment_cancelled,
+      whatsapp_send_staff_on_the_way,
+      whatsapp_send_staff_arrived,
+      whatsapp_send_payment_paid
+    `)
     .eq("id", data.salon_id)
     .single();
 
@@ -114,7 +136,33 @@ async function getAppointmentContext(
     services,
     receiptToken: data.receipt_token ?? null,
     reviewToken: data.review_token ?? null,
+    automation: {
+      // `?? true` keeps existing salons working if the columns
+      // somehow aren't selected yet (defensive — the columns
+      // default true in the migration, but a partial schema
+      // reload can briefly return null before PostgREST catches up).
+      enabled: salon.whatsapp_enabled ?? true,
+      send: {
+        appointment_confirmation: salon.whatsapp_send_appointment_confirmation ?? true,
+        appointment_updated: salon.whatsapp_send_appointment_updated ?? true,
+        appointment_cancelled: salon.whatsapp_send_appointment_cancelled ?? true,
+        staff_on_the_way: salon.whatsapp_send_staff_on_the_way ?? true,
+        staff_arrived: salon.whatsapp_send_staff_arrived ?? true,
+        payment_paid: salon.whatsapp_send_payment_paid ?? true,
+      },
+    },
   };
+}
+
+/** Returns true if the given template is currently enabled for the
+ *  salon (both master + per-template). Used to short-circuit the
+ *  dispatchers before they hit Meta. Defaults open: if the flag is
+ *  missing (older row, schema-reload race), the message still sends —
+ *  matches the pre-migration-054 behaviour. */
+function isTemplateEnabled(ctx: AppointmentContext, label: string): boolean {
+  if (!ctx.automation.enabled) return false;
+  const flag = ctx.automation.send[label];
+  return flag !== false;
 }
 
 /** Friendly labels for the activity bell — never expose the snake_case
@@ -150,6 +198,13 @@ async function safeDispatch(
     const r = await fn();
     if (!r.ok && r.error === "NOT_CONFIGURED") {
       // Salon hasn't connected WABA yet — completely fine, not an error.
+      return r;
+    }
+    if (!r.ok && r.error === "DISABLED") {
+      // Owner deliberately turned this template off via Settings →
+      // WhatsApp. Not a failure, not a config issue — a quiet no-op.
+      // Critical that this DOESN'T write an activity_log row, or the
+      // bell would fire on every status change for disabled templates.
       return r;
     }
     if (!r.ok && r.error !== "NO_CONTEXT") {
@@ -226,6 +281,9 @@ export async function dispatchAppointmentConfirmation(
   return safeDispatch("appointment_confirmation", async () => {
     const ctx = await getAppointmentContext(appointmentId);
     if (!ctx) return { ok: false, error: "NO_CONTEXT" };
+    if (!isTemplateEnabled(ctx, "appointment_confirmation")) {
+      return { ok: false, error: "DISABLED" };
+    }
     return sendAppointmentConfirmation({
       salonId: ctx.salonId,
       toPhone: ctx.clientPhone!,
@@ -246,6 +304,9 @@ export async function dispatchAppointmentUpdated(
   return safeDispatch("appointment_updated", async () => {
     const ctx = await getAppointmentContext(appointmentId);
     if (!ctx) return { ok: false, error: "NO_CONTEXT" };
+    if (!isTemplateEnabled(ctx, "appointment_updated")) {
+      return { ok: false, error: "DISABLED" };
+    }
     return sendAppointmentUpdated({
       salonId: ctx.salonId,
       toPhone: ctx.clientPhone!,
@@ -266,6 +327,9 @@ export async function dispatchAppointmentCancelled(
   return safeDispatch("appointment_cancelled", async () => {
     const ctx = await getAppointmentContext(appointmentId);
     if (!ctx) return { ok: false, error: "NO_CONTEXT" };
+    if (!isTemplateEnabled(ctx, "appointment_cancelled")) {
+      return { ok: false, error: "DISABLED" };
+    }
     return sendAppointmentCancelled({
       salonId: ctx.salonId,
       toPhone: ctx.clientPhone!,
@@ -285,6 +349,9 @@ export async function dispatchStaffOnTheWay(
   return safeDispatch("staff_on_the_way", async () => {
     const ctx = await getAppointmentContext(appointmentId);
     if (!ctx) return { ok: false, error: "NO_CONTEXT" };
+    if (!isTemplateEnabled(ctx, "staff_on_the_way")) {
+      return { ok: false, error: "DISABLED" };
+    }
     return sendStaffOnTheWay({
       salonId: ctx.salonId,
       toPhone: ctx.clientPhone!,
@@ -301,6 +368,9 @@ export async function dispatchStaffArrived(
   return safeDispatch("staff_arrived", async () => {
     const ctx = await getAppointmentContext(appointmentId);
     if (!ctx) return { ok: false, error: "NO_CONTEXT" };
+    if (!isTemplateEnabled(ctx, "staff_arrived")) {
+      return { ok: false, error: "DISABLED" };
+    }
     return sendStaffArrived({
       salonId: ctx.salonId,
       toPhone: ctx.clientPhone!,
@@ -323,6 +393,9 @@ export async function dispatchPaymentPaid(
   return safeDispatch("payment_paid", async () => {
     const ctx = await getAppointmentContext(appointmentId);
     if (!ctx) return { ok: false, error: "NO_CONTEXT" };
+    if (!isTemplateEnabled(ctx, "payment_paid")) {
+      return { ok: false, error: "DISABLED" };
+    }
     if (!ctx.receiptToken || !ctx.reviewToken) {
       return { ok: false, error: "MISSING_TOKENS" };
     }

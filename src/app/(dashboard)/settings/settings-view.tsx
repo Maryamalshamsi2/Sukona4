@@ -11,6 +11,7 @@ import {
   updateSalon,
   getWhatsAppSettings,
   updateWhatsAppSettings,
+  updateWhatsAppAutomation,
   getWhatsAppLogs,
   sendWhatsAppTestMessage,
   getEmailConfigStatus,
@@ -690,12 +691,65 @@ function SalonSection({
 
 // ---- WhatsApp Section (owner only) ----
 
+type WhatsAppTemplateKey =
+  | "appointment_confirmation"
+  | "appointment_updated"
+  | "appointment_cancelled"
+  | "staff_on_the_way"
+  | "staff_arrived"
+  | "payment_paid";
+
+interface WhatsAppAutomation {
+  enabled: boolean;
+  send: Record<WhatsAppTemplateKey, boolean>;
+}
+
 interface WhatsAppCreds {
   phone_number_id: string | null;
   business_account_id: string | null;
   hasAccessToken: boolean;
   accessTokenMask: string | null;
+  automation: WhatsAppAutomation;
 }
+
+/** Label + helper text per template. Order in this array drives the
+ *  rendered order in the toggles panel. */
+const WHATSAPP_TEMPLATES: Array<{
+  key: WhatsAppTemplateKey;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: "appointment_confirmation",
+    label: "Appointment confirmation",
+    hint: "When an appointment is created",
+  },
+  {
+    key: "appointment_updated",
+    label: "Appointment updated",
+    hint: "When date, time, or services change",
+  },
+  {
+    key: "appointment_cancelled",
+    label: "Appointment cancelled",
+    hint: "When an appointment is cancelled",
+  },
+  {
+    key: "staff_on_the_way",
+    label: "Staff on the way",
+    hint: "When status flips to “On the way”",
+  },
+  {
+    key: "staff_arrived",
+    label: "Staff arrived",
+    hint: "When status flips to “Arrived”",
+  },
+  {
+    key: "payment_paid",
+    label: "Payment received",
+    hint: "When an appointment is marked paid (includes review link)",
+  },
+];
 
 /**
  * Owner-only panel for connecting Meta WhatsApp Cloud API and auditing
@@ -765,6 +819,30 @@ function WhatsAppSection() {
       refresh();
     }
     setSaving(false);
+  }
+
+  /** Optimistic toggle handler — patches local state immediately so
+   *  the checkbox flips without a network roundtrip, then writes to
+   *  the DB. On error, refresh from server to revert. */
+  async function handleAutomationPatch(patch: {
+    enabled?: boolean;
+    send?: Partial<Record<WhatsAppTemplateKey, boolean>>;
+  }) {
+    setCreds((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        automation: {
+          enabled: patch.enabled ?? prev.automation.enabled,
+          send: { ...prev.automation.send, ...(patch.send ?? {}) },
+        },
+      };
+    });
+    const res = await updateWhatsAppAutomation(patch);
+    if (res.error) {
+      setSavedMsg({ type: "error", text: res.error });
+      refresh();
+    }
   }
 
   async function handleTest(e: React.FormEvent) {
@@ -895,6 +973,80 @@ function WhatsAppSection() {
           </div>
         </form>
       </div>
+
+      {/* 1.5 Automated messages — per-template toggles. Master kill-
+                switch at the top; individual templates below. When the
+                master is off, the per-template checkboxes still reflect
+                their stored state but are visually muted + disabled so
+                the owner can see what would resume when re-enabled. */}
+      {creds && (
+        <div className="rounded-2xl ring-1 ring-border bg-white">
+          <div className="border-b border-border px-5 py-4">
+            <h3 className="text-body-sm font-semibold text-text-primary">
+              Automated messages
+            </h3>
+            <p className="mt-0.5 text-caption text-text-secondary">
+              Choose which messages send automatically. Turn the master
+              switch off to silence everything without losing your
+              per-template choices.
+            </p>
+          </div>
+
+          <div className="p-6 space-y-5">
+            {/* Master switch */}
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={creds.automation.enabled}
+                onChange={(e) =>
+                  void handleAutomationPatch({ enabled: e.target.checked })
+                }
+                className="mt-0.5 h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-body-sm font-semibold text-text-primary">
+                  Send automated WhatsApp messages
+                </p>
+                <p className="text-caption text-text-secondary">
+                  Master switch. When off, no template fires regardless
+                  of the choices below.
+                </p>
+              </div>
+            </label>
+
+            {/* Per-template toggles. Visually muted + disabled when
+                the master is off so the user understands they're not
+                active right now. */}
+            <div
+              className={`ml-8 space-y-3 ${
+                creds.automation.enabled ? "" : "opacity-50 pointer-events-none"
+              }`}
+            >
+              {WHATSAPP_TEMPLATES.map((t) => (
+                <label
+                  key={t.key}
+                  className="flex items-start gap-3 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={creds.automation.send[t.key]}
+                    onChange={(e) =>
+                      void handleAutomationPatch({
+                        send: { [t.key]: e.target.checked },
+                      })
+                    }
+                    className="mt-0.5 h-5 w-5 rounded border-text-disabled text-neutral-900 focus:ring-primary-100"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body-sm text-text-primary">{t.label}</p>
+                    <p className="text-caption text-text-tertiary">{t.hint}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. Test send */}
       <div className="rounded-2xl ring-1 ring-border bg-white">

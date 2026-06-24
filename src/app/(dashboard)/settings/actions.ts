@@ -214,9 +214,16 @@ export async function getWhatsAppSettings() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("salons")
-    .select(
-      "whatsapp_phone_number_id, whatsapp_business_account_id, whatsapp_access_token"
-    )
+    .select(`
+      whatsapp_phone_number_id, whatsapp_business_account_id, whatsapp_access_token,
+      whatsapp_enabled,
+      whatsapp_send_appointment_confirmation,
+      whatsapp_send_appointment_updated,
+      whatsapp_send_appointment_cancelled,
+      whatsapp_send_staff_on_the_way,
+      whatsapp_send_staff_arrived,
+      whatsapp_send_payment_paid
+    `)
     .eq("id", profile.salon_id)
     .single();
 
@@ -230,7 +237,78 @@ export async function getWhatsAppSettings() {
     accessTokenMask: token
       ? `…${token.slice(-4)}`
       : null,
+    // Migration-054 toggles — surfaced to the Settings UI so the
+    // owner can flip them. Default-true at the DB level, so for
+    // existing salons these all return true.
+    automation: {
+      enabled: data.whatsapp_enabled ?? true,
+      send: {
+        appointment_confirmation: data.whatsapp_send_appointment_confirmation ?? true,
+        appointment_updated: data.whatsapp_send_appointment_updated ?? true,
+        appointment_cancelled: data.whatsapp_send_appointment_cancelled ?? true,
+        staff_on_the_way: data.whatsapp_send_staff_on_the_way ?? true,
+        staff_arrived: data.whatsapp_send_staff_arrived ?? true,
+        payment_paid: data.whatsapp_send_payment_paid ?? true,
+      },
+    },
   };
+}
+
+/** Owner-only. Toggle the master `whatsapp_enabled` flag and / or
+ *  any of the six per-template flags. Pass only the fields you want
+ *  to change — undefined fields are left as-is.
+ *
+ *  Kept separate from updateWhatsAppSettings (the credentials form)
+ *  so the toggles can be saved without making the user re-paste a
+ *  masked token, and credential changes don't accidentally reset
+ *  toggles either. */
+export async function updateWhatsAppAutomation(input: {
+  enabled?: boolean;
+  send?: Partial<{
+    appointment_confirmation: boolean;
+    appointment_updated: boolean;
+    appointment_cancelled: boolean;
+    staff_on_the_way: boolean;
+    staff_arrived: boolean;
+    payment_paid: boolean;
+  }>;
+}) {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner") {
+    return { error: "Only the salon owner can edit WhatsApp settings" };
+  }
+
+  // Only patch the keys the caller passed — undefined → omit the
+  // column from the update so we don't clobber the other booleans
+  // when only one is being toggled.
+  const update: Record<string, boolean> = {};
+  if (input.enabled !== undefined) update.whatsapp_enabled = input.enabled;
+  if (input.send) {
+    if (input.send.appointment_confirmation !== undefined)
+      update.whatsapp_send_appointment_confirmation = input.send.appointment_confirmation;
+    if (input.send.appointment_updated !== undefined)
+      update.whatsapp_send_appointment_updated = input.send.appointment_updated;
+    if (input.send.appointment_cancelled !== undefined)
+      update.whatsapp_send_appointment_cancelled = input.send.appointment_cancelled;
+    if (input.send.staff_on_the_way !== undefined)
+      update.whatsapp_send_staff_on_the_way = input.send.staff_on_the_way;
+    if (input.send.staff_arrived !== undefined)
+      update.whatsapp_send_staff_arrived = input.send.staff_arrived;
+    if (input.send.payment_paid !== undefined)
+      update.whatsapp_send_payment_paid = input.send.payment_paid;
+  }
+  if (Object.keys(update).length === 0) return { success: true };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("salons")
+    .update(update)
+    .eq("id", profile.salon_id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  return { success: true };
 }
 
 /**
