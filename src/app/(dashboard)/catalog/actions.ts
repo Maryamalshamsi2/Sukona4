@@ -86,12 +86,17 @@ export async function addService(formData: FormData) {
     .maybeSingle();
   const nextOrder = (maxRow?.sort_order ?? -1) + 1;
 
-  // is_active: explicit even though the column defaults to true,
-  // so behaviour stays deterministic if anyone adjusts the default
-  // in a future migration. The form's checkbox defaults to checked
-  // (true) — owners can deselect to add an inactive draft service.
+  // is_active: the form ships TWO inputs with name="is_active" — a
+  // hidden value="false" + a checkbox value="true". When the
+  // checkbox is checked, FormData has both entries and
+  // `.get("is_active")` returns the FIRST ("false" — the hidden),
+  // not what the user picked. Use `.getAll().includes("true")` so
+  // we actually read the checkbox state regardless of DOM order.
+  // Explicit even though the DB defaults to true — the form
+  // always sends a value via the hidden mirror, so a future toggle
+  // to inactive can't accidentally fall back to the default.
   const isActive = formData.has("is_active")
-    ? formData.get("is_active") === "true"
+    ? formData.getAll("is_active").includes("true")
     : true;
 
   const { error } = await supabase.from("services").insert({
@@ -119,7 +124,9 @@ export async function updateService(id: string, formData: FormData) {
       name: formData.get("name") as string,
       price: parseFloat(formData.get("price") as string) || 0,
       duration_minutes: parseInt(formData.get("duration_minutes") as string) || 60,
-      is_active: formData.get("is_active") === "true",
+      // See addService comment — hidden+checkbox mirror requires
+      // getAll(...).includes("true") to read the checkbox state.
+      is_active: formData.getAll("is_active").includes("true"),
       category_id: categoryId || null,
     })
     .eq("id", id);
