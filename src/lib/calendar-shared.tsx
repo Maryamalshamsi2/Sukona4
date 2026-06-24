@@ -978,20 +978,21 @@ function mostRecent(a: string | null | undefined, b: string | null | undefined):
 // ---- ShareSection (inside DetailView) ----
 
 /**
- * Combined receipt + review share UI. Renders once payment has been
- * recorded (recordPayment mints both tokens). Composition:
+ * Receipt + review share UI. Renders once payment has been recorded
+ * (recordPayment mints both tokens). Composition:
  *
  *   1. Receipt summary  — receipt number + "View receipt" link.
  *   2. Review readout   — stars + comment if the customer already submitted.
- *   3. Send button      — single WhatsApp deep link whose message body
- *                          contains BOTH the receipt and review URLs (when
- *                          a review hasn't been left yet) or just the
- *                          receipt URL (post-review).
- *   4. Copy buttons     — utility fallbacks for receipt + review links.
- *
- * The wa.me deep link is a no-API solution: opens WhatsApp with the
- * message pre-typed. Staff still has to tap "Send" — Phase 4 (Cloud API)
- * removes that last tap.
+ *   3. Send button      — wa.me deep link that opens WhatsApp with the
+ *                          review prompt pre-typed. ONLY the review link
+ *                          goes in the message body; salon customers
+ *                          rarely need receipts, and a single clear CTA
+ *                          converts better than two competing links.
+ *                          The button is hidden when there's no review
+ *                          to ask for (no token yet, or already reviewed).
+ *   4. Copy buttons     — receipt + review URL copy fallbacks. Staff
+ *                          can paste the receipt manually if a customer
+ *                          asks for it.
  */
 function ShareSection({
   appointment,
@@ -1014,20 +1015,25 @@ function ShareSection({
     ? `${origin}/r/${appointment.review_token}`
     : null;
 
-  // Compose ONE message body. If the review's already in, drop the review
-  // line — no point asking again.
-  const messageLines: string[] = [`Hi ${firstName}! We hope you enjoyed your service.`];
-  if (receiptUrl) messageLines.push(`Your receipt: ${receiptUrl}`);
-  if (reviewUrl && !review) {
-    messageLines.push(`We'd love your feedback — it only takes a moment: ${reviewUrl}`);
-  }
-  const message = messageLines.join("\n\n");
+  // Review-only share message. Receipt link is intentionally
+  // omitted — most salon customers don't need a receipt, and a
+  // single clear CTA converts better. The Receipt card above
+  // still shows the receipt and the Copy receipt link below
+  // lets staff paste it manually if a customer asks.
+  const message = reviewUrl
+    ? `Hi ${firstName}! We hope you enjoyed your service.\n\nWe'd love your feedback — it only takes a moment: ${reviewUrl}`
+    : "";
 
   // wa.me requires the phone WITHOUT the leading "+" and without spaces.
   const waPhone = phone.replace(/[^\d]/g, "");
-  const waUrl = waPhone
+  const waUrl = waPhone && message
     ? `https://wa.me/${waPhone}?text=${encodeURIComponent(message)}`
     : null;
+
+  // Show the Send button only when there's a review to ask for —
+  // either no token yet (rare race) or already reviewed should
+  // hide it entirely rather than render a dead-end button.
+  const canSendReview = !!reviewUrl && !review;
 
   function handleSend() {
     if (!waUrl) return;
@@ -1040,8 +1046,6 @@ function ShareSection({
     if (onShareSent) onShareSent();
   }
 
-  // Choose a label depending on what we still need to share.
-  const sendLabel = review || !reviewUrl ? "Send receipt via WhatsApp" : "Send receipt + review";
   // The "Last shared" stamp uses whichever timestamp is most recent.
   const lastShared = mostRecent(appointment.receipt_sent_at, appointment.review_sent_at);
 
@@ -1105,7 +1109,7 @@ function ShareSection({
 
       {/* Send + copy controls */}
       <div className="space-y-2">
-        {waUrl ? (
+        {canSendReview && waUrl ? (
           <button
             onClick={handleSend}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-body-sm font-semibold text-white transition-opacity hover:opacity-90 active:scale-[0.98]"
@@ -1113,13 +1117,13 @@ function ShareSection({
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
             </svg>
-            {sendLabel}
+            Send review link
           </button>
-        ) : (
+        ) : canSendReview && !waUrl ? (
           <p className="text-caption text-text-tertiary px-1">
             No phone number on file — copy the link instead.
           </p>
-        )}
+        ) : null}
 
         {/* Copy fallbacks — full-width on every breakpoint so they match
             the Send button's width above. */}
