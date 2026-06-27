@@ -226,12 +226,10 @@ function Hero() {
     <section className="bg-white">
       <div className="mx-auto max-w-5xl px-5 pt-20 text-center sm:px-8 sm:pt-28 lg:pt-36">
         <h1 className="mx-auto max-w-4xl text-[2.5rem] font-medium tracking-tight text-text-primary leading-[1.05] sm:text-6xl sm:leading-[1.02] lg:text-7xl xl:text-[5.5rem]">
-          Less juggling.
-          <br />
-          More appointments.
+          Run your home service business in one place.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
-          Run your home service business in one place.
+          Schedule, addresses, payments, payroll.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
