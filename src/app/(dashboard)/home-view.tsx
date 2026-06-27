@@ -675,11 +675,15 @@ export default function HomeView({
             bundles={bundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments, locationId);
-              if (result.error) { undo.error(result.error); return; }
+              // Close modal IMMEDIATELY — perceived-instant save.
+              const apptId = selectedAppointment.id;
               setEditModalOpen(false);
               setSelectedAppointment(null);
-              reloadAppointments();
+              void updateAppointment(apptId, clientId, date, time, notes, entries, adjustments, locationId)
+                .then((result) => {
+                  if (result.error) undo.error(result.error);
+                  reloadAppointments();
+                });
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);

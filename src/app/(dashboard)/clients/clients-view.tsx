@@ -328,18 +328,21 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   }
 
   async function handleSubmit(formData: FormData) {
-    const result = editing
-      ? await updateClient(editing.id, formData)
-      : await addClient(formData);
-
-    if (result.error) {
-      undo.error(result.error);
-      return;
-    }
-
+    // Close modal IMMEDIATELY for perceived-instant save. The user no
+    // longer waits on the network round-trip with the modal stuck
+    // open. The actual save fires in the background; on error we
+    // surface a toast and reload to revert any optimistic state.
+    const wasEditing = editing;
     setModalOpen(false);
     setEditing(null);
-    loadClients();
+
+    const op = wasEditing
+      ? updateClient(wasEditing.id, formData)
+      : addClient(formData);
+    void op.then((result) => {
+      if (result.error) undo.error(result.error);
+      loadClients();
+    });
   }
 
   async function handleDelete(id: string) {
@@ -831,11 +834,15 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
             bundles={allBundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments, locationId);
-              if (result.error) { undo.error(result.error); return; }
+              // Close modal IMMEDIATELY — perceived-instant save.
+              const apptId = selectedAppointment.id;
               setEditModalOpen(false);
               setSelectedAppointment(null);
-              refreshClientAppointments();
+              void updateAppointment(apptId, clientId, date, time, notes, entries, adjustments, locationId)
+                .then((result) => {
+                  if (result.error) undo.error(result.error);
+                  refreshClientAppointments();
+                });
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);

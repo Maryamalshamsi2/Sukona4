@@ -1769,28 +1769,30 @@ export default function CalendarView({
           prefillTime={prefillTime}
           prefillStaffId={prefillStaffId}
           onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
-            const result = await createAppointment(clientId, date, time, notes, entries, adjustments, locationId);
-            if (result.error) { undo.error(result.error); return; }
+            // Close the modal immediately for perceived-instant save —
+            // the user no longer waits on a ~300-600ms network round
+            // trip with the modal stuck open. The actual save fires
+            // in the background; on error we surface a toast.
             setAddModalOpen(false);
             setPrefillTime(null);
             setPrefillStaffId(null);
-
-            // If the appointment was created for a date other than
-            // the one currently displayed, navigate the calendar to
-            // that date so the user can see what they just created.
-            // Without this, the new appointment is invisible until
-            // they happen to scroll to that day — which is exactly
-            // the "appointment didn't appear on desktop calendar"
-            // bug some users hit when they tweaked the date in the
-            // form. The loadData useEffect fires on dateStr change
-            // and refetches everything for the new date, so no
-            // explicit reloadAppointments call needed in that path.
-            if (date !== dateStr) {
+            // Navigate to the appointment's date now (the navigate
+            // also triggers its own reload via the dateStr useEffect).
+            const sameDate = date === dateStr;
+            if (!sameDate) {
               const [y, m, d] = date.split("-").map(Number);
               setSelectedDate(new Date(y, m - 1, d));
-            } else {
-              reloadAppointments();
             }
+            // Fire the save fire-and-forget.
+            void createAppointment(clientId, date, time, notes, entries, adjustments, locationId)
+              .then((result) => {
+                if (result.error) {
+                  undo.error(result.error);
+                  reloadAppointments();
+                  return;
+                }
+                if (sameDate) reloadAppointments();
+              });
           }}
           onNewClient={async (name, phone, address, mapLink, notes) => {
             const result = await addClientQuick(name, phone, address, mapLink, notes);
@@ -1873,11 +1875,20 @@ export default function CalendarView({
             bundles={bundles}
             staffSchedules={staffScheduleMap}
             onSubmit={async (clientId, date, time, notes, entries, adjustments, locationId) => {
-              const result = await updateAppointment(selectedAppointment.id, clientId, date, time, notes, entries, adjustments, locationId);
-              if (result.error) { undo.error(result.error); return; }
+              // Capture id before clearing state — the save runs in the
+              // background after the modal closes.
+              const apptId = selectedAppointment.id;
+              // Close modal IMMEDIATELY for perceived-instant save.
               setEditModalOpen(false);
               setSelectedAppointment(null);
-              reloadAppointments();
+              // Fire save fire-and-forget. Reload only when it completes
+              // (so the user sees the updated row a moment later, but
+              // doesn't sit with a spinner waiting for the network).
+              void updateAppointment(apptId, clientId, date, time, notes, entries, adjustments, locationId)
+                .then((result) => {
+                  if (result.error) undo.error(result.error);
+                  reloadAppointments();
+                });
             }}
             onNewClient={async (name, phone, address, mapLink, notes) => {
               const result = await addClientQuick(name, phone, address, mapLink, notes);
