@@ -229,7 +229,7 @@ function Hero() {
           Run your home service business in one place.
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg text-text-secondary sm:mt-8 sm:text-xl">
-          Schedule, addresses, payments, payroll.
+          Appointments, payments, clients, revenue, inventory, and reports.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
