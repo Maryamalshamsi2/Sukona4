@@ -254,7 +254,24 @@ export async function addClientQuick(name: string, phone: string, address: strin
     .select()
     .single();
 
-  if (error) return { error: error.message };
+  if (error) {
+    // Migration-055 unique index — friendly error naming the
+    // existing client so the user can pick them from the
+    // appointment form's client dropdown instead.
+    if ((error as { code?: string }).code === "23505") {
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("phone", cleanPhone)
+        .maybeSingle();
+      return {
+        error: existing?.name
+          ? `That phone number is already used by ${existing.name}. Pick them from the client list instead.`
+          : "That phone number is already used by another client.",
+      };
+    }
+    return { error: error.message };
+  }
 
   // Migration-047: if the caller provided an address or map link,
   // record it as the client's first saved location (label "Home",

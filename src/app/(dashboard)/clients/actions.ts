@@ -48,7 +48,24 @@ export async function addClient(formData: FormData) {
     .select("id")
     .single();
 
-  if (error || !client) return { error: error?.message ?? "Failed to add client" };
+  if (error || !client) {
+    // Migration-055 unique index — friendly error naming the
+    // client that already owns this phone so the owner can find
+    // and edit them instead of creating a duplicate.
+    if ((error as { code?: string } | null)?.code === "23505") {
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("phone", phone)
+        .maybeSingle();
+      return {
+        error: existing?.name
+          ? `That phone number is already used by ${existing.name}. Edit that client instead.`
+          : "That phone number is already used by another client.",
+      };
+    }
+    return { error: error?.message ?? "Failed to add client" };
+  }
 
   // Migration-047: if an address or map link was provided, also
   // create the client's first saved location (label "Home",
@@ -118,7 +135,25 @@ export async function updateClient(id: string, formData: FormData) {
     .from("clients")
     .update(updates)
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) {
+    // Migration-055 unique index — same treatment as addClient
+    // above so editing a phone into someone else's shows the
+    // right name instead of a raw Postgres error.
+    if ((error as { code?: string }).code === "23505") {
+      const { data: existing } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("phone", phone)
+        .neq("id", id)
+        .maybeSingle();
+      return {
+        error: existing?.name
+          ? `That phone number is already used by ${existing.name}. Edit that client instead.`
+          : "That phone number is already used by another client.",
+      };
+    }
+    return { error: error.message };
+  }
 
   // Legacy form mode (Add modal still uses the single address+map_link
   // inputs): propagate to the client's default saved location so the
