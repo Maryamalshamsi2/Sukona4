@@ -7,7 +7,9 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "import:template": "tsx scripts/historical-import/generate-template.ts",
+    "import:run": "tsx --env-file=.env.local scripts/historical-import/import.ts"
   },
   "repository": {
     "type": "git",
@@ -39,8 +41,10 @@
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "eslint": "^10.1.0",
+    "exceljs": "^4.4.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.2"
   }
 }
