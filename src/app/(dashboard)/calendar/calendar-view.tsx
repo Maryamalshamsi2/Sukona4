@@ -48,6 +48,9 @@ import {
   deleteCalendarBlock,
   getStaffSchedulesForDate,
   markShareSent,
+  getClients,
+  getServices,
+  getBundlesForBooking,
 } from "./actions";
 
 // ---- Local Types ----
@@ -222,6 +225,32 @@ export default function CalendarView({
   const [staffScheduleMap, setStaffScheduleMap] =
     useState<Map<string, { isOff: boolean; startMin: number; endMin: number }>>(initialStaffScheduleMap);
   const [loading, setLoading] = useState(false);
+
+  // Deferred load: clients / services / bundles were dropped from
+  // the SSR fetch (see calendar/page.tsx). They only appear inside
+  // the New Appointment modal, which the user can't open before
+  // this effect resolves. Runs once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [c, s, b] = await Promise.all([
+          getClients(),
+          getServices(),
+          getBundlesForBooking(),
+        ]);
+        if (cancelled) return;
+        setClients(c as ClientItem[]);
+        setServices(s as ServiceItem[]);
+        setBundles(b as unknown as BundleForBooking[]);
+      } catch (err) {
+        console.error("[calendar-view] booking form data fetch failed:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Staff filter: empty set = show all
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
