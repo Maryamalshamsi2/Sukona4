@@ -254,6 +254,7 @@ export async function getClientAppointments(clientId: string) {
         bundle_name,
         services:service_id ( id, name, price, duration_minutes )
       ),
+      payments ( id, amount, method, note, receipt_url, receipt_urls, tip_amount, tip_to_staff_id, created_at ),
       reviews ( id, rating, comment, submitted_at )
     `)
     .eq("client_id", clientId)
