@@ -353,20 +353,36 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
     });
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this client?")) return;
-    // Optimistic: pull the row out immediately so the list responds
-    // to the click even before the server round-trip completes.
-    // Restore on error.
-    const previous = clients;
+  function handleDelete(id: string) {
+    // Instant-with-undo pattern (same as calendar's Delete
+    // appointment): remove from the list immediately, show a toast
+    // with an Undo affordance for ~6s, and only hit the server if
+    // the timer fires without an undo. Window.confirm() was
+    // unreliable — some browsers/PWAs suppress it silently, and the
+    // extra tap slows the flow down for no safety gain (undo covers
+    // the fat-finger case just fine).
+    const removed = clients.find((c) => c.id === id);
+    if (!removed) return;
     setClients((prev) => prev.filter((c) => c.id !== id));
-    const result = await deleteClient(id);
-    if (result.error) {
-      setClients(previous);
-      undo.error(result.error);
-      return;
-    }
-    loadClients();
+    let undone = false;
+    const timer = setTimeout(() => {
+      if (undone) return;
+      void deleteClient(id).then((result) => {
+        if (result?.error) {
+          undo.error(result.error);
+          setClients((prev) => (prev.some((c) => c.id === id) ? prev : [removed, ...prev]));
+        }
+      });
+    }, 6000);
+    undo.show(
+      `Deleted · ${removed.name}`,
+      () => {
+        undone = true;
+        clearTimeout(timer);
+        setClients((prev) => (prev.some((c) => c.id === id) ? prev : [removed, ...prev]));
+      },
+      6000,
+    );
   }
 
   // Filter clients by name / phone / address. Phone match strips non-digits
