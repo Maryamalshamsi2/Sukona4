@@ -7,9 +7,13 @@ import { validateWebUrl } from "@/lib/url-validation";
 
 export async function getClients() {
   const supabase = await createClient();
+  // appointments(count) is a PostgREST aggregate that returns
+  // [{ count: N }] per row — one COUNT(*) roundtripped instead of
+  // N+1 queries. RLS on appointments already filters by salon, so
+  // the total reflects only this salon's history.
   const { data, error } = await supabase
     .from("clients")
-    .select("*")
+    .select("*, appointments(count)")
     .order("created_at", { ascending: false });
 
   if (error) throw error;

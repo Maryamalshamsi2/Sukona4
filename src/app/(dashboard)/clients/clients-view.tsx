@@ -41,6 +41,14 @@ import {
 } from "@/lib/calendar-shared";
 import type { Client } from "@/types";
 
+// getClients() attaches a PostgREST aggregate: appointments: [{ count: N }].
+// Widen the local Client shape so the table can render "Appointments" per row.
+type ClientWithApptCount = Client & { appointments?: Array<{ count: number }> };
+
+function apptCount(c: ClientWithApptCount): number {
+  return c.appointments?.[0]?.count ?? 0;
+}
+
 function formatDateLabel(dateStr: string) {
   // Parse "YYYY-MM-DD" without timezone shift
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -62,7 +70,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   const isStaff = currentUser?.role === "staff";
   const undo = useUndo();
   const currency = useCurrency();
-  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [clients, setClients] = useState<ClientWithApptCount[]>(initialClients);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [phoneValue, setPhoneValue] = useState("");
@@ -470,6 +478,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                 <tr>
                   <th className="px-5 py-4 font-semibold text-text-secondary">Name</th>
                   <th className="px-5 py-4 font-semibold text-text-secondary">Phone</th>
+                  <th className="px-5 py-4 font-semibold text-text-secondary">Appointments</th>
                   <th className="px-5 py-4 font-semibold text-text-secondary">Location</th>
                   <th className="px-5 py-4 font-semibold text-text-secondary">Notes</th>
                   <th className="px-5 py-4"></th>
@@ -499,6 +508,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                         "—"
                       )}
                     </td>
+                    <td className="px-5 py-4 tabular-nums text-text-secondary">{apptCount(client)}</td>
                     <td className="px-5 py-4 text-text-secondary">
                       <div>
                         {client.address || "—"}
@@ -548,6 +558,9 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
                         </a>
                       </p>
                     )}
+                    <p className="mt-1 text-caption text-text-tertiary tabular-nums">
+                      {apptCount(client)} appointment{apptCount(client) === 1 ? "" : "s"}
+                    </p>
                     {client.address && <p className="mt-1 text-body-sm text-text-secondary truncate">{client.address}</p>}
                     {client.map_link && (
                       <a href={client.map_link} target="_blank" rel="noopener noreferrer"
