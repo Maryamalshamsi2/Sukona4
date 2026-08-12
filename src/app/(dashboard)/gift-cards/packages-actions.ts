@@ -266,6 +266,159 @@ export async function sellPackage(payload: SellPackagePayload) {
 }
 
 // ============================================================
+// Update
+// ============================================================
+
+interface UpdatePackagePayload {
+  id: string;
+  expiresAt: string | null;
+  notes: string | null;
+  /**
+   * Full replacement list for the package's items:
+   *   - existing rows carry `id`; sessions_total on those may be
+   *     raised or lowered, but never below sessions_used
+   *   - new rows omit `id` and get inserted
+   *   - any existing item not in the list is deleted, but only
+   *     when it has zero redemptions (sessions_used === 0)
+   */
+  items: Array<{ id?: string; serviceId: string; sessions: number }>;
+}
+
+/**
+ * Edit an already-sold package. Editable fields are limited to the
+ * ones that don't disturb the money side: expiry, notes, and the
+ * items array (add / remove-if-unused / adjust sessions_total).
+ * total_paid, purchase_method, recipient, and buyer are frozen at
+ * sale time — changing them retroactively would rewrite historical
+ * Reports revenue and is safer as a void + resell.
+ *
+ * After the writes, we recompute the package status:
+ *   - if every item has sessions_used == sessions_total → 'completed'
+ *   - otherwise → 'active' (even if it was previously completed and
+ *     the owner just added more sessions)
+ * Void status is preserved — editing a void'd package is disallowed
+ * upstream in the UI anyway, but the guard here is belt-and-braces.
+ */
+export async function updatePackage(payload: UpdatePackagePayload) {
+  const gate = await requireOwnerOrAdmin();
+  if ("error" in gate) return { error: gate.error };
+  if (!payload.id) return { error: "Package id is required" };
+  if (payload.expiresAt && !/^\d{4}-\d{2}-\d{2}$/.test(payload.expiresAt)) {
+    return { error: "Invalid expiry date" };
+  }
+  if (!payload.items || payload.items.length === 0) {
+    return { error: "Package must include at least one item" };
+  }
+  for (const it of payload.items) {
+    if (!it.serviceId) return { error: "Each line must pick a service" };
+    if (!Number.isInteger(it.sessions) || it.sessions <= 0) {
+      return { error: "Each line must have a positive number of sessions" };
+    }
+  }
+
+  const supabase = await createClient();
+
+  const { data: pkg, error: fetchErr } = await supabase
+    .from("packages")
+    .select("id, status")
+    .eq("id", payload.id)
+    .single();
+  if (fetchErr || !pkg) return { error: "Package not found" };
+  if (pkg.status === "void") return { error: "Cannot edit a voided package" };
+
+  const { data: existingItems, error: itemsErr } = await supabase
+    .from("package_items")
+    .select("id, service_id, sessions_total, sessions_used")
+    .eq("package_id", payload.id);
+  if (itemsErr) return { error: itemsErr.message };
+
+  const existingById = new Map(
+    (existingItems ?? []).map((r) => [
+      String(r.id),
+      { serviceId: String(r.service_id), sessionsTotal: Number(r.sessions_total), sessionsUsed: Number(r.sessions_used) },
+    ]),
+  );
+
+  // Partition the incoming items.
+  const toUpdate: Array<{ id: string; sessions_total: number; service_id: string }> = [];
+  const toInsert: Array<{ package_id: string; service_id: string; sessions_total: number; sessions_used: number }> = [];
+  const keepIds = new Set<string>();
+  for (const it of payload.items) {
+    if (it.id) {
+      const existing = existingById.get(it.id);
+      if (!existing) return { error: "One of the items no longer exists — refresh and try again" };
+      if (it.sessions < existing.sessionsUsed) {
+        return { error: `Cannot reduce sessions below ${existing.sessionsUsed} — already redeemed on this item.` };
+      }
+      keepIds.add(it.id);
+      toUpdate.push({ id: it.id, sessions_total: it.sessions, service_id: it.serviceId });
+    } else {
+      toInsert.push({
+        package_id: payload.id,
+        service_id: it.serviceId,
+        sessions_total: it.sessions,
+        sessions_used: 0,
+      });
+    }
+  }
+  // Anything in existing that's not in keepIds is a removal candidate;
+  // only allowed when the row has zero redemptions.
+  const toDelete: string[] = [];
+  for (const [id, ex] of existingById) {
+    if (keepIds.has(id)) continue;
+    if (ex.sessionsUsed > 0) {
+      return { error: "Cannot remove an item that already has redemptions." };
+    }
+    toDelete.push(id);
+  }
+
+  // Parent update: expiry + notes.
+  const { error: updParentErr } = await supabase
+    .from("packages")
+    .update({
+      expires_at: payload.expiresAt,
+      notes: payload.notes?.trim() || null,
+    })
+    .eq("id", payload.id);
+  if (updParentErr) return { error: updParentErr.message };
+
+  // Per-item updates.
+  for (const u of toUpdate) {
+    const { error: e } = await supabase
+      .from("package_items")
+      .update({ sessions_total: u.sessions_total, service_id: u.service_id })
+      .eq("id", u.id);
+    if (e) return { error: e.message };
+  }
+  if (toInsert.length > 0) {
+    const { error: e } = await supabase.from("package_items").insert(toInsert);
+    if (e) return { error: e.message };
+  }
+  if (toDelete.length > 0) {
+    const { error: e } = await supabase.from("package_items").delete().in("id", toDelete);
+    if (e) return { error: e.message };
+  }
+
+  // Re-derive status: if every remaining item is fully used, mark
+  // completed; otherwise active. (Void status was rejected above.)
+  const { data: after, error: afterErr } = await supabase
+    .from("package_items")
+    .select("sessions_total, sessions_used")
+    .eq("package_id", payload.id);
+  if (!afterErr && after && after.length > 0) {
+    const allUsed = after.every((r) => Number(r.sessions_used) >= Number(r.sessions_total));
+    const nextStatus = allUsed ? "completed" : "active";
+    if (nextStatus !== pkg.status) {
+      await supabase.from("packages").update({ status: nextStatus }).eq("id", payload.id);
+    }
+  }
+
+  revalidatePath("/sales");
+  revalidatePath("/reports");
+  return { success: true } as const;
+}
+
+// ============================================================
 // Void
 // ============================================================
 

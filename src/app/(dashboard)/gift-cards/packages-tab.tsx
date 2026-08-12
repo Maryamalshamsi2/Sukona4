@@ -11,6 +11,7 @@ import { isExpired } from "@/lib/gift-card-code";
 import {
   listPackages,
   sellPackage,
+  updatePackage,
   voidPackage,
   deletePackage,
   getPackageDetail,
@@ -230,6 +231,11 @@ export default function PackagesTab({
   const [detailRedemptions, setDetailRedemptions] = useState<RedemptionRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Edit modal opens from the detail modal's Edit button. We close
+  // detail first so the two <dialog>s don't stack — native <dialog>
+  // doesn't stack cleanly.
+  const [editingPkg, setEditingPkg] = useState<PackageRow | null>(null);
+
   async function openDetail(p: PackageRow) {
     setDetailPkg(p);
     setDetailOpen(true);
@@ -399,8 +405,27 @@ export default function PackagesTab({
           closeDetail();
           void reload(statusFilter);
         }}
+        onEdit={(p) => {
+          // Close detail so the two dialogs don't overlap, then
+          // open edit. reload() when edit closes brings the fresh
+          // items back into the list.
+          setDetailOpen(false);
+          setEditingPkg(p);
+        }}
         onError={(msg) => undo.error(msg)}
         currency={currency}
+      />
+
+      <EditPackageModal
+        open={!!editingPkg}
+        pkg={editingPkg}
+        services={services}
+        onClose={() => setEditingPkg(null)}
+        onSaved={() => {
+          setEditingPkg(null);
+          void reload(statusFilter);
+        }}
+        onError={(msg) => undo.error(msg)}
       />
     </div>
   );
@@ -700,6 +725,7 @@ function PackageDetailModal({
   loading,
   onClose,
   onChanged,
+  onEdit,
   onError,
   currency,
 }: {
@@ -709,6 +735,7 @@ function PackageDetailModal({
   loading: boolean;
   onClose: () => void;
   onChanged: () => void;
+  onEdit: (p: PackageRow) => void;
   onError: (msg: string) => void;
   currency: string;
 }) {
@@ -864,10 +891,22 @@ function PackageDetailModal({
           )}
         </div>
 
-        {/* Action buttons. Void only for currently-usable; Delete on
-            any status. Same shape as the gift card detail modal. */}
+        {/* Action buttons. Edit is available on active/expired
+            (not voided or completed — completed is fine actually,
+            adding sessions revives it; block only voided). Void only
+            for currently-usable; Delete on any status. Same shape as
+            the gift card detail modal. */}
         {!voidConfirmOpen && !deleteConfirmOpen && (
           <div className="flex justify-end gap-2 pt-2">
+            {pkg.status !== "void" && (
+              <button
+                type="button"
+                onClick={() => onEdit(pkg)}
+                className="rounded-xl bg-white px-4 py-2.5 text-body-sm font-semibold text-text-primary ring-1 ring-border hover:bg-surface-hover"
+              >
+                Edit package
+              </button>
+            )}
             {displayStatus(pkg) === "active" && (
               <button
                 type="button"
@@ -969,6 +1008,222 @@ function PackageDetailModal({
           </div>
         )}
       </div>
+    </Modal>
+  );
+}
+
+// ============================================================
+// Edit modal — expiry, notes, and items (add / remove-if-unused
+// / adjust sessions_total). Money side (total_paid,
+// purchase_method) and parties (recipient, buyer) are frozen —
+// see updatePackage's block-comment for why.
+// ============================================================
+
+interface EditItemDraft {
+  id?: string;              // set for existing rows
+  serviceId: string;
+  sessions: string;         // string so user can type freely
+  sessionsUsed: number;     // read-only, drives min/removable
+}
+
+function EditPackageModal({
+  open,
+  pkg,
+  services,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  open: boolean;
+  pkg: PackageRow | null;
+  services: ServiceOption[];
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [expiresAt, setExpiresAt] = useState("");
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<EditItemDraft[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !pkg) return;
+    setExpiresAt(pkg.expires_at ?? "");
+    setNotes(pkg.notes ?? "");
+    setItems(
+      pkg.package_items.map((it) => ({
+        id: it.id,
+        serviceId: it.service_id,
+        sessions: String(it.sessions_total),
+        sessionsUsed: it.sessions_used,
+      })),
+    );
+    setError(null);
+  }, [open, pkg]);
+
+  function updateItem(idx: number, patch: Partial<EditItemDraft>) {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+  function removeItem(idx: number) {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function addItem() {
+    setItems((prev) => [...prev, { serviceId: "", sessions: "", sessionsUsed: 0 }]);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pkg) return;
+    setSubmitting(true);
+    setError(null);
+    const parsed = items.map((it) => ({
+      id: it.id,
+      serviceId: it.serviceId,
+      sessions: parseInt(it.sessions, 10) || 0,
+    }));
+    const res = await updatePackage({
+      id: pkg.id,
+      expiresAt: expiresAt || null,
+      notes: notes.trim() || null,
+      items: parsed,
+    });
+    setSubmitting(false);
+    if ("error" in res && res.error) {
+      setError(res.error);
+      onError(res.error);
+      return;
+    }
+    onSaved();
+  }
+
+  if (!pkg) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Package">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <p className="text-caption text-text-tertiary">
+          {pkg.recipient?.name ?? "Unknown recipient"}
+          {" · sold "}{formatDateTime(pkg.created_at)}
+        </p>
+
+        {/* Items */}
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+            Services in this package *
+          </label>
+          <div className="space-y-2">
+            {items.map((it, idx) => {
+              const minSessions = it.sessionsUsed;
+              const removable = it.sessionsUsed === 0;
+              return (
+                <div key={it.id ?? `new-${idx}`} className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <select
+                      value={it.serviceId}
+                      onChange={(e) => updateItem(idx, { serviceId: e.target.value })}
+                      required
+                      className="w-full appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                    >
+                      <option value="">Select service</option>
+                      {services.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                    {it.sessionsUsed > 0 && (
+                      <p className="text-caption text-text-tertiary">
+                        {it.sessionsUsed} already used — total can&apos;t go below that
+                      </p>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={Math.max(1, minSessions)}
+                    step="1"
+                    value={it.sessions}
+                    onChange={(e) => updateItem(idx, { sessions: e.target.value })}
+                    required
+                    placeholder="Sessions"
+                    className="w-24 shrink-0 appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-3 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    disabled={!removable}
+                    aria-label={removable ? "Remove service" : "Item has redemptions — cannot remove"}
+                    title={removable ? "Remove service" : "Item has redemptions — cannot remove"}
+                    className="shrink-0 rounded-md p-1.5 text-text-tertiary hover:bg-surface-active hover:text-error-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-tertiary"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={addItem}
+            className="mt-2 text-body-sm font-semibold text-text-secondary hover:text-text-primary"
+          >
+            + Add another service
+          </button>
+        </div>
+
+        {/* Expiry */}
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+            Expires <span className="font-normal text-text-tertiary">(optional)</span>
+          </label>
+          <input
+            type="date"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+            className="w-full appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
+            Notes <span className="font-normal text-text-tertiary">(optional)</span>
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="w-full appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          />
+        </div>
+
+        <p className="text-caption text-text-tertiary">
+          Total paid, payment method, recipient, and buyer are locked here —
+          those change historical revenue. Void the package and re-sell if
+          you need to correct them.
+        </p>
+
+        {error && <p className="text-body-sm text-error-700">{error}</p>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-xl bg-surface-active px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-primary hover:bg-neutral-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-xl bg-neutral-900 px-4 py-2.5 sm:px-5 text-body-sm font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition disabled:opacity-50"
+          >
+            {submitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }
