@@ -174,6 +174,12 @@ export default function CatalogView({
 
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  // The category field is a native <select>, and defaultValue on a
+  // select doesn't reliably re-sync after mount (the option list
+  // may still be painting when React reads the default). We drive
+  // it as a controlled input instead — set on open, read on submit
+  // via formData because the <select> still has name="category_id".
+  const [svcCategoryId, setSvcCategoryId] = useState<string>("");
 
   const [bundleModalOpen, setBundleModalOpen] = useState(false);
   const [editingBundle, setEditingBundle] = useState<ServiceBundle | null>(null);
@@ -279,11 +285,13 @@ export default function CatalogView({
   // ---- Service handlers ----
   function openAddService() {
     setEditingService(null);
+    setSvcCategoryId("");
     setServiceModalOpen(true);
   }
 
   function openEditService(service: Service) {
     setEditingService(service);
+    setSvcCategoryId(service.category_id ?? "");
     setServiceModalOpen(true);
   }
 
@@ -959,7 +967,8 @@ export default function CatalogView({
             <select
               id="svc-category"
               name="category_id"
-              defaultValue={editingService?.category_id ?? ""}
+              value={svcCategoryId}
+              onChange={(e) => setSvcCategoryId(e.target.value)}
               className="mt-1.5 block w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             >
               <option value="">No category</option>
