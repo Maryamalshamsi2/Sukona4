@@ -927,7 +927,17 @@ export default function CatalogView({
         onClose={() => { setServiceModalOpen(false); setEditingService(null); }}
         title={editingService ? "Edit Service" : "Add Service"}
       >
-        <form action={handleServiceSubmit} className="space-y-6">
+        {/* key remounts the form when switching between Add / Edit
+            (and between two different services). Modal keeps its
+            children in the DOM even when closed, so without a fresh
+            mount defaultValue={editingService?.name} is only ever
+            read once — from whichever editingService was set first.
+            The result: Edit opens with blank fields. */}
+        <form
+          key={editingService?.id ?? "new"}
+          action={handleServiceSubmit}
+          className="space-y-6"
+        >
           <div>
             <label htmlFor="svc-name" className="block text-body-sm font-semibold text-text-primary">
               Name *
@@ -1039,6 +1049,13 @@ export default function CatalogView({
         title={editingBundle ? "Edit Bundle" : "Create Bundle"}
       >
         <BundleForm
+          // key remounts BundleForm when switching Add / Edit (or
+          // between two different bundles). Modal keeps its children
+          // in the DOM even when closed, so BundleForm's
+          // useState(editingBundle?.name || "") only runs once —
+          // from whichever editingBundle existed at first mount
+          // (null). Without this key, Edit opens with blank fields.
+          key={editingBundle?.id ?? "new"}
           // Filter to active services PLUS any inactive ones already
           // on the bundle being edited. Without the union, a service
           // that was deactivated after the bundle was created would
