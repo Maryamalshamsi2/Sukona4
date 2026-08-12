@@ -543,8 +543,16 @@ export function DetailView({
   // The space-y-7 between blocks is bigger than the old space-y-6 so
   // the eye registers them as distinct stops. Internal spacing inside
   // each block is tight (1–2 lines) to feel grouped.
+  // Show the payment-editor button for every paid appointment,
+  // whether or not a payments row exists. Historical imports and
+  // manually-flipped-to-paid rows can lack a payments row; the
+  // owner still needs to be able to open the modal to add / fix
+  // amount, method, receipt, or apply a package. The modal itself
+  // switches between Edit mode (payment row present) and Record
+  // mode (no payment row) based on existingPayment.
   const hasPaidReceiptControls =
-    canEdit && onEditPayment && appointment.status === "paid" && (appointment.payments?.length ?? 0) > 0;
+    canEdit && onEditPayment && appointment.status === "paid";
+  const hasPaymentRow = (appointment.payments?.length ?? 0) > 0;
 
   return (
     // Outer rhythm: space-y-8 (32 px) between major blocks. Apple-
@@ -603,7 +611,7 @@ export function DetailView({
                       onClick={onEditPayment}
                       className="text-caption font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
                     >
-                      Edit payment
+                      {hasPaymentRow ? "Edit payment" : "Add payment"}
                     </button>
                   )}
                 </div>
