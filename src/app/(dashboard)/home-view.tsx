@@ -620,6 +620,7 @@ export default function HomeView({
       {/* ==== EDIT PAYMENT MODAL ==== */}
       <MarkPaidModal
         open={editPaymentOpen}
+        appointmentId={selectedAppointment?.id ?? null}
         clientId={selectedAppointment?.client_id ?? null}
         clientName={selectedAppointment?.clients?.name}
         appointmentStaff={(() => {

@@ -10,8 +10,10 @@ import {
 import {
   getAppointmentPackageContext,
   getPackagesForClient,
+  redeemPackageSession,
   redeemPackageSessionWithPayment,
 } from "@/app/(dashboard)/gift-cards/packages-actions";
+import { useUndo } from "@/components/undo-toast";
 import type { PaymentMethod } from "@/types";
 import { useCurrency } from "@/lib/user-context";
 import { formatCurrency } from "@/lib/currency";
@@ -96,6 +98,7 @@ export default function MarkPaidModal({
 }: Props) {
   const isEdit = !!existingPayment;
   const currency = useCurrency();
+  const undo = useUndo();
 
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [note, setNote] = useState("");
@@ -139,6 +142,11 @@ export default function MarkPaidModal({
   // the redeem checkboxes in record mode).
   type ClientPackage = Awaited<ReturnType<typeof getPackagesForClient>>[number];
   const [clientPackages, setClientPackages] = useState<ClientPackage[]>([]);
+  // Package items the owner clicked "Apply" on in this edit session.
+  // Tracked here so the UI can show the decremented count and hide
+  // the button. Actual RPC runs after a 6s undo window (see the
+  // handler below).
+  const [appliedItems, setAppliedItems] = useState<Set<string>>(() => new Set());
   const [appliedSessions, setAppliedSessions] = useState<Set<string>>(
     () => new Set(),
   );
@@ -195,6 +203,7 @@ export default function MarkPaidModal({
     setPackageOptions([]);
     setAppliedSessions(new Set());
     setClientPackages([]);
+    setAppliedItems(new Set());
   }, [open, defaultAmount, existingPayment]);
 
   // Fetch applicable package items on open (record mode + has an
@@ -215,7 +224,8 @@ export default function MarkPaidModal({
 
   // Edit mode: fetch the client's active packages so the owner can
   // see whether they should have applied one when originally
-  // recording the payment. Read-only — no retroactive redeem here.
+  // recording the payment. Interactive: an "Apply" button per item
+  // (see handleApplyPackage below) fires a deferred redeem RPC.
   useEffect(() => {
     if (!open || !isEdit || !clientId) return;
     let cancelled = false;
@@ -228,6 +238,60 @@ export default function MarkPaidModal({
       cancelled = true;
     };
   }, [open, isEdit, clientId]);
+
+  /**
+   * Retroactively apply one package session to this appointment.
+   *
+   * Ateeq scenario: client had a Signature Mani & Pedi package;
+   * staff added a foot-and-leg massage on the day, charged the
+   * massage on card, and forgot to mark the package session as
+   * used. The owner reopens the payment to fix the package side
+   * without touching the (correct) massage payment row.
+   *
+   * Fire-and-forget with a 6s undo window — matches the client
+   * delete pattern. The payments row is untouched.
+   */
+  function handleApplyPackage(itemId: string, serviceName: string) {
+    if (!appointmentId) return;
+    // Optimistic: mark the item applied so the panel shows the
+    // decremented count immediately.
+    setAppliedItems((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
+    let undone = false;
+    const timer = setTimeout(() => {
+      if (undone) return;
+      void redeemPackageSession({
+        packageItemId: itemId,
+        appointmentId,
+        notes: "Applied retroactively from edit payment",
+      }).then((result) => {
+        if (result && "error" in result && result.error) {
+          undo.error(result.error);
+          setAppliedItems((prev) => {
+            const next = new Set(prev);
+            next.delete(itemId);
+            return next;
+          });
+        }
+      });
+    }, 6000);
+    undo.show(
+      `Applied · ${serviceName}`,
+      () => {
+        undone = true;
+        clearTimeout(timer);
+        setAppliedItems((prev) => {
+          const next = new Set(prev);
+          next.delete(itemId);
+          return next;
+        });
+      },
+      6000,
+    );
+  }
 
   // Coverage = sum of selected appointment-service prices. Each
   // ticked session redeems exactly one session and covers that
@@ -625,9 +689,10 @@ export default function MarkPaidModal({
               <p className="text-body-sm font-semibold text-text-primary">
                 Active packages ({activeItems.length})
               </p>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {activeItems.map(({ pkg, it }) => {
-                  const remaining = it.sessions_total - it.sessions_used;
+                  const applied = appliedItems.has(it.id);
+                  const remaining = it.sessions_total - it.sessions_used - (applied ? 1 : 0);
                   // PostgREST's type inference reports `services` as an
                   // array even for a single FK relation; handle both.
                   const svcRel = it.services as unknown as
@@ -638,14 +703,31 @@ export default function MarkPaidModal({
                     ? svcRel[0]?.name ?? "Package session"
                     : svcRel?.name ?? "Package session";
                   return (
-                    <li key={it.id} className="text-body-sm text-text-secondary">
-                      <span className="font-semibold text-text-primary">{svcName}</span>
-                      {" — "}
-                      <span className="tabular-nums">{remaining} of {it.sessions_total}</span> left
-                      {pkg.expires_at ? (
-                        <span className="text-text-tertiary"> · expires {pkg.expires_at}</span>
-                      ) : (
-                        <span className="text-text-tertiary"> · no expiry</span>
+                    <li key={it.id} className="flex items-start justify-between gap-2 text-body-sm text-text-secondary">
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-text-primary">{svcName}</span>
+                        {" — "}
+                        <span className="tabular-nums">{remaining} of {it.sessions_total}</span> left
+                        {pkg.expires_at ? (
+                          <span className="text-text-tertiary"> · expires {pkg.expires_at}</span>
+                        ) : (
+                          <span className="text-text-tertiary"> · no expiry</span>
+                        )}
+                      </div>
+                      {appointmentId && (
+                        applied ? (
+                          <span className="shrink-0 rounded-md bg-success-100 px-2 py-0.5 text-caption font-semibold text-success-700">
+                            Applied
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyPackage(it.id, svcName)}
+                            className="shrink-0 rounded-md bg-neutral-900 px-2.5 py-1 text-caption font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+                          >
+                            Apply
+                          </button>
+                        )
                       )}
                     </li>
                   );
