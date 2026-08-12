@@ -828,6 +828,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
       {/* ==== Edit Payment Modal ==== */}
       <MarkPaidModal
         open={editPaymentOpen}
+        clientId={selectedAppointment?.client_id ?? null}
         clientName={selectedAppointment?.clients?.name}
         appointmentStaff={(() => {
           if (!selectedAppointment) return [];

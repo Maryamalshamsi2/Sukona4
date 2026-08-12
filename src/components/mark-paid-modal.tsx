@@ -9,6 +9,7 @@ import {
 } from "@/app/(dashboard)/gift-cards/actions";
 import {
   getAppointmentPackageContext,
+  getPackagesForClient,
   redeemPackageSessionWithPayment,
 } from "@/app/(dashboard)/gift-cards/packages-actions";
 import type { PaymentMethod } from "@/types";
@@ -50,6 +51,11 @@ type Props = {
   /** Required when recording a new payment (mark-as-paid flow). Ignored
    *  in edit mode. */
   appointmentId?: string | null;
+  /** Optional in record mode (packages are fetched from the appointment
+   *  context anyway). In edit mode this drives the read-only "Active
+   *  packages" panel so the owner can spot a mis-charge — e.g. the
+   *  client had a package that should have covered this appointment. */
+  clientId?: string | null;
   defaultAmount?: number; // auto-filled from appointment total (record mode)
   clientName?: string;
   /** When provided, the modal flips to "Edit Payment" mode: title +
@@ -80,6 +86,7 @@ type Props = {
 export default function MarkPaidModal({
   open,
   appointmentId,
+  clientId,
   defaultAmount,
   clientName,
   existingPayment,
@@ -125,6 +132,13 @@ export default function MarkPaidModal({
     ReturnType<typeof getAppointmentPackageContext>
   >[number];
   const [packageOptions, setPackageOptions] = useState<PackageOption[]>([]);
+  // Read-only "Active packages" info panel — edit mode only. Shows all
+  // of this client's active packages with sessions remaining so the
+  // owner can spot a mis-charge and manually adjust. Distinct from
+  // packageOptions above (which is per-appointment-service and drives
+  // the redeem checkboxes in record mode).
+  type ClientPackage = Awaited<ReturnType<typeof getPackagesForClient>>[number];
+  const [clientPackages, setClientPackages] = useState<ClientPackage[]>([]);
   const [appliedSessions, setAppliedSessions] = useState<Set<string>>(
     () => new Set(),
   );
@@ -180,6 +194,7 @@ export default function MarkPaidModal({
     // separate effect that depends on appointmentId.
     setPackageOptions([]);
     setAppliedSessions(new Set());
+    setClientPackages([]);
   }, [open, defaultAmount, existingPayment]);
 
   // Fetch applicable package items on open (record mode + has an
@@ -197,6 +212,22 @@ export default function MarkPaidModal({
       cancelled = true;
     };
   }, [open, isEdit, appointmentId]);
+
+  // Edit mode: fetch the client's active packages so the owner can
+  // see whether they should have applied one when originally
+  // recording the payment. Read-only — no retroactive redeem here.
+  useEffect(() => {
+    if (!open || !isEdit || !clientId) return;
+    let cancelled = false;
+    (async () => {
+      const packages = await getPackagesForClient(clientId);
+      if (cancelled) return;
+      setClientPackages(packages);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isEdit, clientId]);
 
   // Coverage = sum of selected appointment-service prices. Each
   // ticked session redeems exactly one session and covers that
@@ -574,6 +605,55 @@ export default function MarkPaidModal({
             )}
           </div>
         )}
+
+        {/* Active packages — edit mode only. Read-only heads-up so the
+            owner can notice they charged cash for a service the client
+            already had a package session for. Retroactively redeeming
+            isn't supported here; the fix is to void this payment and
+            re-record with a package session applied. */}
+        {isEdit && clientPackages.length > 0 && (() => {
+          type Pkg = ClientPackage;
+          type Item = Pkg["package_items"][number];
+          const activeItems = clientPackages.flatMap((p: Pkg) =>
+            (p.package_items ?? [])
+              .filter((it: Item) => it.sessions_used < it.sessions_total)
+              .map((it: Item) => ({ pkg: p, it })),
+          );
+          if (activeItems.length === 0) return null;
+          return (
+            <div className="space-y-2 rounded-xl bg-primary-50 ring-1 ring-primary-100 px-4 py-3">
+              <p className="text-body-sm font-semibold text-text-primary">
+                Active packages ({activeItems.length})
+              </p>
+              <ul className="space-y-1">
+                {activeItems.map(({ pkg, it }) => {
+                  const remaining = it.sessions_total - it.sessions_used;
+                  // PostgREST's type inference reports `services` as an
+                  // array even for a single FK relation; handle both.
+                  const svcRel = it.services as unknown as
+                    | { name: string }
+                    | Array<{ name: string }>
+                    | null;
+                  const svcName = Array.isArray(svcRel)
+                    ? svcRel[0]?.name ?? "Package session"
+                    : svcRel?.name ?? "Package session";
+                  return (
+                    <li key={it.id} className="text-body-sm text-text-secondary">
+                      <span className="font-semibold text-text-primary">{svcName}</span>
+                      {" — "}
+                      <span className="tabular-nums">{remaining} of {it.sessions_total}</span> left
+                      {pkg.expires_at ? (
+                        <span className="text-text-tertiary"> · expires {pkg.expires_at}</span>
+                      ) : (
+                        <span className="text-text-tertiary"> · no expiry</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })()}
 
         {/* Payment method. Gift card is hidden in edit mode — you
             can't retroactively switch a cash payment into a gift card

@@ -1874,6 +1874,7 @@ export default function CalendarView({
       {/* ==== EDIT PAYMENT MODAL ==== */}
       <MarkPaidModal
         open={editPaymentOpen}
+        clientId={selectedAppointment?.client_id ?? null}
         clientName={selectedAppointment?.clients?.name}
         existingPayment={(() => {
           const list = selectedAppointment?.payments ?? [];
