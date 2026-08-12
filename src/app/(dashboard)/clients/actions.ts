@@ -207,9 +207,20 @@ export async function updateClient(id: string, formData: FormData) {
 export async function deleteClient(id: string) {
   const supabase = await createClient();
 
-  const { error } = await supabase.from("clients").delete().eq("id", id);
+  // `.select()` after delete so we can distinguish "no rows matched"
+  // (permission or already-gone) from a real success. Without this,
+  // Postgres RLS silently filters the row out on failed permission
+  // checks and the caller thinks the delete worked when it didn't.
+  const { data, error } = await supabase
+    .from("clients")
+    .delete()
+    .eq("id", id)
+    .select("id");
 
   if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    return { error: "Client could not be deleted. It may already be gone, or you may not have permission." };
+  }
   revalidatePath("/clients");
   return { success: true };
 }

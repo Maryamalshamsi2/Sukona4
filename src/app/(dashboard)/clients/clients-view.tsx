@@ -355,8 +355,14 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this client?")) return;
+    // Optimistic: pull the row out immediately so the list responds
+    // to the click even before the server round-trip completes.
+    // Restore on error.
+    const previous = clients;
+    setClients((prev) => prev.filter((c) => c.id !== id));
     const result = await deleteClient(id);
     if (result.error) {
+      setClients(previous);
       undo.error(result.error);
       return;
     }
