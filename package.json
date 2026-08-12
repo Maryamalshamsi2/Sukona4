@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "import:template": "tsx scripts/historical-import/generate-template.ts",
-    "import:run": "tsx --env-file=.env.local scripts/historical-import/import.ts"
+    "import:run": "tsx --env-file=.env.local scripts/historical-import/import.ts",
+    "import:ateeq": "tsx --env-file=.env.local scripts/historical-import/ateeq-run.ts"
   },
   "repository": {
     "type": "git",
