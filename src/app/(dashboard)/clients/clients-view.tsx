@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/modal";
 import MarkPaidModal from "@/components/mark-paid-modal";
 import PhoneInput from "@/components/phone-input";
@@ -65,6 +65,23 @@ export interface ClientsViewProps {
   initialClients: Client[];
 }
 
+type SortKey =
+  | "name-asc"
+  | "name-desc"
+  | "created-desc"
+  | "created-asc"
+  | "appts-desc"
+  | "appts-asc";
+
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: "name-asc",     label: "Name (A → Z)" },
+  { value: "name-desc",    label: "Name (Z → A)" },
+  { value: "created-desc", label: "Newest first" },
+  { value: "created-asc",  label: "Oldest first" },
+  { value: "appts-desc",   label: "Most appointments" },
+  { value: "appts-asc",    label: "Fewest appointments" },
+];
+
 export default function ClientsView({ initialClients }: ClientsViewProps) {
   const currentUser = useCurrentUser();
   const isStaff = currentUser?.role === "staff";
@@ -78,6 +95,24 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   // matches against normalized phone (digits only) so "0501234567" finds
   // "+971 50 123 4567" and vice-versa.
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Sort dropdown — mirrors the funnel-icon pattern on /inventory.
+  // Default matches what the list has always shown: newest client first
+  // (this was already the DB order via created_at desc), so existing
+  // muscle memory doesn't shift.
+  const [sortBy, setSortBy] = useState<SortKey>("created-desc");
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sortOpen) return;
+    function handler(e: MouseEvent) {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setSortOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [sortOpen]);
 
   // ---- Client appointments list modal ----
   const [listModalOpen, setListModalOpen] = useState(false);
@@ -390,7 +425,7 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
   const trimmedQuery = searchQuery.trim();
   const queryLower = trimmedQuery.toLowerCase();
   const queryDigits = trimmedQuery.replace(/\D/g, "");
-  const filteredClients = !trimmedQuery
+  const searchedClients = !trimmedQuery
     ? clients
     : clients.filter((c) => {
         if (c.name?.toLowerCase().includes(queryLower)) return true;
@@ -402,25 +437,87 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
         return false;
       });
 
+  // Sort AFTER filter so the search hit set is what's ordered.
+  // Sort is stable via a secondary tiebreaker on id — otherwise two
+  // clients with the same appointment count would swap positions on
+  // every render, which is jarring.
+  const filteredClients = [...searchedClients].sort((a, b) => {
+    switch (sortBy) {
+      case "name-asc":     return (a.name ?? "").localeCompare(b.name ?? "");
+      case "name-desc":    return (b.name ?? "").localeCompare(a.name ?? "");
+      case "created-desc": return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+      case "created-asc":  return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+      case "appts-desc":   return apptCount(b) - apptCount(a) || a.id.localeCompare(b.id);
+      case "appts-asc":    return apptCount(a) - apptCount(b) || a.id.localeCompare(b.id);
+    }
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">Clients</h1>
         </div>
-        {/* Desktop add button. Mobile gets a thumb-zone FAB at the
-            bottom of the screen instead — see below. */}
-        {!isStaff && (
-          <button
-            onClick={openAdd}
-            aria-label="Add client"
-            className="hidden shrink-0 sm:flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {/* Sort dropdown — same visual pattern as the funnel button
+              on /inventory. Hidden when there are no clients (nothing
+              to sort). Shown to staff too — sorting is view-only. */}
+          {clients.length > 0 && (
+            <div className="relative" ref={sortRef}>
+              <button
+                onClick={() => setSortOpen((v) => !v)}
+                aria-label="Sort"
+                className={`rounded-lg p-2 ${
+                  sortBy !== "created-desc"
+                    ? "bg-surface-active text-text-primary"
+                    : "text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+                }`}
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+                </svg>
+              </button>
+              {sortOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                  <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
+                    Sort by
+                  </p>
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setSortBy(opt.value); setSortOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-body-sm hover:bg-surface-hover ${
+                        sortBy === opt.value ? "text-text-primary font-semibold" : "text-text-secondary"
+                      }`}
+                    >
+                      <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                        sortBy === opt.value ? "border-gray-900 bg-neutral-900" : "border-neutral-200"
+                      }`}>
+                        {sortBy === opt.value && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Desktop add button. Mobile gets a thumb-zone FAB at the
+              bottom of the screen instead — see below. */}
+          {!isStaff && (
+            <button
+              onClick={openAdd}
+              aria-label="Add client"
+              className="hidden shrink-0 sm:flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search box. Hidden when there are no clients yet — the empty
