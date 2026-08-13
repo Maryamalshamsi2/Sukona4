@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/modal";
-import { recordPayment, updatePayment, uploadReceipt } from "@/app/(dashboard)/payments/actions";
+import { recordPayment, updatePayment, uploadReceipt, recordExtraPayment, deletePayment } from "@/app/(dashboard)/payments/actions";
 import {
   getGiftCardByCode,
   redeemGiftCardWithPayment,
@@ -64,6 +64,13 @@ type Props = {
    *  submit label change, fields pre-fill from this row, and Save
    *  calls updatePayment(this.id, ...) instead of recordPayment. */
   existingPayment?: ExistingPayment | null;
+  /** All payment rows for the appointment (for split payments).
+   *  Sorted newest first. When set with 2+ entries, the modal renders
+   *  the first as the "primary" (drives receipts / notes / tips) and
+   *  the rest as extra {method, amount} rows below.
+   *  Callers may pass this alongside existingPayment (which should be
+   *  existingPayments[0]) or in place of it. */
+  existingPayments?: ExistingPayment[];
   /** Staff who can receive a tip on this appointment. Pass the
    *  unique set of staff_ids attached to appointment_services so the
    *  "Tip to" selector only lists people who actually worked on it.
@@ -92,6 +99,7 @@ export default function MarkPaidModal({
   defaultAmount,
   clientName,
   existingPayment,
+  existingPayments,
   appointmentStaff,
   onClose,
   onPaid,
@@ -124,6 +132,25 @@ export default function MarkPaidModal({
   const [giftCardLookupErr, setGiftCardLookupErr] = useState<string | null>(null);
   const [giftCardLooking, setGiftCardLooking] = useState(false);
   const [remainderMethod, setRemainderMethod] = useState<"cash" | "card" | "other">("cash");
+
+  // ---- Split payment: extra rows ----
+  // The primary row (method/amount/receipt/note/tip fields above) is
+  // unchanged. Additional rows here contribute more money in
+  // different methods — e.g. AED 50 cash + AED 50 card. Only
+  // cash / card / other; gift_card & package stay primary-only.
+  type ExtraRow = {
+    /** Present when this row corresponds to an existing payments row
+     *  (edit mode). Missing on rows the user just added — those get
+     *  inserted on Save. */
+    id?: string;
+    method: "cash" | "card" | "other";
+    amount: string;
+  };
+  const [extraRows, setExtraRows] = useState<ExtraRow[]>([]);
+  // Payments the owner removed from the list in this session. On
+  // Save we call deletePayment for each. Populated only in edit
+  // mode; in record mode there's nothing to delete.
+  const [removedExtraIds, setRemovedExtraIds] = useState<string[]>([]);
 
   // ---- Package redemption state. Record mode only.
   // packageOptions: one entry per appointment_service that has a
@@ -204,7 +231,24 @@ export default function MarkPaidModal({
     setAppliedSessions(new Set());
     setClientPackages([]);
     setAppliedItems(new Set());
-  }, [open, defaultAmount, existingPayment]);
+
+    // Extra split-payment rows. Edit mode: everything in
+    // existingPayments except the primary (the first entry) that
+    // maps to a supported extra method (cash/card/other). Gift-card
+    // and package rows stay in the primary slot only; they'd be
+    // listed but not editable as extras.
+    const others = (existingPayments ?? []).slice(1);
+    setExtraRows(
+      others
+        .filter((p) => p.method === "cash" || p.method === "card" || p.method === "other")
+        .map((p) => ({
+          id: p.id,
+          method: p.method as "cash" | "card" | "other",
+          amount: String(p.amount),
+        })),
+    );
+    setRemovedExtraIds([]);
+  }, [open, defaultAmount, existingPayment, existingPayments]);
 
   // Fetch applicable package items on open (record mode + has an
   // appointmentId). Skipped in edit mode since package redemption
@@ -587,6 +631,49 @@ export default function MarkPaidModal({
       return;
     }
 
+    // Split-payment extras. Delete removed rows first, then update
+    // existing ones, then insert new ones. Primary is already saved
+    // above; errors here surface via setError so the owner can retry
+    // without losing the primary result.
+    for (const rid of removedExtraIds) {
+      const r = await deletePayment(rid);
+      if (r.error) {
+        setError(`Removed row failed to delete: ${r.error}`);
+        setSubmitting(false);
+        return;
+      }
+    }
+    for (const row of extraRows) {
+      const rowAmt = parseFloat(row.amount);
+      if (!Number.isFinite(rowAmt) || rowAmt <= 0) {
+        setError("Each split-payment row needs a positive amount.");
+        setSubmitting(false);
+        return;
+      }
+      if (row.id) {
+        const u = await updatePayment(row.id, rowAmt, row.method, null, [], 0, null);
+        if (u.error) {
+          setError(`Extra payment update failed: ${u.error}`);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        // New extras need appointmentId — required in both record
+        // and edit callers. If missing, block with a clear message.
+        if (!appointmentId) {
+          setError("Extra payment needs an appointment id — reload and try again.");
+          setSubmitting(false);
+          return;
+        }
+        const ins = await recordExtraPayment(appointmentId, rowAmt, row.method);
+        if (ins.error) {
+          setError(`Extra payment failed: ${ins.error}`);
+          setSubmitting(false);
+          return;
+        }
+      }
+    }
+
     setSubmitting(false);
     onPaid();
   }
@@ -823,12 +910,105 @@ export default function MarkPaidModal({
             onChange={(e) => setAmount(e.target.value)}
             className="mt-1.5 block w-full rounded-xl border-[1.5px] border-neutral-200 px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
           />
-          {!isEdit && (
+          {!isEdit && extraRows.length === 0 && (
             <p className="mt-1 text-caption text-text-tertiary">
               Auto-filled from the appointment total. Edit if the final amount differs.
             </p>
           )}
         </div>
+
+        {/* Split-payment extras. Each row is another {method, amount}
+            insert on Save; existing rows update in place; removed rows
+            get deleted. Only cash / card / other — gift-card & package
+            stay primary-only for now. */}
+        {extraRows.map((row, idx) => (
+          <div key={row.id ?? `new-${idx}`} className="rounded-xl bg-neutral-50 ring-1 ring-border px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-body-sm font-semibold text-text-primary">
+                Payment #{idx + 2}
+              </p>
+              <button
+                type="button"
+                aria-label="Remove this payment method"
+                onClick={() => {
+                  setExtraRows((prev) => prev.filter((_, i) => i !== idx));
+                  if (row.id) setRemovedExtraIds((prev) => [...prev, row.id!]);
+                }}
+                className="rounded-md p-1 text-text-tertiary hover:bg-surface-active hover:text-error-700"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(["cash", "card", "other"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() =>
+                    setExtraRows((prev) =>
+                      prev.map((r, i) => (i === idx ? { ...r, method: m } : r)),
+                    )
+                  }
+                  className={`rounded-xl border-[1.5px] px-3 py-2 text-caption font-semibold capitalize transition ${
+                    row.method === m
+                      ? "border-neutral-900 bg-neutral-900 text-text-inverse"
+                      : "border-neutral-200 bg-white text-text-primary hover:border-neutral-400"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              value={row.amount}
+              placeholder={`Amount (${currency})`}
+              onChange={(e) =>
+                setExtraRows((prev) =>
+                  prev.map((r, i) => (i === idx ? { ...r, amount: e.target.value } : r)),
+                )
+              }
+              className="block w-full rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-3 sm:py-2.5 transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+          </div>
+        ))}
+
+        {/* "+ Add another method" — only offered when the primary
+            method is a normal money method (not gift-card / package,
+            since extras of those aren't supported). */}
+        {(method === "cash" || method === "card" || method === "other") && (
+          <button
+            type="button"
+            onClick={() =>
+              setExtraRows((prev) => [...prev, { method: "card", amount: "" }])
+            }
+            className="text-body-sm font-semibold text-text-secondary hover:text-text-primary"
+          >
+            + Add another method
+          </button>
+        )}
+
+        {/* Total across primary + all extras. Shows only when there
+            IS a split, so single-payment appointments look the same
+            as they always did. */}
+        {extraRows.length > 0 && (() => {
+          const total =
+            (Number(amount) || 0) +
+            extraRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+          return (
+            <div className="flex items-center justify-between rounded-xl bg-neutral-900 px-4 py-3 text-text-inverse">
+              <span className="text-body-sm font-semibold">Total</span>
+              <span className="text-body-sm font-semibold tabular-nums">
+                {formatCurrency(total, currency)}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Tip — optional. Tracked separately from amount because it
             belongs to the staff member, not the salon. Goes into the

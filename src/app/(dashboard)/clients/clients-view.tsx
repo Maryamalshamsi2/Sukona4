@@ -945,6 +945,10 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
           if (list.length === 0) return null;
           return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
         })()}
+        existingPayments={(() => {
+          const list = selectedAppointment?.payments ?? [];
+          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+        })()}
         onClose={() => setEditPaymentOpen(false)}
         onPaid={() => {
           setEditPaymentOpen(false);

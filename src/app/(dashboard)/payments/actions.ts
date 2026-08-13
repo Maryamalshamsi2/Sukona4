@@ -134,6 +134,95 @@ export async function updatePayment(
   return { success: true };
 }
 
+/**
+ * Insert an additional payment row for an appointment that's ALREADY
+ * been finalized (i.e. paid). Used by MarkPaidModal's split-payment
+ * flow: the primary row calls recordPayment (which flips status + mints
+ * the review token + fires WhatsApp), and each extra split row calls
+ * this — no re-finalize, no duplicate WhatsApp dispatch, no tip, no
+ * note, no receipt. Extras are just method + amount.
+ *
+ * Owner/admin only; staff shouldn't add money records they didn't
+ * capture on the day.
+ */
+export async function recordExtraPayment(
+  appointmentId: string,
+  amount: number,
+  method: PaymentMethod,
+) {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner" && profile.role !== "admin") {
+    return { error: "Not authorized" };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Amount must be positive" };
+  }
+  if (method === "gift_card" || method === "package") {
+    return { error: "Gift card and package extras aren't supported here — record via their own flow." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("payments").insert({
+    appointment_id: appointmentId,
+    amount,
+    method,
+    note: null,
+    receipt_urls: [],
+    receipt_url: null,
+    tip_amount: 0,
+    tip_to_staff_id: null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/payments");
+  revalidatePath("/reports");
+  revalidatePath("/calendar");
+  revalidatePath("/payroll");
+  revalidatePath("/");
+  return { success: true };
+}
+
+/**
+ * Delete a single payment row. Used by MarkPaidModal when the owner
+ * removes a row from the split-payment list. Cannot delete gift_card
+ * or package rows here — those need to go through their own void /
+ * un-redeem flows so balances stay right.
+ */
+export async function deletePayment(paymentId: string) {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "Not authenticated" };
+  if (profile.role !== "owner" && profile.role !== "admin") {
+    return { error: "Not authorized" };
+  }
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("payments")
+    .select("salon_id, method")
+    .eq("id", paymentId)
+    .maybeSingle();
+  if (!existing || existing.salon_id !== profile.salon_id) {
+    return { error: "Payment not found" };
+  }
+  if (existing.method === "gift_card" || existing.method === "package") {
+    return {
+      error:
+        "Gift card and package payments must be voided through their own flow, not deleted here.",
+    };
+  }
+
+  const { error } = await supabase.from("payments").delete().eq("id", paymentId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/payments");
+  revalidatePath("/reports");
+  revalidatePath("/calendar");
+  revalidatePath("/payroll");
+  revalidatePath("/");
+  return { success: true };
+}
+
 // Upload a receipt image to the shared `receipts` storage bucket.
 // Returns a public URL, or { error } on failure.
 export async function uploadReceipt(
