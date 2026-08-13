@@ -1865,6 +1865,7 @@ export default function CalendarView({
       <MarkPaidModal
         open={markPaidOpen}
         appointmentId={selectedAppointment?.id ?? null}
+        clientId={selectedAppointment?.client_id ?? null}
         defaultAmount={selectedAppointment ? getApptTotal(selectedAppointment) : 0}
         clientName={selectedAppointment?.clients?.name}
         onClose={() => setMarkPaidOpen(false)}
