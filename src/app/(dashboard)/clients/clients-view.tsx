@@ -943,11 +943,14 @@ export default function ClientsView({ initialClients }: ClientsViewProps) {
         existingPayment={(() => {
           const list = selectedAppointment?.payments ?? [];
           if (list.length === 0) return null;
-          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+          // Oldest-first: primary = the row from the original
+          // Mark-as-Paid (carries receipt / note / tip). See the
+          // matching comment in calendar-view.
+          return [...list].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
         })()}
         existingPayments={(() => {
           const list = selectedAppointment?.payments ?? [];
-          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+          return [...list].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
         })()}
         onClose={() => setEditPaymentOpen(false)}
         onPaid={() => {

@@ -1880,11 +1880,16 @@ export default function CalendarView({
         existingPayment={(() => {
           const list = selectedAppointment?.payments ?? [];
           if (list.length === 0) return null;
-          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+          // Sort OLDEST first so the row created at the original
+          // Mark-as-Paid stays "primary" — that's the one carrying
+          // the receipt, note, and tip. Rows added later via the
+          // split-payment flow are extras. Sorting newest-first
+          // would swap them on reopen and lose the receipt.
+          return [...list].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
         })()}
         existingPayments={(() => {
           const list = selectedAppointment?.payments ?? [];
-          return [...list].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+          return [...list].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
         })()}
         onClose={() => setEditPaymentOpen(false)}
         onPaid={() => {
