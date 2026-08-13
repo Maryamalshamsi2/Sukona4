@@ -3,12 +3,12 @@ import SalesView, { type SaleRow, type ClientOption, type StaffOption } from "./
 import { getRetailSales } from "./actions";
 import { listGiftCards } from "../gift-cards/actions";
 import { listPackages } from "../gift-cards/packages-actions";
-import { getServices } from "../catalog/actions";
+import { getServices, getBundles } from "../catalog/actions";
 import { getCurrentProfile } from "@/lib/auth-server";
 import { getClients } from "../clients/actions";
 import { getStaffMembers } from "../calendar/actions";
 import type { GiftCardRow } from "../gift-cards/gift-cards-view";
-import type { PackageRow, ServiceOption } from "../gift-cards/packages-tab";
+import type { PackageRow, ServiceOption, BundleOption } from "../gift-cards/packages-tab";
 
 /**
  * Owner/admin-only Sales page. Hosts three tabs (Retail / Gift cards
@@ -42,13 +42,14 @@ export default async function SalesPage() {
   fromDate.setDate(fromDate.getDate() - 29);
   const from = toISODate(fromDate);
 
-  const [sales, clients, staff, giftCards, packages, services] = await Promise.all([
+  const [sales, clients, staff, giftCards, packages, services, bundles] = await Promise.all([
     getRetailSales(from, today),
     getClients(),
     getStaffMembers(),
     listGiftCards("all"),
     listPackages("all"),
     getServices(),
+    getBundles(),
   ]);
 
   return (
@@ -65,6 +66,19 @@ export default async function SalesPage() {
         name: s.name,
         price: s.price,
       })) as ServiceOption[]}
+      initialBundles={
+        (bundles || [])
+          .filter((b: { is_active?: boolean }) => b.is_active !== false)
+          .map((b: { id: string; name: string; fixed_price: number | null }) => ({
+            id: b.id,
+            name: b.name,
+            // For MVP we don't drive per-line pricing off the bundle
+            // price yet (server keeps total_paid at the aggregate the
+            // owner types). Pass the fixed_price when set so future
+            // per-item price previews have it.
+            price: b.fixed_price ?? 0,
+          })) as BundleOption[]
+      }
     />
   );
 }

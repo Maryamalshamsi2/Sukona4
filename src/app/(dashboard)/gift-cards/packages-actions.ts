@@ -59,8 +59,9 @@ export async function listPackages(status: PackageStatus = "all") {
       buyer:buyer_client_id ( id, name ),
       recipient:recipient_client_id ( id, name ),
       package_items (
-        id, service_id, sessions_total, sessions_used,
-        services ( id, name )
+        id, service_id, bundle_id, sessions_total, sessions_used,
+        services ( id, name ),
+        service_bundles:bundle_id ( id, name )
       ),
       created_by_profile:created_by ( id, full_name )
     `)
@@ -101,8 +102,9 @@ export async function getPackageDetail(id: string) {
         buyer:buyer_client_id ( id, name ),
         recipient:recipient_client_id ( id, name ),
         package_items (
-          id, service_id, sessions_total, sessions_used,
-          services ( id, name, price )
+          id, service_id, bundle_id, sessions_total, sessions_used,
+          services ( id, name, price ),
+          service_bundles:bundle_id ( id, name, fixed_price )
         ),
         created_by_profile:created_by ( id, full_name )
       `)
@@ -112,7 +114,11 @@ export async function getPackageDetail(id: string) {
       .from("package_redemptions")
       .select(`
         *,
-        package_items ( id, services ( id, name ) ),
+        package_items (
+          id,
+          services ( id, name ),
+          service_bundles:bundle_id ( id, name )
+        ),
         appointments ( id, date, time ),
         created_by_profile:created_by ( id, full_name )
       `)
@@ -169,6 +175,15 @@ export async function getPackagesForClient(clientId: string) {
 // Sell
 // ============================================================
 
+/**
+ * Package item target — either a service or a bundle. Callers pass
+ * one shape or the other; the server sets the corresponding column
+ * (XOR is enforced by the CHECK constraint added in migration 057).
+ */
+export type PackageItemTarget =
+  | { kind: "service"; serviceId: string }
+  | { kind: "bundle"; bundleId: string };
+
 interface SellPackagePayload {
   recipientClientId: string;       // required — who uses the sessions
   buyerClientId: string | null;    // who paid (null = same as recipient)
@@ -176,10 +191,7 @@ interface SellPackagePayload {
   purchaseMethod: "cash" | "card" | "other";
   expiresAt: string | null;        // YYYY-MM-DD or null
   notes: string | null;
-  items: Array<{
-    serviceId: string;
-    sessions: number;              // sessions_total
-  }>;
+  items: Array<PackageItemTarget & { sessions: number }>;
 }
 
 function validateSell(p: SellPackagePayload): string | null {
@@ -194,10 +206,11 @@ function validateSell(p: SellPackagePayload): string | null {
     return "Invalid expiry date";
   }
   if (!p.items || p.items.length === 0) {
-    return "Package must include at least one service";
+    return "Package must include at least one service or bundle";
   }
   for (const it of p.items) {
-    if (!it.serviceId) return "Each line must pick a service";
+    if (it.kind === "service" && !it.serviceId) return "Each line must pick a service";
+    if (it.kind === "bundle" && !it.bundleId) return "Each line must pick a bundle";
     if (!Number.isInteger(it.sessions) || it.sessions <= 0) {
       return "Each line must have a positive number of sessions";
     }
@@ -242,10 +255,13 @@ export async function sellPackage(payload: SellPackagePayload) {
     return { error: pkgErr?.message || "Failed to create package" };
   }
 
-  // 2. Insert all items in a batch.
+  // 2. Insert all items in a batch. XOR service_id / bundle_id per
+  // migration 057 — the CHECK constraint blocks a row with both or
+  // neither.
   const itemsPayload = payload.items.map((it) => ({
     package_id: pkg.id,
-    service_id: it.serviceId,
+    service_id: it.kind === "service" ? it.serviceId : null,
+    bundle_id: it.kind === "bundle" ? it.bundleId : null,
     sessions_total: it.sessions,
     sessions_used: 0,
   }));
@@ -280,8 +296,13 @@ interface UpdatePackagePayload {
    *   - new rows omit `id` and get inserted
    *   - any existing item not in the list is deleted, but only
    *     when it has zero redemptions (sessions_used === 0)
+   *
+   * Target is either a service or a bundle (XOR, see migration 057).
+   * Existing rows can also switch what they point at (service ↔ bundle,
+   * or between two services / bundles), so the UI can correct a
+   * miskeyed row without deleting and re-adding it.
    */
-  items: Array<{ id?: string; serviceId: string; sessions: number }>;
+  items: Array<PackageItemTarget & { id?: string; sessions: number }>;
 }
 
 /**
@@ -310,7 +331,8 @@ export async function updatePackage(payload: UpdatePackagePayload) {
     return { error: "Package must include at least one item" };
   }
   for (const it of payload.items) {
-    if (!it.serviceId) return { error: "Each line must pick a service" };
+    if (it.kind === "service" && !it.serviceId) return { error: "Each line must pick a service" };
+    if (it.kind === "bundle" && !it.bundleId) return { error: "Each line must pick a bundle" };
     if (!Number.isInteger(it.sessions) || it.sessions <= 0) {
       return { error: "Each line must have a positive number of sessions" };
     }
@@ -328,22 +350,31 @@ export async function updatePackage(payload: UpdatePackagePayload) {
 
   const { data: existingItems, error: itemsErr } = await supabase
     .from("package_items")
-    .select("id, service_id, sessions_total, sessions_used")
+    .select("id, service_id, bundle_id, sessions_total, sessions_used")
     .eq("package_id", payload.id);
   if (itemsErr) return { error: itemsErr.message };
 
   const existingById = new Map(
     (existingItems ?? []).map((r) => [
       String(r.id),
-      { serviceId: String(r.service_id), sessionsTotal: Number(r.sessions_total), sessionsUsed: Number(r.sessions_used) },
+      {
+        serviceId: r.service_id ? String(r.service_id) : null,
+        bundleId: r.bundle_id ? String(r.bundle_id) : null,
+        sessionsTotal: Number(r.sessions_total),
+        sessionsUsed: Number(r.sessions_used),
+      },
     ]),
   );
 
-  // Partition the incoming items.
-  const toUpdate: Array<{ id: string; sessions_total: number; service_id: string }> = [];
-  const toInsert: Array<{ package_id: string; service_id: string; sessions_total: number; sessions_used: number }> = [];
+  // Partition the incoming items. On update we set BOTH columns
+  // explicitly (one to the id, the other to null) so switching an
+  // item from a service to a bundle (or vice versa) writes cleanly.
+  const toUpdate: Array<{ id: string; sessions_total: number; service_id: string | null; bundle_id: string | null }> = [];
+  const toInsert: Array<{ package_id: string; service_id: string | null; bundle_id: string | null; sessions_total: number; sessions_used: number }> = [];
   const keepIds = new Set<string>();
   for (const it of payload.items) {
+    const serviceId = it.kind === "service" ? it.serviceId : null;
+    const bundleId = it.kind === "bundle" ? it.bundleId : null;
     if (it.id) {
       const existing = existingById.get(it.id);
       if (!existing) return { error: "One of the items no longer exists — refresh and try again" };
@@ -351,11 +382,12 @@ export async function updatePackage(payload: UpdatePackagePayload) {
         return { error: `Cannot reduce sessions below ${existing.sessionsUsed} — already redeemed on this item.` };
       }
       keepIds.add(it.id);
-      toUpdate.push({ id: it.id, sessions_total: it.sessions, service_id: it.serviceId });
+      toUpdate.push({ id: it.id, sessions_total: it.sessions, service_id: serviceId, bundle_id: bundleId });
     } else {
       toInsert.push({
         package_id: payload.id,
-        service_id: it.serviceId,
+        service_id: serviceId,
+        bundle_id: bundleId,
         sessions_total: it.sessions,
         sessions_used: 0,
       });
@@ -386,7 +418,11 @@ export async function updatePackage(payload: UpdatePackagePayload) {
   for (const u of toUpdate) {
     const { error: e } = await supabase
       .from("package_items")
-      .update({ sessions_total: u.sessions_total, service_id: u.service_id })
+      .update({
+        sessions_total: u.sessions_total,
+        service_id: u.service_id,
+        bundle_id: u.bundle_id,
+      })
       .eq("id", u.id);
     if (e) return { error: e.message };
   }

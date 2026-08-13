@@ -46,12 +46,17 @@ export interface PackageRow {
   created_at: string;
   buyer?: { id: string; name: string } | null;
   recipient?: { id: string; name: string } | null;
+  // Each item targets EITHER a service or a bundle (migration 057 CHECK).
+  // The joined `services` / `service_bundles` field mirrors whichever
+  // column is set on the row.
   package_items: Array<{
     id: string;
-    service_id: string;
+    service_id: string | null;
+    bundle_id: string | null;
     sessions_total: number;
     sessions_used: number;
     services?: { id: string; name: string } | null;
+    service_bundles?: { id: string; name: string } | null;
   }>;
   created_by_profile?: { id: string; full_name: string } | null;
 }
@@ -67,6 +72,16 @@ export interface ServiceOption {
   price: number;
 }
 
+/** Bundle picker option — used alongside services in the package
+ *  sell / edit modals. Price is the bundle's effective price
+ *  (fixed_price, or the derived total from its items when the
+ *  bundle uses % discount). */
+export interface BundleOption {
+  id: string;
+  name: string;
+  price: number;
+}
+
 interface RedemptionRow {
   id: string;
   package_id: string;
@@ -77,6 +92,7 @@ interface RedemptionRow {
   package_items?: {
     id: string;
     services?: { id: string; name: string } | null;
+    service_bundles?: { id: string; name: string } | null;
   } | null;
   appointments?: { id: string; date: string; time: string } | null;
   created_by_profile?: { id: string; full_name: string } | null;
@@ -144,11 +160,18 @@ function totalSessions(p: PackageRow): number {
   return p.package_items.reduce((s, it) => s + it.sessions_total, 0);
 }
 
+/** Human label for a package_item row — the target's name, whether
+ *  it's a service or a bundle. Falls back to a generic string when
+ *  the join is unexpectedly missing. */
+function itemLabel(it: PackageRow["package_items"][number]): string {
+  return it.services?.name ?? it.service_bundles?.name ?? "Item";
+}
+
 /** Compact one-line summary of what's in the package, for list rows.
- *  Single-service: "5 Basic Manicures". Mixed: "3 Mani + 3 Pedi + 1 Facial". */
+ *  Single-item: "5 Basic Manicures". Mixed: "3 Mani + 3 Pedi + 1 Bundle". */
 function itemsSummary(p: PackageRow): string {
   return p.package_items
-    .map((it) => `${it.sessions_total} ${it.services?.name ?? "Service"}`)
+    .map((it) => `${it.sessions_total} ${itemLabel(it)}`)
     .join(" + ");
 }
 
@@ -161,6 +184,7 @@ export default function PackagesTab({
   clients,
   onClientAdded,
   initialServices,
+  initialBundles,
   controlsSlot,
   sellOpen,
   onSellClose,
@@ -172,6 +196,8 @@ export default function PackagesTab({
   /** Bubble up a newly-added client so SalesView appends to state. */
   onClientAdded: (c: ClientOption) => void;
   initialServices: ServiceOption[];
+  /** Bundles selectable as package items alongside services (migration 057). */
+  initialBundles: BundleOption[];
   /** Parent's portal target above the pill strip. See the equivalent
    *  prop on GiftCardsTab for the rationale. */
   controlsSlot: HTMLDivElement | null;
@@ -190,6 +216,7 @@ export default function PackagesTab({
   const [packages, setPackages] = useState<PackageRow[]>(initialPackages);
   // clients comes from the parent (SalesView). No internal copy.
   const [services] = useState<ServiceOption[]>(initialServices);
+  const [bundles] = useState<BundleOption[]>(initialBundles);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<PackageStatus>("all");
 
@@ -388,6 +415,7 @@ export default function PackagesTab({
         clients={clients}
         onClientAdded={onClientAdded}
         services={services}
+        bundles={bundles}
         onClose={onSellClose}
         onSold={() => {
           onSellClose();
@@ -420,6 +448,7 @@ export default function PackagesTab({
         open={!!editingPkg}
         pkg={editingPkg}
         services={services}
+        bundles={bundles}
         onClose={() => setEditingPkg(null)}
         onSaved={() => {
           setEditingPkg(null);
@@ -436,8 +465,19 @@ export default function PackagesTab({
 // ============================================================
 
 interface ItemDraft {
-  serviceId: string;
+  /** Compound picker value: "service:<uuid>" or "bundle:<uuid>". Kept
+   *  as a single string so <select> can hold it in one option value —
+   *  parsed back into { kind, id } at submit time. Empty string = no
+   *  target picked yet (blocks submit). */
+  target: string;
   sessions: string; // string so user can type freely; parsed on submit
+}
+
+function parseTargetValue(v: string): { kind: "service" | "bundle"; id: string } | null {
+  if (!v) return null;
+  const [kind, id] = v.split(":");
+  if ((kind !== "service" && kind !== "bundle") || !id) return null;
+  return { kind, id };
 }
 
 function SellPackageModal({
@@ -445,6 +485,7 @@ function SellPackageModal({
   clients,
   onClientAdded,
   services,
+  bundles,
   onClose,
   onSold,
 }: {
@@ -452,6 +493,7 @@ function SellPackageModal({
   clients: ClientOption[];
   onClientAdded: (c: ClientOption) => void;
   services: ServiceOption[];
+  bundles: BundleOption[];
   onClose: () => void;
   onSold: () => void;
 }) {
@@ -468,7 +510,7 @@ function SellPackageModal({
 
   // Items array. Start with one empty row; user can + Add more.
   const [items, setItems] = useState<ItemDraft[]>([
-    { serviceId: "", sessions: "" },
+    { target: "", sessions: "" },
   ]);
 
   const [expiresAt, setExpiresAt] = useState("");
@@ -483,7 +525,7 @@ function SellPackageModal({
     setBuyerId("");
     setTotalPaid("");
     setPurchaseMethod("cash");
-    setItems([{ serviceId: "", sessions: "" }]);
+    setItems([{ target: "", sessions: "" }]);
     setExpiresAt("");
     setNotes("");
     setError(null);
@@ -496,7 +538,7 @@ function SellPackageModal({
     setItems((prev) => prev.filter((_, i) => i !== idx));
   }
   function addItem() {
-    setItems((prev) => [...prev, { serviceId: "", sessions: "" }]);
+    setItems((prev) => [...prev, { target: "", sessions: "" }]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -504,10 +546,18 @@ function SellPackageModal({
     setSubmitting(true);
     setError(null);
 
-    const parsedItems = items.map((it) => ({
-      serviceId: it.serviceId,
-      sessions: parseInt(it.sessions, 10) || 0,
-    }));
+    // Turn each row's compound target into the { kind, id } shape
+    // sellPackage expects. Blank rows fail validation server-side.
+    const parsedItems = items.map((it) => {
+      const parsed = parseTargetValue(it.target);
+      const sessions = parseInt(it.sessions, 10) || 0;
+      if (!parsed) {
+        return { kind: "service" as const, serviceId: "", sessions };
+      }
+      return parsed.kind === "service"
+        ? { kind: "service" as const, serviceId: parsed.id, sessions }
+        : { kind: "bundle" as const, bundleId: parsed.id, sessions };
+    });
 
     const res = await sellPackage({
       recipientClientId: recipientId,
@@ -570,23 +620,34 @@ function SellPackageModal({
         {/* Items */}
         <div>
           <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-            Services in this package *
+            Services or bundles in this package *
           </label>
           <div className="space-y-2">
             {items.map((it, idx) => (
               <div key={idx} className="flex items-center gap-2">
                 <select
-                  value={it.serviceId}
-                  onChange={(e) => updateItem(idx, { serviceId: e.target.value })}
+                  value={it.target}
+                  onChange={(e) => updateItem(idx, { target: e.target.value })}
                   required
                   className="flex-1 min-w-0 appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                 >
-                  <option value="">Select service</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
+                  <option value="">Select service or bundle</option>
+                  <optgroup label="Services">
+                    {services.map((s) => (
+                      <option key={s.id} value={`service:${s.id}`}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {bundles.length > 0 && (
+                    <optgroup label="Bundles">
+                      {bundles.map((b) => (
+                        <option key={b.id} value={`bundle:${b.id}`}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <input
                   type="number"
@@ -823,7 +884,12 @@ function PackageDetailModal({
               return (
                 <li key={it.id} className="flex items-center justify-between px-4 py-2.5">
                   <span className="text-body-sm text-text-primary">
-                    {it.services?.name ?? "Unknown service"}
+                    {itemLabel(it)}
+                    {it.bundle_id && (
+                      <span className="ml-1.5 rounded bg-neutral-100 px-1.5 py-0.5 text-caption font-semibold text-text-secondary">
+                        bundle
+                      </span>
+                    )}
                   </span>
                   <span className="text-body-sm tabular-nums text-text-secondary">
                     {itemRemaining} of {tot} left
@@ -877,7 +943,10 @@ function PackageDetailModal({
               {redemptions.map((r) => (
                 <li key={r.id} className="px-4 py-2.5">
                   <p className="text-body-sm text-text-primary">
-                    {r.package_items?.services?.name ?? "Session"} used
+                    {r.package_items?.services?.name ??
+                      r.package_items?.service_bundles?.name ??
+                      "Session"}{" "}
+                    used
                   </p>
                   <p className="text-caption text-text-tertiary">
                     {formatDateTime(r.created_at)}
@@ -1021,7 +1090,8 @@ function PackageDetailModal({
 
 interface EditItemDraft {
   id?: string;              // set for existing rows
-  serviceId: string;
+  /** Compound picker value — see parseTargetValue. */
+  target: string;
   sessions: string;         // string so user can type freely
   sessionsUsed: number;     // read-only, drives min/removable
 }
@@ -1030,6 +1100,7 @@ function EditPackageModal({
   open,
   pkg,
   services,
+  bundles,
   onClose,
   onSaved,
   onError,
@@ -1037,6 +1108,7 @@ function EditPackageModal({
   open: boolean;
   pkg: PackageRow | null;
   services: ServiceOption[];
+  bundles: BundleOption[];
   onClose: () => void;
   onSaved: () => void;
   onError: (msg: string) => void;
@@ -1054,7 +1126,13 @@ function EditPackageModal({
     setItems(
       pkg.package_items.map((it) => ({
         id: it.id,
-        serviceId: it.service_id,
+        // Rebuild the compound target string from whichever column
+        // this row uses (service_id XOR bundle_id — migration 057).
+        target: it.bundle_id
+          ? `bundle:${it.bundle_id}`
+          : it.service_id
+            ? `service:${it.service_id}`
+            : "",
         sessions: String(it.sessions_total),
         sessionsUsed: it.sessions_used,
       })),
@@ -1069,7 +1147,7 @@ function EditPackageModal({
     setItems((prev) => prev.filter((_, i) => i !== idx));
   }
   function addItem() {
-    setItems((prev) => [...prev, { serviceId: "", sessions: "", sessionsUsed: 0 }]);
+    setItems((prev) => [...prev, { target: "", sessions: "", sessionsUsed: 0 }]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1077,11 +1155,16 @@ function EditPackageModal({
     if (!pkg) return;
     setSubmitting(true);
     setError(null);
-    const parsed = items.map((it) => ({
-      id: it.id,
-      serviceId: it.serviceId,
-      sessions: parseInt(it.sessions, 10) || 0,
-    }));
+    const parsed = items.map((it) => {
+      const parsedTarget = parseTargetValue(it.target);
+      const sessions = parseInt(it.sessions, 10) || 0;
+      if (!parsedTarget) {
+        return { kind: "service" as const, id: it.id, serviceId: "", sessions };
+      }
+      return parsedTarget.kind === "service"
+        ? { kind: "service" as const, id: it.id, serviceId: parsedTarget.id, sessions }
+        : { kind: "bundle" as const, id: it.id, bundleId: parsedTarget.id, sessions };
+    });
     const res = await updatePackage({
       id: pkg.id,
       expiresAt: expiresAt || null,
@@ -1110,7 +1193,7 @@ function EditPackageModal({
         {/* Items */}
         <div>
           <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
-            Services in this package *
+            Services or bundles in this package *
           </label>
           <div className="space-y-2">
             {items.map((it, idx) => {
@@ -1120,15 +1203,24 @@ function EditPackageModal({
                 <div key={it.id ?? `new-${idx}`} className="flex items-start gap-2">
                   <div className="flex-1 min-w-0 space-y-1">
                     <select
-                      value={it.serviceId}
-                      onChange={(e) => updateItem(idx, { serviceId: e.target.value })}
+                      value={it.target}
+                      onChange={(e) => updateItem(idx, { target: e.target.value })}
                       required
                       className="w-full appearance-none box-border rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
                     >
-                      <option value="">Select service</option>
-                      {services.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
+                      <option value="">Select service or bundle</option>
+                      <optgroup label="Services">
+                        {services.map((s) => (
+                          <option key={s.id} value={`service:${s.id}`}>{s.name}</option>
+                        ))}
+                      </optgroup>
+                      {bundles.length > 0 && (
+                        <optgroup label="Bundles">
+                          {bundles.map((b) => (
+                            <option key={b.id} value={`bundle:${b.id}`}>{b.name}</option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                     {it.sessionsUsed > 0 && (
                       <p className="text-caption text-text-tertiary">

@@ -21,6 +21,7 @@ import {
 import PackagesTab, {
   type PackageRow,
   type ServiceOption,
+  type BundleOption,
 } from "../gift-cards/packages-tab";
 
 /**
@@ -144,6 +145,7 @@ export default function SalesView({
   initialGiftCards,
   initialPackages,
   initialServices,
+  initialBundles,
 }: {
   initialSales: SaleRow[];
   initialClients: ClientOption[];
@@ -153,6 +155,7 @@ export default function SalesView({
   initialGiftCards: GiftCardRow[];
   initialPackages: PackageRow[];
   initialServices: ServiceOption[];
+  initialBundles: BundleOption[];
 }) {
   const [tab, setTab] = useState<ActiveTab>("retail");
   const [sellWhich, setSellWhich] = useState<SellWhich>(null);
@@ -309,6 +312,7 @@ export default function SalesView({
             clients={clients as GcClientOption[]}
             onClientAdded={handleClientAdded}
             initialServices={initialServices}
+            initialBundles={initialBundles}
             controlsSlot={slotEl}
             sellOpen={sellWhich === "package"}
             onSellClose={() => setSellWhich(null)}

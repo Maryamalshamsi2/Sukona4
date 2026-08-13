@@ -780,15 +780,21 @@ export default function MarkPaidModal({
                 {activeItems.map(({ pkg, it }) => {
                   const applied = appliedItems.has(it.id);
                   const remaining = it.sessions_total - it.sessions_used - (applied ? 1 : 0);
-                  // PostgREST's type inference reports `services` as an
-                  // array even for a single FK relation; handle both.
-                  const svcRel = it.services as unknown as
-                    | { name: string }
-                    | Array<{ name: string }>
-                    | null;
-                  const svcName = Array.isArray(svcRel)
-                    ? svcRel[0]?.name ?? "Package session"
-                    : svcRel?.name ?? "Package session";
+                  // PostgREST's type inference reports embedded FK
+                  // relations as arrays even when there's exactly one;
+                  // handle both. Fall through to the bundle name when
+                  // the row is a bundle-typed package item (migration 057).
+                  const relName = (
+                    rel: unknown,
+                  ): string | null => {
+                    if (!rel) return null;
+                    if (Array.isArray(rel)) return (rel[0] as { name?: string })?.name ?? null;
+                    return (rel as { name?: string }).name ?? null;
+                  };
+                  const svcName =
+                    relName(it.services) ??
+                    relName((it as unknown as { service_bundles?: unknown }).service_bundles) ??
+                    "Package session";
                   return (
                     <li key={it.id} className="flex items-start justify-between gap-2 text-body-sm text-text-secondary">
                       <div className="min-w-0 flex-1">
