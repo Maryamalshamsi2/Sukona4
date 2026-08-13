@@ -5,6 +5,7 @@ import Modal from "@/components/modal";
 import { recordPayment, updatePayment, uploadReceipt, recordExtraPayment, deletePayment } from "@/app/(dashboard)/payments/actions";
 import {
   getGiftCardByCode,
+  getGiftCardsForClient,
   redeemGiftCardWithPayment,
 } from "@/app/(dashboard)/gift-cards/actions";
 import {
@@ -169,6 +170,13 @@ export default function MarkPaidModal({
   // the redeem checkboxes in record mode).
   type ClientPackage = Awaited<ReturnType<typeof getPackagesForClient>>[number];
   const [clientPackages, setClientPackages] = useState<ClientPackage[]>([]);
+  // Client's active gift cards — parallels the packages panel.
+  // Shown in record mode as clickable "Use this card" chips (one
+  // tap flips method → gift_card + auto-populates the code, then
+  // the existing lookup effect takes it from there). Shown in
+  // edit mode as a read-only heads-up.
+  type ClientGiftCard = Awaited<ReturnType<typeof getGiftCardsForClient>>[number];
+  const [clientGiftCards, setClientGiftCards] = useState<ClientGiftCard[]>([]);
   // Package items the owner clicked "Apply" on in this edit session.
   // Tracked here so the UI can show the decremented count and hide
   // the button. Actual RPC runs after a 6s undo window (see the
@@ -231,6 +239,7 @@ export default function MarkPaidModal({
     setAppliedSessions(new Set());
     setClientPackages([]);
     setAppliedItems(new Set());
+    setClientGiftCards([]);
 
     // Extra split-payment rows. Edit mode: everything in
     // existingPayments except the primary (the first entry) that
@@ -282,6 +291,22 @@ export default function MarkPaidModal({
       cancelled = true;
     };
   }, [open, isEdit, clientId]);
+
+  // Client's active gift cards — both modes. Record mode uses this
+  // as a shortcut ("Use this card" chips), edit mode as a heads-up.
+  // Cheap query; fine to run on every open when we have a clientId.
+  useEffect(() => {
+    if (!open || !clientId) return;
+    let cancelled = false;
+    (async () => {
+      const cards = await getGiftCardsForClient(clientId);
+      if (cancelled) return;
+      setClientGiftCards(cards);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, clientId]);
 
   /**
    * Retroactively apply one package session to this appointment.
@@ -754,6 +779,58 @@ export default function MarkPaidModal({
                 . The amount below is the remainder still due.
               </p>
             )}
+          </div>
+        )}
+
+        {/* Client's active gift cards. Record mode: clickable — one
+            tap sets method → gift_card and populates the code, and
+            the existing lookup effect above resolves the card. Edit
+            mode: read-only heads-up (matches the packages panel).
+            Hidden when the client has no active cards. */}
+        {clientGiftCards.length > 0 && (
+          <div className="space-y-2 rounded-xl bg-primary-50 ring-1 ring-primary-100 px-4 py-3">
+            <p className="text-body-sm font-semibold text-text-primary">
+              {isEdit ? "Active gift cards" : "Client has a gift card"}
+              {" "}({clientGiftCards.length})
+            </p>
+            <ul className="space-y-1.5">
+              {clientGiftCards.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-start justify-between gap-2 text-body-sm text-text-secondary"
+                >
+                  <div className="min-w-0 flex-1">
+                    <span className="font-mono font-semibold text-text-primary">
+                      {formatGiftCardCode(c.code)}
+                    </span>
+                    {" — "}
+                    <span className="tabular-nums">
+                      {formatCurrency(Number(c.balance), currency)}
+                    </span>
+                    {" left"}
+                    {c.expires_at ? (
+                      <span className="text-text-tertiary">
+                        {" "}· expires {c.expires_at}
+                      </span>
+                    ) : (
+                      <span className="text-text-tertiary"> · no expiry</span>
+                    )}
+                  </div>
+                  {!isEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMethod("gift_card");
+                        setGiftCardCode(c.code);
+                      }}
+                      className="shrink-0 rounded-md bg-neutral-900 px-2.5 py-1 text-caption font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+                    >
+                      Use this card
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

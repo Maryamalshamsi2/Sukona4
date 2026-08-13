@@ -199,6 +199,38 @@ export async function getGiftCardDetail(id: string) {
   };
 }
 
+/**
+ * List a client's currently-usable gift cards. A card is included
+ * when it's tied to this client either as buyer (`client_id`) or
+ * recipient (`recipient_client_id`, migration 053), still `active`,
+ * not past expiry, and has a positive balance. Used in MarkPaidModal
+ * — parallels getPackagesForClient's role: surface what the client
+ * already has so the staff doesn't miss it at checkout.
+ *
+ * Returns [] on error / no cards; callers can just check .length.
+ */
+export async function getGiftCardsForClient(clientId: string) {
+  const gate = await requireAuthed();
+  if ("error" in gate) return [];
+  if (!clientId) return [];
+
+  const supabase = await createClient();
+  const today = todayISO();
+  const { data, error } = await supabase
+    .from("gift_cards")
+    .select("id, code, initial_amount, balance, expires_at, client_id, recipient_client_id")
+    .or(`client_id.eq.${clientId},recipient_client_id.eq.${clientId}`)
+    .eq("status", "active")
+    .gt("balance", 0)
+    .or(`expires_at.is.null,expires_at.gte.${today}`);
+
+  if (error) {
+    console.error("getGiftCardsForClient failed:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
 /** Look up by code — used by the payment modal. Authed (not gated to
  *  owner/admin) because staff need this for redemption. RLS keeps
  *  cross-salon lookups blocked.
