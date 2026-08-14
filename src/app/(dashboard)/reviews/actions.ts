@@ -139,12 +139,15 @@ export async function getReviewsForMonth(month: string): Promise<{
       .lte("appointments.date", end),
 
     // Retail sales in the month — per-staff totals for the "Sales"
-    // metric tile. staff_id is nullable on retail_sales (some walk-in
-    // sales were entered without an attribution), so nullable rows
-    // just don't contribute to any staff's tile.
+    // metric tile. Migration 059 makes attribution many-to-many;
+    // when a sale credits N staff we split the amount equally. Rows
+    // with no attribution don't contribute to any staff's tile.
     supabase
       .from("retail_sales")
-      .select("staff_id, amount")
+      .select(`
+        amount,
+        sold_by_staff:retail_sale_staff ( staff_id )
+      `)
       .eq("salon_id", salonId)
       .gte("sale_date", start)
       .lte("sale_date", end),
@@ -280,10 +283,19 @@ export async function getReviewsForMonth(month: string): Promise<{
     }
   }
 
-  // Retail sales per staff. Rows without a staff_id don't contribute.
-  for (const s of (retailRes.data ?? []) as Array<{ staff_id: string | null; amount: number | null }>) {
-    if (!s.staff_id) continue;
-    ensure(s.staff_id).retail += Number(s.amount ?? 0);
+  // Retail sales per staff. Split each sale's amount equally across
+  // its attributed staff (migration 059). Sales with no attribution
+  // don't contribute anywhere.
+  for (const s of (retailRes.data ?? []) as Array<{
+    amount: number | null;
+    sold_by_staff: Array<{ staff_id: string | null }> | null;
+  }>) {
+    const attributed = (s.sold_by_staff ?? [])
+      .map((j) => j.staff_id)
+      .filter((sid): sid is string => !!sid);
+    if (attributed.length === 0) continue;
+    const share = Number(s.amount ?? 0) / attributed.length;
+    for (const sid of attributed) ensure(sid).retail += share;
   }
 
   const rows: StaffMetric[] = (staffRes.data ?? []).map((s) => {

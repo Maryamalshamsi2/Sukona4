@@ -34,12 +34,20 @@ export async function getRetailSales(from?: string, to?: string) {
   if ("error" in gate) return [];
 
   const supabase = await createClient();
+  // Multi-staff via migration 059's join. Keep the legacy
+  // `staff:staff_id` embed too so existing list renderers that read
+  // `.staff.full_name` keep working; new code should prefer
+  // `sold_by_staff` for the full list.
   let query = supabase
     .from("retail_sales")
     .select(`
       *,
       clients ( id, name ),
-      staff:staff_id ( id, full_name )
+      staff:staff_id ( id, full_name ),
+      sold_by_staff:retail_sale_staff (
+        staff_id,
+        profiles:staff_id ( id, full_name )
+      )
     `)
     .order("sale_date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -90,7 +98,13 @@ interface SalePayload {
   method: "cash" | "card" | "other";
   saleDate: string; // YYYY-MM-DD
   clientId: string | null;
-  staffId: string | null;
+  /**
+   * Multi-staff via migration 059. Empty array = no attribution
+   * (walk-in). The first entry is also mirrored to the legacy
+   * retail_sales.staff_id column so existing single-value read
+   * paths still find something.
+   */
+  staffIds: string[];
   notes: string | null;
 }
 
@@ -114,20 +128,48 @@ export async function addRetailSale(payload: SalePayload) {
   if (v) return { error: v };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("retail_sales").insert({
-    description: payload.description.trim(),
-    amount: payload.amount,
-    method: payload.method,
-    sale_date: payload.saleDate,
-    client_id: payload.clientId,
-    staff_id: payload.staffId,
-    notes: payload.notes?.trim() || null,
-    created_by: gate.profile.id,
-  });
+  const uniqueStaff = [...new Set(payload.staffIds.filter(Boolean))];
 
-  if (error) return { error: error.message };
+  const { data: inserted, error } = await supabase
+    .from("retail_sales")
+    .insert({
+      description: payload.description.trim(),
+      amount: payload.amount,
+      method: payload.method,
+      sale_date: payload.saleDate,
+      client_id: payload.clientId,
+      // Legacy mirror — first staff (or null). Existing read paths
+      // that render `.staff.full_name` still work; new code prefers
+      // the join.
+      staff_id: uniqueStaff[0] ?? null,
+      notes: payload.notes?.trim() || null,
+      created_by: gate.profile.id,
+    })
+    .select("id, salon_id")
+    .single();
+
+  if (error || !inserted) return { error: error?.message ?? "Insert failed" };
+
+  if (uniqueStaff.length > 0) {
+    const joinRows = uniqueStaff.map((sid) => ({
+      salon_id: inserted.salon_id,
+      retail_sale_id: inserted.id,
+      staff_id: sid,
+    }));
+    const { error: joinErr } = await supabase
+      .from("retail_sale_staff")
+      .insert(joinRows);
+    if (joinErr) {
+      // Best-effort rollback so the sale isn't orphaned with a
+      // half-populated attribution set.
+      await supabase.from("retail_sales").delete().eq("id", inserted.id);
+      return { error: joinErr.message };
+    }
+  }
+
   revalidatePath("/sales");
   revalidatePath("/reports");
+  revalidatePath("/reviews");
   return { success: true };
 }
 
@@ -153,6 +195,8 @@ export async function updateRetailSale(id: string, payload: SalePayload) {
     return { error: "Sale not found" };
   }
 
+  const uniqueStaff = [...new Set(payload.staffIds.filter(Boolean))];
+
   const { error } = await supabase
     .from("retail_sales")
     .update({
@@ -161,14 +205,37 @@ export async function updateRetailSale(id: string, payload: SalePayload) {
       method: payload.method,
       sale_date: payload.saleDate,
       client_id: payload.clientId,
-      staff_id: payload.staffId,
+      // Legacy mirror of the first staff (or null). See addRetailSale.
+      staff_id: uniqueStaff[0] ?? null,
       notes: payload.notes?.trim() || null,
     })
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // Multi-staff join: replace the set. Cheap even at N staff since a
+  // typical retail sale has ≤3 attributions.
+  const { error: delErr } = await supabase
+    .from("retail_sale_staff")
+    .delete()
+    .eq("retail_sale_id", id);
+  if (delErr) return { error: delErr.message };
+
+  if (uniqueStaff.length > 0) {
+    const joinRows = uniqueStaff.map((sid) => ({
+      salon_id: gate.profile.salon_id,
+      retail_sale_id: id,
+      staff_id: sid,
+    }));
+    const { error: joinErr } = await supabase
+      .from("retail_sale_staff")
+      .insert(joinRows);
+    if (joinErr) return { error: joinErr.message };
+  }
+
   revalidatePath("/sales");
   revalidatePath("/reports");
+  revalidatePath("/reviews");
   return { success: true };
 }
 

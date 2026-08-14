@@ -57,6 +57,13 @@ export interface SaleRow {
   staff_id: string | null;
   clients?: { id: string; name: string } | null;
   staff?: { id: string; full_name: string } | null;
+  /** Migration 059: multi-staff attribution. Empty / missing = no
+   *  attribution (walk-in). Present alongside the legacy single
+   *  staff field for backwards compat. */
+  sold_by_staff?: Array<{
+    staff_id: string;
+    profiles?: { id: string; full_name: string } | null;
+  }>;
 }
 
 export interface ClientOption {
@@ -584,11 +591,23 @@ function RetailTab({
                           · {s.clients.name}
                         </span>
                       )}
-                      {s.staff?.full_name && (
-                        <span className="text-caption text-text-tertiary">
-                          · by {s.staff.full_name}
-                        </span>
-                      )}
+                      {(() => {
+                        // Prefer the multi-staff join for the display;
+                        // fall back to the legacy single field.
+                        const joinNames = (s.sold_by_staff ?? [])
+                          .map((j) => j.profiles?.full_name)
+                          .filter(Boolean) as string[];
+                        const label =
+                          joinNames.length > 0
+                            ? joinNames.join(", ")
+                            : s.staff?.full_name ?? null;
+                        if (!label) return null;
+                        return (
+                          <span className="text-caption text-text-tertiary">
+                            · by {label}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </button>
                   <span className="shrink-0 text-body-sm font-semibold tabular-nums text-text-primary">
@@ -668,7 +687,12 @@ function SaleFormModal({
   const [method, setMethod] = useState<"cash" | "card" | "other">("cash");
   const [saleDate, setSaleDate] = useState("");
   const [clientId, setClientId] = useState("");
-  const [staffId, setStaffId] = useState("");
+  // Multi-staff attribution — migration 059. A Set makes toggle
+  // logic cheap; converted to an array on submit. Empty = no
+  // attribution (walk-in), same as the legacy single-value case.
+  const [staffIds, setStaffIds] = useState<Set<string>>(() => new Set());
+  const [staffPickerOpen, setStaffPickerOpen] = useState(false);
+  const staffPickerRef = useRef<HTMLDivElement>(null);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -681,7 +705,17 @@ function SaleFormModal({
       setMethod(editing.method);
       setSaleDate(editing.sale_date);
       setClientId(editing.client_id ?? "");
-      setStaffId(editing.staff_id ?? "");
+      // Prefer the multi-staff join; fall back to the legacy
+      // single-value field for rows that haven't been touched
+      // since the join was populated (backfill covers most).
+      const initialStaff = new Set<string>();
+      const joinRows = editing.sold_by_staff ?? [];
+      if (joinRows.length > 0) {
+        for (const j of joinRows) if (j.staff_id) initialStaff.add(j.staff_id);
+      } else if (editing.staff_id) {
+        initialStaff.add(editing.staff_id);
+      }
+      setStaffIds(initialStaff);
       setNotes(editing.notes ?? "");
     } else {
       setDescription("");
@@ -694,11 +728,24 @@ function SaleFormModal({
       const d = String(now.getDate()).padStart(2, "0");
       setSaleDate(`${y}-${m}-${d}`);
       setClientId("");
-      setStaffId("");
+      setStaffIds(new Set());
       setNotes("");
     }
+    setStaffPickerOpen(false);
     setError(null);
   }, [open, editing]);
+
+  // Close the multi-staff picker on outside click.
+  useEffect(() => {
+    if (!staffPickerOpen) return;
+    function handler(e: MouseEvent) {
+      if (staffPickerRef.current && !staffPickerRef.current.contains(e.target as Node)) {
+        setStaffPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [staffPickerOpen]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -710,7 +757,7 @@ function SaleFormModal({
       method,
       saleDate,
       clientId: clientId || null,
-      staffId: staffId || null,
+      staffIds: [...staffIds],
       notes: notes.trim() || null,
     };
     const res = isEdit
@@ -809,22 +856,64 @@ function SaleFormModal({
           emptyOptionLabel="Walk-in / no client"
         />
 
+        {/* Sold by — multi-select via a checkbox dropdown. Tap the
+            trigger to open the panel, tick as many as apply, tap
+            outside to close. Migration 059: each ticked staff is
+            attributed to the sale via retail_sale_staff. */}
         <div>
           <label className="block text-body-sm font-semibold text-text-primary mb-1.5">
             Sold by <span className="font-normal text-text-tertiary">(optional)</span>
           </label>
-            <select
-              value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
-              className="w-full rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          <div className="relative" ref={staffPickerRef}>
+            <button
+              type="button"
+              onClick={() => setStaffPickerOpen((v) => !v)}
+              className="flex w-full items-center justify-between rounded-xl border-[1.5px] border-gray-200 bg-white px-4 py-3 sm:py-2.5 text-left text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
             >
-            <option value="">—</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.full_name}
-              </option>
-            ))}
-          </select>
+              <span className={staffIds.size === 0 ? "text-text-tertiary" : "text-text-primary"}>
+                {staffIds.size === 0
+                  ? "—"
+                  : staff
+                      .filter((s) => staffIds.has(s.id))
+                      .map((s) => s.full_name)
+                      .join(", ")}
+              </span>
+              <svg className="h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {staffPickerOpen && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+                {staff.length === 0 && (
+                  <p className="px-3 py-2 text-body-sm text-text-tertiary">No staff to pick from.</p>
+                )}
+                {staff.map((s) => {
+                  const checked = staffIds.has(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-surface-hover"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setStaffIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(s.id);
+                            else next.delete(s.id);
+                            return next;
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-primary-100"
+                      />
+                      <span className="text-body-sm text-text-primary">{s.full_name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Notes */}
