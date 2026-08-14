@@ -24,8 +24,21 @@ export default async function ReviewsPage() {
   if ("error" in initial) {
     // Rare — likely a transient DB error. Render the view with an
     // empty payload so the owner sees the shell + can retry via the
-    // month picker.
-    return <ReviewsView initialMonth={month} initialRows={[]} />;
+    // month picker. viewerIsAdmin default here doesn't affect
+    // rendering when rows[] is empty.
+    return (
+      <ReviewsView
+        initialMonth={month}
+        initialRows={[]}
+        viewerIsAdmin={profile.role === "admin"}
+      />
+    );
   }
-  return <ReviewsView initialMonth={month} initialRows={initial.rows} />;
+  return (
+    <ReviewsView
+      initialMonth={month}
+      initialRows={initial.rows}
+      viewerIsAdmin={initial.viewerIsAdmin}
+    />
+  );
 }

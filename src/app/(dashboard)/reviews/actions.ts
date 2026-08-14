@@ -49,7 +49,9 @@ export interface StaffMetric {
     appointmentsCompleted: number;
     revenueAttributed: number;
     tipsReceived: number;
-    noShowOrCancelled: number;
+    /** Retail (product) sales attributed to this staff in the month.
+     *  Sum of retail_sales.amount where staff_id matches. */
+    retailSales: number;
   };
 }
 
@@ -66,6 +68,10 @@ export interface StaffMetric {
 export async function getReviewsForMonth(month: string): Promise<{
   month: string;
   rows: StaffMetric[];
+  /** True when the current viewer is admin (not owner). Drives the
+   *  UI: admins see only staff rows and don't see any metric tiles;
+   *  owners see staff + admin rows with tiles. */
+  viewerIsAdmin: boolean;
   error?: undefined;
 } | { error: string }> {
   const gate = await requireOwnerOrAdmin();
@@ -74,13 +80,23 @@ export async function getReviewsForMonth(month: string): Promise<{
 
   const supabase = await createClient();
   const salonId = gate.profile.salon_id;
+  const viewerIsAdmin = gate.profile.role === "admin";
+  const viewerId = gate.profile.id;
   const { start, end } = monthRange(month);
 
-  const [staffRes, reviewsRes, apptsRes, paysRes] = await Promise.all([
+  // Which profile rows the caller sees:
+  //   - owner: staff + admin (excluding themselves; self-review is
+  //     out of scope for this page)
+  //   - admin: staff only (per the spec)
+  const visibleRoles: string[] = viewerIsAdmin ? ["staff"] : ["staff", "admin"];
+
+  const [staffRes, reviewsRes, apptsRes, paysRes, retailRes] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, full_name, role")
       .eq("salon_id", salonId)
+      .in("role", visibleRoles)
+      .neq("id", viewerId)
       .order("full_name", { ascending: true }),
 
     supabase
@@ -121,12 +137,24 @@ export async function getReviewsForMonth(month: string): Promise<{
       .gt("tip_amount", 0)
       .gte("appointments.date", start)
       .lte("appointments.date", end),
+
+    // Retail sales in the month — per-staff totals for the "Sales"
+    // metric tile. staff_id is nullable on retail_sales (some walk-in
+    // sales were entered without an attribution), so nullable rows
+    // just don't contribute to any staff's tile.
+    supabase
+      .from("retail_sales")
+      .select("staff_id, amount")
+      .eq("salon_id", salonId)
+      .gte("sale_date", start)
+      .lte("sale_date", end),
   ]);
 
   if (staffRes.error) return { error: staffRes.error.message };
   if (reviewsRes.error) return { error: reviewsRes.error.message };
   if (apptsRes.error) return { error: apptsRes.error.message };
   if (paysRes.error) return { error: paysRes.error.message };
+  if (retailRes.error) return { error: retailRes.error.message };
 
   // Resolve author names for existing reviews in one lookup so the
   // "Last updated by X" line has a name to show.
@@ -149,7 +177,7 @@ export async function getReviewsForMonth(month: string): Promise<{
     completed: number;
     revenue: number;
     tips: number;
-    noShow: number;
+    retail: number;
     // Bundle prices are stored on the first line-item of an instance;
     // if we naively summed appointment_services.services.price we'd
     // double-count bundle underlyings. Instead, count each bundle
@@ -161,7 +189,7 @@ export async function getReviewsForMonth(month: string): Promise<{
   const ensure = (sid: string): Agg => {
     let a = agg.get(sid);
     if (!a) {
-      a = { completed: 0, revenue: 0, tips: 0, noShow: 0, countedBundleInstances: new Set() };
+      a = { completed: 0, revenue: 0, tips: 0, retail: 0, countedBundleInstances: new Set() };
       agg.set(sid, a);
     }
     return a;
@@ -185,9 +213,8 @@ export async function getReviewsForMonth(month: string): Promise<{
     appointment_services: ApptSvc[];
   }>) {
     const isPaid = appt.status === "paid";
-    const isNoShowOrCancel = appt.status === "no_show" || appt.status === "cancelled";
     // Count each staff appearing on the appointment once per
-    // appointment for the "appointments completed / no-show" tallies.
+    // appointment for the "appointments completed" tally.
     const seenStaffPerAppt = new Set<string>();
     for (const as of appt.appointment_services ?? []) {
       const sid = as.staff_id;
@@ -195,7 +222,6 @@ export async function getReviewsForMonth(month: string): Promise<{
       const a = ensure(sid);
       if (!seenStaffPerAppt.has(sid)) {
         if (isPaid) a.completed += 1;
-        else if (isNoShowOrCancel) a.noShow += 1;
         seenStaffPerAppt.add(sid);
       }
       if (isPaid) {
@@ -254,6 +280,12 @@ export async function getReviewsForMonth(month: string): Promise<{
     }
   }
 
+  // Retail sales per staff. Rows without a staff_id don't contribute.
+  for (const s of (retailRes.data ?? []) as Array<{ staff_id: string | null; amount: number | null }>) {
+    if (!s.staff_id) continue;
+    ensure(s.staff_id).retail += Number(s.amount ?? 0);
+  }
+
   const rows: StaffMetric[] = (staffRes.data ?? []).map((s) => {
     const r = reviewByStaff.get(String(s.id));
     const a = agg.get(String(s.id));
@@ -273,12 +305,12 @@ export async function getReviewsForMonth(month: string): Promise<{
         appointmentsCompleted: a?.completed ?? 0,
         revenueAttributed: Math.round((a?.revenue ?? 0) * 100) / 100,
         tipsReceived: Math.round((a?.tips ?? 0) * 100) / 100,
-        noShowOrCancelled: a?.noShow ?? 0,
+        retailSales: Math.round((a?.retail ?? 0) * 100) / 100,
       },
     };
   });
 
-  return { month, rows };
+  return { month, rows, viewerIsAdmin };
 }
 
 // ============================================================

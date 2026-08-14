@@ -26,6 +26,10 @@ import { getReviewsForMonth, upsertReview, type StaffMetric } from "./actions";
 interface Props {
   initialMonth: string;
   initialRows: StaffMetric[];
+  /** Admin viewers see only staff rows and no metric tiles (per spec).
+   *  Owner viewers see staff + admin rows with tiles. Server-side is
+   *  the authority — this prop just spares the client a re-derivation. */
+  viewerIsAdmin: boolean;
 }
 
 /** Ex: "2026-08" → "August 2026". */
@@ -56,7 +60,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export default function ReviewsView({ initialMonth, initialRows }: Props) {
+export default function ReviewsView({ initialMonth, initialRows, viewerIsAdmin }: Props) {
   const undo = useUndo();
   const currency = useCurrency();
 
@@ -136,19 +140,13 @@ export default function ReviewsView({ initialMonth, initialRows }: Props) {
     setSavedAt((prev) => ({ ...prev, [staffId]: new Date().toISOString() }));
   }
 
-  const totalStaff = rows.length;
-  const withNotes = rows.filter((r) => (drafts[r.staff_id] ?? "").trim().length > 0).length;
-
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-title-page font-bold tracking-tight text-text-primary">
-            Performance reviews
+            Performance
           </h1>
-          <p className="mt-1 text-body-sm text-text-secondary">
-            {withNotes} of {totalStaff} written · {humanMonth(month)}
-          </p>
         </div>
 
         {/* Month picker. Prev / Human label / Next. */}
@@ -223,23 +221,25 @@ export default function ReviewsView({ initialMonth, initialRows }: Props) {
                 </div>
               </div>
 
-              {/* Metric snapshot */}
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <MetricTile label="Completed" value={String(r.metrics.appointmentsCompleted)} />
-                <MetricTile
-                  label="Revenue"
-                  value={formatCurrency(r.metrics.revenueAttributed, currency)}
-                />
-                <MetricTile
-                  label="Tips"
-                  value={formatCurrency(r.metrics.tipsReceived, currency)}
-                />
-                <MetricTile
-                  label="No-show / cancel"
-                  value={String(r.metrics.noShowOrCancelled)}
-                  warn={r.metrics.noShowOrCancelled > 0}
-                />
-              </div>
+              {/* Metric snapshot — owner-only. Admins see notes
+                  without the numeric context per spec. */}
+              {!viewerIsAdmin && (
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <MetricTile label="Completed" value={String(r.metrics.appointmentsCompleted)} />
+                  <MetricTile
+                    label="Revenue"
+                    value={formatCurrency(r.metrics.revenueAttributed, currency)}
+                  />
+                  <MetricTile
+                    label="Tips"
+                    value={formatCurrency(r.metrics.tipsReceived, currency)}
+                  />
+                  <MetricTile
+                    label="Sales"
+                    value={formatCurrency(r.metrics.retailSales, currency)}
+                  />
+                </div>
+              )}
 
               {/* Notes */}
               <textarea
@@ -257,27 +257,11 @@ export default function ReviewsView({ initialMonth, initialRows }: Props) {
   );
 }
 
-function MetricTile({
-  label,
-  value,
-  warn,
-}: {
-  label: string;
-  value: string;
-  warn?: boolean;
-}) {
+function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className={`rounded-xl px-3 py-2 ring-1 ring-border ${
-        warn ? "bg-error-50" : "bg-surface-subtle"
-      }`}
-    >
+    <div className="rounded-xl bg-surface-subtle px-3 py-2 ring-1 ring-border">
       <p className="text-caption text-text-tertiary">{label}</p>
-      <p
-        className={`mt-0.5 text-body-sm font-semibold tabular-nums ${
-          warn ? "text-error-700" : "text-text-primary"
-        }`}
-      >
+      <p className="mt-0.5 text-body-sm font-semibold tabular-nums text-text-primary">
         {value}
       </p>
     </div>
