@@ -171,12 +171,18 @@ export default function MarkPaidModal({
   type ClientPackage = Awaited<ReturnType<typeof getPackagesForClient>>[number];
   const [clientPackages, setClientPackages] = useState<ClientPackage[]>([]);
   // Client's active gift cards — parallels the packages panel.
-  // Shown in record mode as clickable "Use this card" chips (one
-  // tap flips method → gift_card + auto-populates the code, then
-  // the existing lookup effect takes it from there). Shown in
-  // edit mode as a read-only heads-up.
+  // Record mode: clickable "Use this card" chips (one tap flips
+  // method → gift_card + auto-populates the code). Edit mode:
+  // per-card amount input + Apply button that retroactively
+  // redeems from the card and adds a new gift_card payment row.
   type ClientGiftCard = Awaited<ReturnType<typeof getGiftCardsForClient>>[number];
   const [clientGiftCards, setClientGiftCards] = useState<ClientGiftCard[]>([]);
+  // Edit-mode-only: per-card amount input + applied state.
+  // The amount default = min(card balance, appointment remainder)
+  // but the owner can override before hitting Apply. Once applied,
+  // the card row shows "Applied" and hides the input.
+  const [giftCardApplyAmount, setGiftCardApplyAmount] = useState<Record<string, string>>({});
+  const [appliedGiftCards, setAppliedGiftCards] = useState<Set<string>>(() => new Set());
   // Package items the owner clicked "Apply" on in this edit session.
   // Tracked here so the UI can show the decremented count and hide
   // the button. Actual RPC runs after a 6s undo window (see the
@@ -240,6 +246,8 @@ export default function MarkPaidModal({
     setClientPackages([]);
     setAppliedItems(new Set());
     setClientGiftCards([]);
+    setGiftCardApplyAmount({});
+    setAppliedGiftCards(new Set());
 
     // Extra split-payment rows. Edit mode: everything in
     // existingPayments except the primary (the first entry) that
@@ -307,6 +315,77 @@ export default function MarkPaidModal({
       cancelled = true;
     };
   }, [open, clientId]);
+
+  /**
+   * Retroactively apply a gift-card amount to this appointment.
+   *
+   * Asma scenario: client had an active gift card, staff added
+   * extra services and took the extra as a card payment, but forgot
+   * to redeem the gift card. The owner reopens Edit Payment and hits
+   * Apply on the card row.
+   *
+   * Runs redeem_gift_card_with_payment (the atomic RPC used by the
+   * record-mode gift-card flow): debits the card balance and inserts
+   * a NEW payment row with method='gift_card' for the amount. The
+   * existing card / cash payment row(s) are untouched. 6s undo
+   * window before the RPC fires — matches the package Apply pattern.
+   */
+  function handleApplyGiftCard(cardId: string, code: string, amountStr: string) {
+    if (!appointmentId) return;
+    const amount = parseFloat(amountStr);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      undo.error("Enter an amount greater than 0 before applying.");
+      return;
+    }
+    // Optimistic: mark applied so the row shows "Applied" and the
+    // input disappears immediately.
+    setAppliedGiftCards((prev) => {
+      const next = new Set(prev);
+      next.add(cardId);
+      return next;
+    });
+    let undone = false;
+    const timer = setTimeout(() => {
+      if (undone) return;
+      void redeemGiftCardWithPayment({
+        code,
+        amount,
+        appointmentId,
+        note: "Applied retroactively from edit payment",
+        tipAmount: 0,
+        tipToStaffId: null,
+        receiptUrls: [],
+      }).then((result) => {
+        if (result && "error" in result && result.error) {
+          undo.error(result.error);
+          setAppliedGiftCards((prev) => {
+            const next = new Set(prev);
+            next.delete(cardId);
+            return next;
+          });
+          return;
+        }
+        // Refresh the panel so the balance decrements visibly. The
+        // parent's onPaid triggers a full reload of payments too.
+        if (clientId) {
+          void getGiftCardsForClient(clientId).then((cards) => setClientGiftCards(cards));
+        }
+      });
+    }, 6000);
+    undo.show(
+      `Applied · ${formatGiftCardCode(code)}`,
+      () => {
+        undone = true;
+        clearTimeout(timer);
+        setAppliedGiftCards((prev) => {
+          const next = new Set(prev);
+          next.delete(cardId);
+          return next;
+        });
+      },
+      6000,
+    );
+  }
 
   /**
    * Retroactively apply one package session to this appointment.
@@ -785,8 +864,9 @@ export default function MarkPaidModal({
         {/* Client's active gift cards. Record mode: clickable — one
             tap sets method → gift_card and populates the code, and
             the existing lookup effect above resolves the card. Edit
-            mode: read-only heads-up (matches the packages panel).
-            Hidden when the client has no active cards. */}
+            mode: per-card amount input + Apply button that debits
+            the card and adds a new gift_card payment row. Hidden
+            when the client has no active cards. */}
         {clientGiftCards.length > 0 && (
           <div className="space-y-2 rounded-xl bg-primary-50 ring-1 ring-primary-100 px-4 py-3">
             <p className="text-body-sm font-semibold text-text-primary">
@@ -794,10 +874,17 @@ export default function MarkPaidModal({
               {" "}({clientGiftCards.length})
             </p>
             <ul className="space-y-1.5">
-              {clientGiftCards.map((c) => (
+              {clientGiftCards.map((c) => {
+                const applied = appliedGiftCards.has(c.id);
+                const balance = Number(c.balance);
+                // Default the amount input to the card's balance; the
+                // owner can lower it before Apply if the appointment
+                // remainder is smaller.
+                const amtValue = giftCardApplyAmount[c.id] ?? String(balance);
+                return (
                 <li
                   key={c.id}
-                  className="flex items-start justify-between gap-2 text-body-sm text-text-secondary"
+                  className={`text-body-sm text-text-secondary ${isEdit ? "space-y-2" : "flex items-start justify-between gap-2"}`}
                 >
                   <div className="min-w-0 flex-1">
                     <span className="font-mono font-semibold text-text-primary">
@@ -805,7 +892,7 @@ export default function MarkPaidModal({
                     </span>
                     {" — "}
                     <span className="tabular-nums">
-                      {formatCurrency(Number(c.balance), currency)}
+                      {formatCurrency(balance, currency)}
                     </span>
                     {" left"}
                     {c.expires_at ? (
@@ -816,6 +903,35 @@ export default function MarkPaidModal({
                       <span className="text-text-tertiary"> · no expiry</span>
                     )}
                   </div>
+                  {isEdit && appointmentId && (
+                    applied ? (
+                      <span className="inline-block rounded-md bg-success-100 px-2 py-0.5 text-caption font-semibold text-success-700">
+                        Applied
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max={balance}
+                          value={amtValue}
+                          placeholder={`Amount (${currency})`}
+                          onChange={(e) =>
+                            setGiftCardApplyAmount((prev) => ({ ...prev, [c.id]: e.target.value }))
+                          }
+                          className="w-24 shrink-0 rounded-md border-[1.5px] border-neutral-200 bg-white px-2 py-1 text-caption tabular-nums focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleApplyGiftCard(c.id, c.code, amtValue)}
+                          className="shrink-0 rounded-md bg-neutral-900 px-2.5 py-1 text-caption font-semibold text-text-inverse hover:bg-neutral-800 active:scale-[0.98] transition"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    )
+                  )}
                   {!isEdit && (
                     <button
                       type="button"
@@ -829,7 +945,8 @@ export default function MarkPaidModal({
                     </button>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </div>
         )}
