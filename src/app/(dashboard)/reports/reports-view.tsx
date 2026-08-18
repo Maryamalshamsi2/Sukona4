@@ -339,18 +339,21 @@ export default function ReportsView({
       import("html2canvas-pro"),
       import("jspdf"),
     ]);
-    document.body.classList.add("exporting");
     try {
-      // Wait one paint so the .exporting class applies before
-      // html2canvas reads styles. Without this the sidebar can end up
-      // in the canvas.
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      // Apply the export styles to html2canvas's off-screen clone
+      // (via onclone) instead of the live document. Without this
+      // the user watches the sidebar disappear, the report reflow,
+      // and then everything snap back when the download starts —
+      // jarring even when it takes only a couple hundred ms.
       const canvas = await html2canvas(exportRef.current, {
         backgroundColor: "#ffffff",
         scale: 2,
         useCORS: true,
         windowWidth: exportRef.current.scrollWidth,
         windowHeight: exportRef.current.scrollHeight,
+        onclone: (clonedDoc) => {
+          clonedDoc.body.classList.add("exporting");
+        },
       });
       const pdf = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       // A4 = 210 × 297 mm. Fit width to A4 minus margins and split
@@ -393,7 +396,6 @@ export default function ReportsView({
       // of round-tripping to the console.
       undo.error(`Couldn't build the PDF: ${msg.slice(0, 140)}`);
     } finally {
-      document.body.classList.remove("exporting");
       setExporting(false);
     }
   }, [exporting, getRange, undo]);
