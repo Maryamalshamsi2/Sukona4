@@ -182,8 +182,12 @@ const PRESET_LABELS: Record<DatePreset, string> = {
   today: "Today",
   week: "Week",
   month: "Month",
+  // Still a valid preset value internally — set when the user edits
+  // the inline from/to date inputs. Not exposed in the funnel
+  // dropdown; PICKABLE_PRESETS below is the ordered subset that is.
   custom: "Custom",
 };
+const PICKABLE_PRESETS: Array<Exclude<DatePreset, "custom">> = ["today", "week", "month"];
 
 // ---- Stat Card ----
 
@@ -672,7 +676,7 @@ export default function ReportsView({
               <p className="px-3 pt-2 pb-1 text-caption font-semibold uppercase tracking-wide text-text-tertiary">
                 Period
               </p>
-              {(Object.keys(PRESET_LABELS) as DatePreset[]).map((p) => (
+              {PICKABLE_PRESETS.map((p) => (
                 <button
                   key={p}
                   onClick={() => { setPreset(p); setFilterOpen(false); }}
