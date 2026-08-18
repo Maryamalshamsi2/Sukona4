@@ -440,16 +440,22 @@ export default function ReportsView({
     }
   }, [getRange, teamFilter, undo]);
 
-  // Skip the very first run because the server already seeded the initial
-  // period's data. Subsequent preset/customFrom/customTo/teamFilter changes
-  // still trigger a fetch.
+  // Skip the very first run because the server already seeded the
+  // initial period's data. Subsequent preset / customFrom /
+  // customTo / teamFilter changes still trigger a fetch — but
+  // debounced 400 ms so rapid changes (native date picker firing
+  // onChange during a pick, or the user editing both ends in quick
+  // succession) collapse into a single request. The 7 report queries
+  // are heavy; back-to-back cascades made the page feel sluggish
+  // even though each individual request was fine.
   const didMountRef = useRef(false);
   useEffect(() => {
     if (!didMountRef.current) {
       didMountRef.current = true;
       return;
     }
-    loadData();
+    const timer = setTimeout(() => loadData(), 400);
+    return () => clearTimeout(timer);
   }, [loadData]);
 
   // ---- Delete appointment (used by the trash button in the appointments tab) ----
