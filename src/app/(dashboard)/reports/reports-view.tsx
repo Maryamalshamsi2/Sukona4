@@ -312,12 +312,85 @@ export default function ReportsView({
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [teams] = useState(initialTeams);
 
+  // PDF export ref + flag — the actual handler is defined below,
+  // after getRange().
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
   const getRange = useCallback(() => {
     if (preset === "custom" && customFrom && customTo) {
       return { from: customFrom, to: customTo };
     }
     return getPresetRange(preset);
   }, [preset, customFrom, customTo]);
+
+  // PDF export handler. Rasterizes the report DOM (below exportRef)
+  // with html2canvas + jsPDF and downloads as a file. Body picks up
+  // `.exporting` during capture so globals.css hides sidebar,
+  // filters, and the Export button itself. Libs are dynamically
+  // imported so /reports ships fast for owners who never hit Export.
+  const handleExportPDF = useCallback(async () => {
+    if (!exportRef.current || exporting) return;
+    setExporting(true);
+    const [{ default: html2canvas }, { default: JsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]);
+    document.body.classList.add("exporting");
+    try {
+      // Wait one paint so the .exporting class applies before
+      // html2canvas reads styles. Without this the sidebar can end up
+      // in the canvas.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const canvas = await html2canvas(exportRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        windowWidth: exportRef.current.scrollWidth,
+        windowHeight: exportRef.current.scrollHeight,
+      });
+      const pdf = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      // A4 = 210 × 297 mm. Fit width to A4 minus margins and split
+      // the tall canvas into page-sized chunks so long reports flow
+      // across multiple pages without clipping.
+      const pageWmm = 210;
+      const pageHmm = 297;
+      const marginMm = 10;
+      const usableWmm = pageWmm - marginMm * 2;
+      const usableHmm = pageHmm - marginMm * 2;
+      const fullImgHmm = (canvas.height * usableWmm) / canvas.width;
+      if (fullImgHmm <= usableHmm) {
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", marginMm, marginMm, usableWmm, fullImgHmm);
+      } else {
+        const sliceHeightPx = Math.floor((usableHmm / fullImgHmm) * canvas.height);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        const ctx = slice.getContext("2d");
+        if (!ctx) throw new Error("Canvas 2D context unavailable");
+        let cursorPx = 0;
+        let firstPage = true;
+        while (cursorPx < canvas.height) {
+          const thisSlicePx = Math.min(sliceHeightPx, canvas.height - cursorPx);
+          slice.height = thisSlicePx;
+          ctx.clearRect(0, 0, slice.width, slice.height);
+          ctx.drawImage(canvas, 0, cursorPx, canvas.width, thisSlicePx, 0, 0, canvas.width, thisSlicePx);
+          const sliceHmm = (thisSlicePx / canvas.height) * fullImgHmm;
+          if (!firstPage) pdf.addPage();
+          pdf.addImage(slice.toDataURL("image/png"), "PNG", marginMm, marginMm, usableWmm, sliceHmm);
+          firstPage = false;
+          cursorPx += thisSlicePx;
+        }
+      }
+      const { from, to } = getRange();
+      pdf.save(`sukona-report-${from}-to-${to}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      undo.error("Couldn't build the PDF — try again in a moment.");
+    } finally {
+      document.body.classList.remove("exporting");
+      setExporting(false);
+    }
+  }, [exporting, getRange, undo]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -484,7 +557,7 @@ export default function ReportsView({
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div ref={exportRef} className="space-y-4 sm:space-y-6">
       {/* Print-only banner. Renders "Reports · <from> → <to>" at the
           top of the PDF so the printed page is self-describing. See
           the @media print block in globals.css for how it's shown. */}
@@ -574,20 +647,29 @@ export default function ReportsView({
             </div>
           )}
         </div>
-        {/* Export PDF — triggers the browser print dialog. The
-            @media print block in globals.css hides dashboard chrome
-            and reveals the .print-only banner at the top of the
-            report. User picks "Save as PDF" in the print dialog. */}
+        {/* Export PDF — rasterizes the report with html2canvas and
+            wraps it in a jsPDF file that downloads directly. During
+            capture body.exporting hides the sidebar / filters / this
+            button itself and reveals the .print-only banner at the
+            top (see globals.css). Disabled + spinner while running. */}
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={handleExportPDF}
+          disabled={exporting}
           aria-label="Export PDF"
           title="Export PDF"
-          className="rounded-lg p-2 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+          className="rounded-lg p-2 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary disabled:opacity-50 disabled:cursor-wait"
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v10" />
-          </svg>
+          {exporting ? (
+            <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          ) : (
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v10" />
+            </svg>
+          )}
         </button>
         </div>
       </div>

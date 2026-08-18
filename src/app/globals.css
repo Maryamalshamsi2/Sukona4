@@ -317,28 +317,52 @@ article li,
 }
 
 /* ============================================================
-   Print → PDF. Used by /reports today (Export PDF button calls
-   window.print(); browser's Save-as-PDF option produces the file).
-   Any page that opts in to printing benefits from the same rules
-   because the selectors match dashboard chrome regardless of route.
-     - hide the sidebar (<aside>), bottom-tab-bar (<nav>), and any
-       element the page explicitly marks with .print-hide (filters,
-       Export button itself, action ctas that don't render)
-     - drop the dashboard's grey background so the page uses white
-       ink area; let the content grow beyond the 100dvh scroll box
-       so all sections print instead of clipping at the fold
-     - reveal .print-only elements (a header banner with the salon
-       name + date range so the PDF is self-describing)
-     - avoid mid-section page breaks on cards / <section> blocks
-     - A4-ish margins via @page
-   The `.print-only` default (hidden) is outside the block so it's
-   the normal on-screen behavior.
+   Export → PDF. /reports has an "Export PDF" button that uses
+   html2canvas + jsPDF to rasterize the report DOM and download
+   it as a real file — no print dialog.
+   During capture, JS adds `.exporting` to <body>; the rules below
+   mirror what a browser print stylesheet would do so the captured
+   canvas doesn't include the dashboard sidebar, filter buttons,
+   or the app's grey scroll shell. `.print-hide` on any control
+   means "hide it in the exported PDF"; `.print-only` reveals a
+   banner header that's hidden on screen. The `.print-only`
+   default (hidden) sits outside the block so it stays hidden in
+   normal on-screen rendering.
+   Also kept: an @media print block for anyone who still wants a
+   physical print — same rules, same selectors.
    ============================================================ */
+/* Rules for both flows kept as two parallel blocks — one under a
+   `body.exporting` class (added by JS during html2canvas capture)
+   and one under @media print (kept in case someone Cmd-P's). Same
+   selectors, same declarations. Duplication is on purpose: CSS
+   doesn't let you factor an @media block into a class-scoped rule. */
+
+body.exporting aside,
+body.exporting nav,
+body.exporting .print-hide { display: none !important; }
+body.exporting {
+  height: auto !important;
+  overflow: visible !important;
+  background: white !important;
+}
+body.exporting main {
+  padding: 0 !important;
+  overflow: visible !important;
+  height: auto !important;
+  background: white !important;
+}
+body.exporting .h-\[100dvh\] {
+  height: auto !important;
+  overflow: visible !important;
+}
+body.exporting .print-only { display: block !important; }
+body.exporting section,
+body.exporting .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+
 @media print {
   aside,
   nav,
   .print-hide { display: none !important; }
-
   html,
   body {
     height: auto !important;
@@ -351,9 +375,6 @@ article li,
     height: auto !important;
     background: white !important;
   }
-  /* The dashboard's chrome wrapper uses h-[100dvh] + overflow-hidden
-     to keep the app-shell scroll trapped. Neither works for print —
-     force it to grow to content height. */
   .h-\[100dvh\] {
     height: auto !important;
     overflow: visible !important;
