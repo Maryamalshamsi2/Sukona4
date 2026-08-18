@@ -485,12 +485,29 @@ export default function ReportsView({
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Print-only banner. Renders "Reports · <from> → <to>" at the
+          top of the PDF so the printed page is self-describing. See
+          the @media print block in globals.css for how it's shown. */}
+      <div className="print-only mb-4 border-b border-neutral-300 pb-2 text-body-sm text-text-primary">
+        <div className="font-semibold">Reports</div>
+        {(() => {
+          const { from, to } = getRange();
+          return (
+            <div className="text-text-secondary">
+              {from} → {to}
+              {" · Generated "}
+              {new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+            </div>
+          );
+        })()}
+      </div>
+
       {/* Header — title on the left, team selector + period filter on
           the right. Mirrors the expenses + calendar filter pattern. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-title-page font-bold tracking-tight text-text-primary">Reports</h1>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 print-hide">
           {/* Team selector (Multi-Team v1.7) — only when the salon
               has 2+ teams. Refetches all data on change. Expenses
               ignore the filter (they're salon-wide business costs,
@@ -557,6 +574,21 @@ export default function ReportsView({
             </div>
           )}
         </div>
+        {/* Export PDF — triggers the browser print dialog. The
+            @media print block in globals.css hides dashboard chrome
+            and reveals the .print-only banner at the top of the
+            report. User picks "Save as PDF" in the print dialog. */}
+        <button
+          type="button"
+          onClick={() => window.print()}
+          aria-label="Export PDF"
+          title="Export PDF"
+          className="rounded-lg p-2 text-text-tertiary hover:bg-surface-hover hover:text-text-secondary"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v10" />
+          </svg>
+        </button>
         </div>
       </div>
 

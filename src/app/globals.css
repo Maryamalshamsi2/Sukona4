@@ -315,3 +315,52 @@ article li,
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
 }
+
+/* ============================================================
+   Print → PDF. Used by /reports today (Export PDF button calls
+   window.print(); browser's Save-as-PDF option produces the file).
+   Any page that opts in to printing benefits from the same rules
+   because the selectors match dashboard chrome regardless of route.
+     - hide the sidebar (<aside>), bottom-tab-bar (<nav>), and any
+       element the page explicitly marks with .print-hide (filters,
+       Export button itself, action ctas that don't render)
+     - drop the dashboard's grey background so the page uses white
+       ink area; let the content grow beyond the 100dvh scroll box
+       so all sections print instead of clipping at the fold
+     - reveal .print-only elements (a header banner with the salon
+       name + date range so the PDF is self-describing)
+     - avoid mid-section page breaks on cards / <section> blocks
+     - A4-ish margins via @page
+   The `.print-only` default (hidden) is outside the block so it's
+   the normal on-screen behavior.
+   ============================================================ */
+@media print {
+  aside,
+  nav,
+  .print-hide { display: none !important; }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    background: white !important;
+  }
+  /* The dashboard's chrome wrapper uses h-[100dvh] + overflow-hidden
+     to keep the app-shell scroll trapped. Neither works for print —
+     force it to grow to content height. */
+  .h-\[100dvh\] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .print-only { display: block !important; }
+  section,
+  .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+  @page { margin: 15mm; }
+}
+.print-only { display: none; }
