@@ -589,6 +589,46 @@ export default function ReportsView({
         <h1 className="text-title-page font-bold tracking-tight text-text-primary">Reports</h1>
 
         <div className="flex items-center gap-1.5 shrink-0 print-hide">
+          {/* Inline date range. Always visible — the funnel filter
+              now only handles the preset step (today / week /
+              month). Editing either input switches preset to
+              'custom' so getRange() reads from these fields; when a
+              preset is active the value shown here mirrors the
+              preset's from/to so the user always sees the exact
+              range in effect. */}
+          {(() => {
+            const { from, to } = getRange();
+            return (
+              <>
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(e) => {
+                    setPreset("custom");
+                    setCustomFrom(e.target.value);
+                    // Seed the other end on the first switch so
+                    // getRange doesn't fall back to a preset range
+                    // between the two edits.
+                    if (!customTo) setCustomTo(to);
+                  }}
+                  aria-label="From date"
+                  className="h-9 rounded-lg border-[1.5px] border-gray-200 bg-white px-2 text-body-sm text-text-primary focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+                <span className="text-caption text-text-tertiary">to</span>
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(e) => {
+                    setPreset("custom");
+                    setCustomTo(e.target.value);
+                    if (!customFrom) setCustomFrom(from);
+                  }}
+                  aria-label="To date"
+                  className="h-9 rounded-lg border-[1.5px] border-gray-200 bg-white px-2 text-body-sm text-text-primary focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+              </>
+            );
+          })()}
           {/* Team selector (Multi-Team v1.7) — only when the salon
               has 2+ teams. Refetches all data on change. Expenses
               ignore the filter (they're salon-wide business costs,
@@ -681,25 +721,6 @@ export default function ReportsView({
         </button>
         </div>
       </div>
-
-      {/* Custom date inputs */}
-      {preset === "custom" && (
-        <div className="flex items-center gap-3">
-          <input
-            type="date"
-            value={customFrom}
-            onChange={(e) => setCustomFrom(e.target.value)}
-            className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-          />
-          <span className="text-body-sm text-text-tertiary">to</span>
-          <input
-            type="date"
-            value={customTo}
-            onChange={(e) => setCustomTo(e.target.value)}
-            className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3 sm:py-2.5 text-body-sm focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-          />
-        </div>
-      )}
 
       {/* Detail tabs — 2x2 grid on mobile, 4-up on desktop. Each tab is
           self-contained: it owns its own counts/totals/summary. The
