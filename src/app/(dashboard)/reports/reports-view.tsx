@@ -332,8 +332,11 @@ export default function ReportsView({
   const handleExportPDF = useCallback(async () => {
     if (!exportRef.current || exporting) return;
     setExporting(true);
+    // html2canvas-pro is a maintained fork that understands
+    // modern color functions (oklch / oklab / color()). Plain
+    // html2canvas 1.x throws on the oklch() Tailwind v4 emits.
     const [{ default: html2canvas }, { default: JsPDF }] = await Promise.all([
-      import("html2canvas"),
+      import("html2canvas-pro"),
       import("jspdf"),
     ]);
     document.body.classList.add("exporting");
@@ -385,7 +388,10 @@ export default function ReportsView({
       pdf.save(`sukona-report-${from}-to-${to}.pdf`);
     } catch (err) {
       console.error("PDF export failed:", err);
-      undo.error("Couldn't build the PDF — try again in a moment.");
+      const msg = err instanceof Error ? err.message : String(err);
+      // Surface a snippet so we can debug from a screenshot instead
+      // of round-tripping to the console.
+      undo.error(`Couldn't build the PDF: ${msg.slice(0, 140)}`);
     } finally {
       document.body.classList.remove("exporting");
       setExporting(false);
