@@ -664,12 +664,16 @@ export async function getAppointmentPackageContext(appointmentId: string) {
   const supabase = await createClient();
 
   // 1. Load the appointment + its service lines + the client_id.
+  // Bundle fields (migration 025) let us dedupe by bundle_instance_id
+  // when the appointment was booked as a bundle — one bundle instance
+  // consumes ONE package session, not one per underlying service.
   const { data: appt, error: apptErr } = await supabase
     .from("appointments")
     .select(`
       id, client_id,
       appointment_services (
-        id, service_id,
+        id, service_id, sort_order,
+        bundle_id, bundle_instance_id, bundle_total_price, bundle_name,
         services ( id, name, price )
       )
     `)
@@ -684,19 +688,25 @@ export async function getAppointmentPackageContext(appointmentId: string) {
   type ApptSvc = {
     id: string;
     service_id: string | null;
+    sort_order: number | null;
+    bundle_id: string | null;
+    bundle_instance_id: string | null;
+    bundle_total_price: number | null;
+    bundle_name: string | null;
     services: { id: string; name: string; price: number } | null;
   };
   const apptServices = (appt.appointment_services ?? []) as unknown as ApptSvc[];
   if (apptServices.length === 0) return [];
 
   // 2. Load client's active, non-expired packages with their items.
+  // Migration 057: an item may target a service_id OR a bundle_id.
   const today = todayISO();
   const { data: packages, error: pkgErr } = await supabase
     .from("packages")
     .select(`
       id, expires_at, status, created_at,
       recipient:recipient_client_id ( id, name ),
-      package_items ( id, service_id, sessions_total, sessions_used )
+      package_items ( id, service_id, bundle_id, sessions_total, sessions_used )
     `)
     .eq("recipient_client_id", appt.client_id)
     .eq("status", "active")
@@ -717,17 +727,17 @@ export async function getAppointmentPackageContext(appointmentId: string) {
     recipient: { id: string; name: string } | { id: string; name: string }[] | null;
     package_items: Array<{
       id: string;
-      service_id: string;
+      service_id: string | null;
+      bundle_id: string | null;
       sessions_total: number;
       sessions_used: number;
     }>;
   };
   const pkgs = (packages ?? []) as unknown as PkgRow[];
 
-  // 3. For each appointment service, find the first matching package
-  //    item with sessions remaining. Track per-item remaining counts
-  //    so we don't over-allocate if the same package can cover
-  //    multiple appointment lines.
+  // 3. Reserve remaining-sessions locally so multi-line appointments
+  // and multi-instance bundles don't over-allocate against a single
+  // package item.
   const remaining: Record<string, number> = {};
   for (const pkg of pkgs) {
     for (const it of pkg.package_items) {
@@ -746,32 +756,109 @@ export async function getAppointmentPackageContext(appointmentId: string) {
     expiresAt: string | null;
   }> = [];
 
-  for (const apptSvc of apptServices) {
-    if (!apptSvc.service_id || !apptSvc.services) continue;
-    // First package whose items include this service AND has sessions
-    // remaining on that item.
-    for (const pkg of pkgs) {
-      const matchItem = pkg.package_items.find(
-        (it) => it.service_id === apptSvc.service_id && remaining[it.id] > 0,
-      );
-      if (matchItem) {
-        const recipientObj = Array.isArray(pkg.recipient) ? pkg.recipient[0] : pkg.recipient;
-        applicable.push({
-          apptServiceId: apptSvc.id,
-          serviceId: apptSvc.service_id,
-          serviceName: apptSvc.services.name,
-          servicePrice: Number(apptSvc.services.price || 0),
-          packageItemId: matchItem.id,
-          packageId: pkg.id,
-          recipientName: recipientObj?.name ?? null,
-          expiresAt: pkg.expires_at,
+  // 4. Group the appointment services: bundle-booked lines collapse
+  // into one "unit" per bundle_instance_id; standalone services are
+  // one unit each. Bundle units process FIRST so a bundle-typed
+  // package item gets the first shot; a plain package for one of the
+  // bundle's underlyings shouldn't win over the bundle package.
+  interface BundleUnit {
+    kind: "bundle";
+    apptServiceId: string; // first row of the instance (stable key for the modal checkbox)
+    bundleId: string;
+    bundleName: string;
+    bundlePrice: number;
+  }
+  interface ServiceUnit {
+    kind: "service";
+    apptServiceId: string;
+    serviceId: string;
+    serviceName: string;
+    servicePrice: number;
+  }
+  const bundleInstances = new Map<string, BundleUnit>();
+  const serviceUnits: ServiceUnit[] = [];
+  for (const as of apptServices) {
+    if (as.bundle_id && as.bundle_instance_id) {
+      const key = as.bundle_instance_id;
+      const existing = bundleInstances.get(key);
+      // Keep the earliest sort_order (first appointment_service row of
+      // the instance) so we always credit the same anchor.
+      const isEarlier = !existing ||
+        (as.sort_order ?? 0) < (existing.apptServiceId === as.id ? -1 : Number.MAX_SAFE_INTEGER);
+      if (!existing) {
+        bundleInstances.set(key, {
+          kind: "bundle",
+          apptServiceId: as.id,
+          bundleId: as.bundle_id,
+          bundleName: as.bundle_name ?? "Bundle",
+          // bundle_total_price is stored only on the first row of the
+          // instance; other rows in the same instance carry 0. Take
+          // whichever row has a positive value.
+          bundlePrice: Number(as.bundle_total_price ?? 0),
         });
-        // Reserve this session locally so a duplicate appointment
-        // line doesn't double-pick the same item.
-        remaining[matchItem.id] -= 1;
-        break;
+      } else if (isEarlier) {
+        existing.apptServiceId = as.id;
       }
+      if (existing) {
+        const price = Number(as.bundle_total_price ?? 0);
+        if (price > 0 && existing.bundlePrice === 0) existing.bundlePrice = price;
+      }
+    } else if (as.service_id && as.services) {
+      serviceUnits.push({
+        kind: "service",
+        apptServiceId: as.id,
+        serviceId: as.service_id,
+        serviceName: as.services.name,
+        servicePrice: Number(as.services.price || 0),
+      });
     }
+  }
+
+  const tryMatch = (
+    matchFn: (it: PkgRow["package_items"][number]) => boolean,
+  ): { pkg: PkgRow; itemId: string } | null => {
+    for (const pkg of pkgs) {
+      const item = pkg.package_items.find((it) => matchFn(it) && remaining[it.id] > 0);
+      if (item) return { pkg, itemId: item.id };
+    }
+    return null;
+  };
+
+  for (const unit of bundleInstances.values()) {
+    const hit = tryMatch((it) => it.bundle_id === unit.bundleId);
+    if (!hit) continue;
+    const recipientObj = Array.isArray(hit.pkg.recipient) ? hit.pkg.recipient[0] : hit.pkg.recipient;
+    applicable.push({
+      apptServiceId: unit.apptServiceId,
+      // serviceId is used by the modal / callers as a stable id; the
+      // bundle id is fine here — nothing downstream compares against
+      // an actual services row for this line.
+      serviceId: unit.bundleId,
+      serviceName: unit.bundleName,
+      servicePrice: unit.bundlePrice,
+      packageItemId: hit.itemId,
+      packageId: hit.pkg.id,
+      recipientName: recipientObj?.name ?? null,
+      expiresAt: hit.pkg.expires_at,
+    });
+    remaining[hit.itemId] -= 1;
+  }
+
+  for (const unit of serviceUnits) {
+    const hit = tryMatch((it) => it.service_id === unit.serviceId);
+    if (!hit) continue;
+    const recipientObj = Array.isArray(hit.pkg.recipient) ? hit.pkg.recipient[0] : hit.pkg.recipient;
+    applicable.push({
+      apptServiceId: unit.apptServiceId,
+      serviceId: unit.serviceId,
+      serviceName: unit.serviceName,
+      servicePrice: unit.servicePrice,
+      packageItemId: hit.itemId,
+      packageId: hit.pkg.id,
+      recipientName: recipientObj?.name ?? null,
+      expiresAt: hit.pkg.expires_at,
+    });
+    remaining[hit.itemId] -= 1;
   }
 
   return applicable;
