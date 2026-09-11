@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import PhoneInput from "@/components/phone-input";
+import SearchableSelect from "@/components/searchable-select";
 import { addClientQuick } from "@/app/(dashboard)/calendar/actions";
 
 /**
@@ -115,20 +116,17 @@ export default function ClientPickerWithAdd({
       </div>
 
       {mode === "existing" ? (
-        <select
+        <SearchableSelect
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           required={required}
-          className="block w-full appearance-none box-border rounded-xl border-[1.5px] border-neutral-200 bg-white px-4 py-3 sm:py-2.5 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="">{emptyOptionLabel ?? "Select a client"}</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.phone ? ` — ${c.phone}` : ""}
-            </option>
-          ))}
-        </select>
+          placeholder={emptyOptionLabel ?? "Select a client"}
+          emptyLabel={required ? undefined : (emptyOptionLabel ?? "Walk-in / no client")}
+          items={clients.map((c) => ({
+            value: c.id,
+            label: c.phone ? `${c.name} — ${c.phone}` : c.name,
+          }))}
+        />
       ) : (
         <div className="space-y-4 rounded-xl border border-border bg-surface-hover p-4">
           <div>

@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useEffect } from "react";
 import PhoneInput from "@/components/phone-input";
+import SearchableSelect, { type SelectGroup } from "@/components/searchable-select";
 import { useCurrency } from "@/lib/user-context";
 import type { ClientLocation } from "@/types";
 import { listClientLocations } from "@/app/(dashboard)/clients/client-locations-actions";
@@ -1851,30 +1852,20 @@ export function AppointmentForm({
                           {selectedService ? getServiceName(selectedService) : "Unknown service"}
                         </div>
                       ) : (
-                        <select value={entry.service_id}
-                          onChange={(e) => {
-                            // Clear any prior custom validity so the
-                            // browser stops nagging once the user picks.
-                            e.currentTarget.setCustomValidity("");
-                            handleServiceSelect(idx, e.target.value);
-                          }}
-                          onInvalid={(e) => {
-                            // Replace the browser-default "Please select
-                            // an item in the list" with a message that
-                            // says WHICH item.
-                            e.currentTarget.setCustomValidity("Please choose a service for this row.");
-                          }}
-                          required
-                          className="block w-full rounded-xl border-[1.5px] border-neutral-200 px-3 py-2 text-body-sm transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-100">
-                          <option value="">Select service</option>
-                          {services.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name} ({s.duration_minutes} min, {currency} {s.price})
-                            </option>
-                          ))}
-                          {bundles && bundles.length > 0 && (
-                            <optgroup label="Bundles">
-                              {bundles.map((b) => {
+                        (() => {
+                          const groups: SelectGroup[] = [
+                            {
+                              label: "Services",
+                              options: services.map((s) => ({
+                                value: s.id,
+                                label: `${s.name} (${s.duration_minutes} min, ${currency} ${s.price})`,
+                              })),
+                            },
+                          ];
+                          if (bundles && bundles.length > 0) {
+                            groups.push({
+                              label: "Bundles",
+                              options: bundles.map((b) => {
                                 const originalPrice = b.service_bundle_items.reduce(
                                   (sum, item) => sum + (item.services?.price || 0), 0
                                 );
@@ -1883,15 +1874,24 @@ export function AppointmentForm({
                                   : b.discount_percentage != null
                                     ? Math.round(originalPrice * (1 - b.discount_percentage / 100))
                                     : originalPrice;
-                                return (
-                                  <option key={b.id} value={`bundle:${b.id}`}>
-                                    {b.name} ({b.service_bundle_items.length} services, {currency} {bundlePrice})
-                                  </option>
-                                );
-                              })}
-                            </optgroup>
-                          )}
-                        </select>
+                                return {
+                                  value: `bundle:${b.id}`,
+                                  label: `${b.name} (${b.service_bundle_items.length} services, ${currency} ${bundlePrice})`,
+                                };
+                              }),
+                            });
+                          }
+                          return (
+                            <SearchableSelect
+                              value={entry.service_id}
+                              onChange={(v) => handleServiceSelect(idx, v)}
+                              items={groups}
+                              placeholder="Select service"
+                              required
+                              name={`service-${idx}`}
+                            />
+                          );
+                        })()
                       )}
 
                       <select value={entry.staff_id}
