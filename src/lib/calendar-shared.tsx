@@ -1366,6 +1366,51 @@ export function AppointmentForm({
     setServiceEntries(serviceEntries.filter((_, i) => i !== idx));
   }
 
+  /**
+   * Group service entries into ordered runs — solo entries stand
+   * alone; entries sharing a bundle_instance_id fuse into one group.
+   * Reordering happens at the group level so bundles don't shatter.
+   */
+  function computeServiceGroups(entries: ServiceEntry[]): Array<{ startIdx: number; count: number }> {
+    const groups: Array<{ startIdx: number; count: number }> = [];
+    let i = 0;
+    while (i < entries.length) {
+      const instId = entries[i].bundle_instance_id;
+      if (!instId) {
+        groups.push({ startIdx: i, count: 1 });
+        i += 1;
+        continue;
+      }
+      let j = i + 1;
+      while (j < entries.length && entries[j].bundle_instance_id === instId) j += 1;
+      groups.push({ startIdx: i, count: j - i });
+      i = j;
+    }
+    return groups;
+  }
+
+  /**
+   * Swap two adjacent groups in the entries array. delta is -1 (up)
+   * or +1 (down). Also normalises `is_parallel` to false on whichever
+   * entry ends up at index 0 — that field only makes sense from the
+   * second entry onward (relative to the previous one).
+   */
+  function moveServiceGroup(groupIdx: number, delta: -1 | 1) {
+    const groups = computeServiceGroups(serviceEntries);
+    const targetIdx = groupIdx + delta;
+    if (targetIdx < 0 || targetIdx >= groups.length) return;
+    const a = groups[Math.min(groupIdx, targetIdx)];
+    const b = groups[Math.max(groupIdx, targetIdx)];
+    const before = serviceEntries.slice(0, a.startIdx);
+    const first = serviceEntries.slice(a.startIdx, a.startIdx + a.count);
+    const middle = serviceEntries.slice(a.startIdx + a.count, b.startIdx);
+    const second = serviceEntries.slice(b.startIdx, b.startIdx + b.count);
+    const after = serviceEntries.slice(b.startIdx + b.count);
+    const next = [...before, ...second, ...middle, ...first, ...after];
+    if (next[0] && next[0].is_parallel) next[0] = { ...next[0], is_parallel: false };
+    setServiceEntries(next);
+  }
+
   function handleServiceSelect(idx: number, value: string) {
     if (value.startsWith("bundle:")) {
       const bundleId = value.slice(7);
@@ -1706,13 +1751,34 @@ export function AppointmentForm({
         <label className="block text-body-sm font-semibold text-text-primary mb-2">Services *</label>
 
         <div className="space-y-3">
-          {serviceEntries.map((entry, idx) => {
+          {(() => {
+            // Precompute the group layout once per render so the map
+            // body can cheaply look up whether an entry starts a
+            // group (renders the up/down arrows) and where in the
+            // group order it lives.
+            const groups = computeServiceGroups(serviceEntries);
+            const groupIdxByEntryIdx = new Map<number, number>();
+            const groupStartEntryIdx = new Set<number>();
+            groups.forEach((g, gIdx) => {
+              groupStartEntryIdx.add(g.startIdx);
+              for (let k = g.startIdx; k < g.startIdx + g.count; k++) {
+                groupIdxByEntryIdx.set(k, gIdx);
+              }
+            });
+            return serviceEntries.map((entry, idx) => {
             const selectedService = services.find((s) => s.id === entry.service_id);
             // Show bundle header for the first entry in a bundle group.
             // Compare on instance ID (not bundle ID) so two consecutive
             // copies of the same bundle each get their own header.
             const isFirstInBundle = !!entry.bundle_instance_id && (idx === 0 || serviceEntries[idx - 1].bundle_instance_id !== entry.bundle_instance_id);
             const isInBundle = !!entry.bundle_instance_id;
+            // Reorder controls: only on the first entry of each
+            // group (solo entries are their own group, bundles use
+            // their first row). Disabled at the list boundaries.
+            const isGroupStart = groupStartEntryIdx.has(idx);
+            const myGroupIdx = groupIdxByEntryIdx.get(idx) ?? 0;
+            const canMoveUp = isGroupStart && myGroupIdx > 0;
+            const canMoveDown = isGroupStart && myGroupIdx < groups.length - 1;
             // Bundle price for the header — prefer the snapshot stamped
             // when the bundle was picked, fall back to the catalog price.
             let bundlePriceDisplay: number | null = null;
@@ -1851,27 +1917,61 @@ export function AppointmentForm({
                       </select>
                     </div>
 
-                    {serviceEntries.length > 1 && (
-                      <button type="button" onClick={() => {
-                        if (isInBundle && entry.bundle_instance_id) {
-                          // Remove every entry that belongs to THIS bundle
-                          // instance (not all instances of the same bundle).
-                          setServiceEntries(serviceEntries.filter((e) => e.bundle_instance_id !== entry.bundle_instance_id));
-                        } else {
-                          removeServiceEntry(idx);
-                        }
-                      }}
-                        className="mt-1 rounded-lg p-1 text-text-tertiary hover:bg-surface-active hover:text-text-secondary">
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
+                    {/* Reorder + remove controls. Reorder arrows are
+                        only shown on the first row of each group so a
+                        bundle's underlying services can't be split
+                        out of their bundle; the whole bundle moves
+                        together when the ↑/↓ is tapped. */}
+                    <div className="mt-1 flex flex-col items-center gap-0.5">
+                      {isGroupStart && groups.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => moveServiceGroup(myGroupIdx, -1)}
+                            disabled={!canMoveUp}
+                            aria-label="Move up"
+                            className="rounded-md p-0.5 text-text-tertiary hover:bg-surface-active hover:text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-tertiary"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveServiceGroup(myGroupIdx, 1)}
+                            disabled={!canMoveDown}
+                            aria-label="Move down"
+                            className="rounded-md p-0.5 text-text-tertiary hover:bg-surface-active hover:text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-tertiary"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                      {serviceEntries.length > 1 && (
+                        <button type="button" onClick={() => {
+                          if (isInBundle && entry.bundle_instance_id) {
+                            // Remove every entry that belongs to THIS bundle
+                            // instance (not all instances of the same bundle).
+                            setServiceEntries(serviceEntries.filter((e) => e.bundle_instance_id !== entry.bundle_instance_id));
+                          } else {
+                            removeServiceEntry(idx);
+                          }
+                        }}
+                          className="rounded-lg p-1 text-text-tertiary hover:bg-surface-active hover:text-text-secondary">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             );
-          })}
+            });
+          })()}
         </div>
 
         <button type="button" onClick={addServiceEntry}
